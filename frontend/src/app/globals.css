@@ -1,8 +1,12 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: #F1F4CB; 
+  --foreground: #191818;
+  --card-bg: #FCFCFC; /* nền khối trắng hồng nhạt */
+  --muted: #F6EBEB; /* màu input */
+  --primary: #5060F9; /* nút xanh */
+  --text-muted: #8D8888;
 }
 
 @theme inline {
@@ -12,15 +16,32 @@
   --font-mono: var(--font-geist-mono);
 }
 
-@media (prefers-color-scheme: dark) {
+/* @media (prefers-color-scheme: dark) {
   :root {
     --background: #0a0a0a;
     --foreground: #ededed;
   }
-}
+} */
 
 body {
   background: var(--background);
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+/* tiện ích nhỏ cho thẻ card login */
+.login-card {
+  background: var(--card-bg);
+  border-radius: 24px;
+  box-shadow: 0 0 0 2px rgba(0,0,0,0.2) inset, 0 6px 20px rgba(0,0,0,0.06);
+}
+
+.input-soft {
+  background: var(--muted);
+}
+
+.btn-primary {
+  background: var(--primary);
+}
+
+.text-muted { color: var(--text-muted); }
