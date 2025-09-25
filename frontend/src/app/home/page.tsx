@@ -3,8 +3,8 @@
 import Image from "next/image";
 
 export default function Home() {
-  const handleStudentClick = () => {
-    window.location.href = "http://localhost:8080/login";
+  const handleClick = (path: string) => {
+    window.location.href = `http://localhost:8080/${path}`;
   };
 
   return (
@@ -26,15 +26,13 @@ export default function Home() {
       {/* Nút */}
       <div className="flex gap-16 mt-auto mb-[25vh]">
         <button
-          onClick={handleStudentClick}
+          onClick={() => handleClick("login")}
           className="px-8 py-4 bg-[#479a8a] text-white rounded-lg font-semibold hover:bg-[#36796e] transition text-2xl"
         >
           Sinh viên
         </button>
         <button
-          onClick={() =>
-            window.location.href = "http://localhost:8080/login-teacher"
-          }
+          onClick={() => handleClick("login-teacher")}
           className="px-8 py-4 bg-[#479a8a] text-white rounded-lg font-semibold hover:bg-[#36796e] transition text-2xl"
         >
           Giáo viên
