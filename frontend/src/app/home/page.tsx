@@ -1,13 +1,10 @@
 "use client";
 
 import Image from "next/image";
-import { useRouter } from "next/navigation";
 
 export default function Home() {
-  const router = useRouter();
-
   const handleStudentClick = () => {
-    router.push("/login"); // Điều hướng đến trang login
+    window.location.href = "http://localhost:8080/login";
   };
 
   return (
@@ -34,7 +31,12 @@ export default function Home() {
         >
           Sinh viên
         </button>
-        <button className="px-8 py-4 bg-[#479a8a] text-white rounded-lg font-semibold hover:bg-[#36796e] transition text-2xl">
+        <button
+          onClick={() =>
+            window.location.href = "http://localhost:8080/login-teacher"
+          }
+          className="px-8 py-4 bg-[#479a8a] text-white rounded-lg font-semibold hover:bg-[#36796e] transition text-2xl"
+        >
           Giáo viên
         </button>
       </div>
