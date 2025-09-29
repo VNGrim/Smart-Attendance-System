@@ -52,6 +52,15 @@ export default function LoginPage() {
         return;
       }
 
+      // Lưu thông tin phiên vào localStorage để các trang khác dùng
+      try {
+        localStorage.setItem("sas_user", JSON.stringify({
+          userId: data.userId,
+          role: data.role,
+          name: data.name
+        }));
+      } catch {}
+
       // Đăng nhập thành công - xử lý theo từng loại người dùng
       if (data.role === "student") {
         // SINH VIÊN: Chuyển đến trang thông báo
