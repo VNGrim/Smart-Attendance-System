@@ -1,0 +1,137 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap');
+
+:root {
+  --bg-page: #F1F4CB;
+  --header-bg: #49998A;
+  --tab-active-bg: #FFD700;
+}
+
+body {
+  margin: 0;
+  font-family: 'Inter', sans-serif;
+  background: var(--bg-page);
+}
+
+/* ===== HEADER TOP (avatar + QR) ===== */
+.header-top {
+  width: 1137px;
+  margin: 8px auto;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.user {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.user img {
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  object-fit: cover;
+}
+.user .name {
+  font-weight: 600;
+  font-size: 15px;
+  color: #000;
+}
+
+.qrBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--header-bg);
+  color: #fff;
+  border: none;
+  padding: 6px 14px;
+  border-radius: 8px;
+  font-weight: 600;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+/* ===== HEADER BOTTOM (thanh tab xanh) ===== */
+.header-bottom {
+  width: 1137px;
+  height: 48px;
+  background: var(--header-bg);
+  margin: 0 auto;
+  border-radius: 6px;
+  display: flex;
+  justify-content: space-around; /* ✅ tab cách đều */
+  align-items: center;
+}
+
+.tab {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
+  font-size: 14px;
+  color: #fff;
+  cursor: pointer;
+  padding: 6px 12px;
+  border-radius: 6px;
+}
+.tab.active {
+  background: var(--tab-active-bg);
+  color: #000;
+}
+
+/* ===== DROPDOWN ===== */
+.schedule-header {
+  width: 1137px;
+  margin: 20px auto;
+  display: flex;
+  justify-content: space-between;
+}
+
+select {
+  padding: 6px 12px;
+  border-radius: 6px;
+  border: 1px solid #ccc;
+  font-weight: 600;
+  font-size: 14px;
+}
+
+/* ===== BẢNG LỊCH HỌC ===== */
+.schedule-table {
+  width: 1137px;
+  margin: 20px auto;
+  border-collapse: collapse;
+  background: #fff;
+  border-radius: 12px;
+  overflow: hidden;
+  font-size: 14px;
+}
+
+.schedule-table th,
+.schedule-table td {
+  border: 1px solid #ddd;
+  text-align: center;
+  padding: 8px;
+  min-width: 120px;
+  vertical-align: top;
+}
+
+.schedule-table th {
+  background: var(--header-bg);
+  color: #fff;
+  font-weight: 600;
+}
+
+.course {
+  font-size: 13px;
+  font-weight: 600;
+  margin-bottom: 2px;
+}
+.room {
+  font-size: 12px;
+  color: #444;
+}
+.time {
+  font-size: 12px;
+  color: #666;
+}

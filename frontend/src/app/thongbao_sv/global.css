@@ -1,0 +1,118 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap');
+
+:root {
+  --bg-page: #F1F4CB;
+  --header-bg: #49998A;
+  --tab-active-bg: #FFD700;
+}
+
+body {
+  margin: 0;
+  font-family: 'Inter', sans-serif;
+  background: var(--bg-page);
+}
+
+/* ===== HEADER TOP (avatar + QR, nền trong suốt) ===== */
+.header-top {
+  width: 1137px;
+  margin: 8px auto;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.user {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.user img {
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  object-fit: cover;
+}
+.user .name {
+  font-weight: 600;
+  font-size: 15px;
+  color: #000;
+}
+
+.qrBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--header-bg);
+  color: #fff;
+  border: none;
+  padding: 6px 14px;
+  border-radius: 8px;
+  font-weight: 600;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+/* ===== HEADER BOTTOM (thanh tab xanh) ===== */
+.header-bottom {
+  width: 1137px;
+  height: 48px;
+  background: var(--header-bg);
+  margin: 0 auto;
+  border-radius: 6px;
+  display: flex;
+  justify-content: space-around; /* chia đều */
+  align-items: center;
+}
+
+.tab {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
+  font-size: 14px;
+  color: #fff;
+  cursor: pointer;
+  padding: 6px 12px;
+  border-radius: 6px;
+}
+.tab.active {
+  background: var(--tab-active-bg);
+  color: #000;
+}
+
+/* ===== BODY CONTENT ===== */
+.container {
+  width: 1137px;
+  margin: 20px auto;
+}
+
+.card {
+  background: #fff;
+  border-radius: 12px;
+  padding: 20px 24px;
+  box-shadow: 0 6px 18px rgba(0,0,0,0.06);
+}
+
+.notifications {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.notifications li {
+  display: flex;
+  gap: 16px;
+  padding: 12px 0;
+  border-bottom: 1px solid #EFEFEF;
+}
+.notifications li:last-child { border-bottom: none; }
+
+.notif-time {
+  min-width: 170px;
+  font-weight: 600;
+  font-size: 14px;
+  color: #111;
+}
+.notif-body {
+  font-size: 16px;
+  color: #000;
+}
