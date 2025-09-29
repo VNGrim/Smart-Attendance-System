@@ -13,33 +13,47 @@ export default function Home() {
 
   return (
     <div
-      className="min-h-screen flex flex-col items-center"
+      className="h-screen w-screen flex flex-col items-center relative overflow-hidden"
       style={{ backgroundColor: "#eff4cb" }}
-    >
-      {/* Logo */}
+    > 
+      {/* Logo chính giữa */}
+      
       <div className="mt-[10%]">
         <Image
-          src="/logo.png"
+          src="/logohome.png"
           alt="Logo"
           width={450}
           height={350}
           priority
         />
       </div>
+      {/* Logo ở góc trên bên trái */}
+      <div className="absolute top-20 left-35">
+        <Image
+          src="/logo.png"
+          alt="Logo"
+          width={300}
+          height={140}
+          priority
+        />
+      </div>
+
+      {/* Tiêu đề phụ */}
+      <div
+        className="absolute top-30 font-semibold text-lg"
+        style={{ color: '#49998A', fontSize: '30px' }}
+      >
+        Trang điểm danh dành cho sinh viên và giảng viên
+      </div>
+
 
       {/* Nút */}
       <div className="flex gap-16 mt-auto mb-[25vh]">
         <button
-          onClick={() => handleClick("student")}
+          onClick={() => handleClick("login")}
           className="px-8 py-4 bg-[#479a8a] text-white rounded-lg font-semibold hover:bg-[#36796e] transition text-2xl"
         >
-          Sinh viên
-        </button>
-        <button
-          onClick={() => handleClick("teacher")}
-          className="px-8 py-4 bg-[#479a8a] text-white rounded-lg font-semibold hover:bg-[#36796e] transition text-2xl"
-        >
-          Giáo viên
+          Đăng nhập
         </button>
       </div>
     </div>
