@@ -13,7 +13,7 @@ export default function LichHocPage() {
   return (
     <div>
       {/* ===== Header Top (avatar + QR) ===== */}
-      <div className="header-top">
+      <div className="user-qr">
         <div className="user">
           <img src="/avatar.png" alt="avatar" />
           <div className="name">Nguyen Van A</div>
@@ -52,28 +52,30 @@ export default function LichHocPage() {
       </div>
 
       {/* ===== Bảng lịch ===== */}
-      <table className="schedule-table">
-        <thead>
-          <tr>
-            <th>Slot</th>
-            {DAYS.map((d) => (
-              <th key={d}>{d}</th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {SLOTS.map((slot, idx) => (
-            <tr key={idx}>
-              <td>
-                <b>{slot}</b>
-              </td>
+      <div className="schedule-card">
+        <table className="schedule-table">
+          <thead>
+            <tr>
+              <th>Slot</th>
               {DAYS.map((d) => (
-                <td key={d + idx}></td>
+                <th key={d}>{d}</th>
               ))}
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {SLOTS.map((slot, idx) => (
+              <tr key={idx}>
+                <td>
+                  <b>{slot}</b>
+                </td>
+                {DAYS.map((d) => (
+                  <td key={d + idx}></td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }

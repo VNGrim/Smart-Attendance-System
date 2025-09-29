@@ -12,13 +12,14 @@ body {
   background: var(--bg-page);
 }
 
-/* ===== HEADER TOP (avatar + QR) ===== */
-.header-top {
-  width: 1137px;
-  margin: 8px auto;
+.user-qr {
+  max-width: 1450px; 
+  margin: 0 auto;
   display: flex;
   justify-content: space-between;
   align-items: center;
+  padding: 40px 60px 0 60px;
+  box-sizing: border-box;
 }
 
 .user {
@@ -50,24 +51,21 @@ body {
   font-weight: 600;
   font-size: 14px;
   cursor: pointer;
+  margin-right: 40px;
 }
 
-/* ===== HEADER BOTTOM (thanh tab xanh) ===== */
 .header-bottom {
-  width: 1137px;
+  width: 100%;
   height: 48px;
   background: var(--header-bg);
-  margin: 0 auto;
-  border-radius: 6px;
+  margin-top: 20px;
   display: flex;
-  justify-content: space-around; /* ✅ tab cách đều */
+  justify-content: center;
   align-items: center;
+  gap: 350px;
 }
 
 .tab {
-  display: flex;
-  align-items: center;
-  gap: 6px;
   font-weight: 600;
   font-size: 14px;
   color: #fff;
@@ -80,10 +78,9 @@ body {
   color: #000;
 }
 
-/* ===== DROPDOWN ===== */
 .schedule-header {
   width: 1137px;
-  margin: 20px auto;
+  margin: 30px auto;
   display: flex;
   justify-content: space-between;
 }
@@ -96,10 +93,9 @@ select {
   font-size: 14px;
 }
 
-/* ===== BẢNG LỊCH HỌC ===== */
 .schedule-table {
   width: 1137px;
-  margin: 20px auto;
+  margin: 30px auto;
   border-collapse: collapse;
   background: #fff;
   border-radius: 12px;

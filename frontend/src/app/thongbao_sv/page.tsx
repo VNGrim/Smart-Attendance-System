@@ -1,19 +1,11 @@
 "use client";
 
-import QRButton from "../components/QRButton";
+import QRButton from "@/app/components/QRButton";
 
 export default function ThongBaoPage() {
-  const notifications = [
-    { date: "01/09/2025 18:07", text: "[THÔNG TIN] THÔNG BÁO LỊCH HỌC KỲ SUMMER 2025" },
-    { date: "01/09/2025 17:55", text: "[THÔNG TIN] DANH SÁCH PHÒNG THI CUỐI KỲ" },
-    { date: "01/09/2025 17:30", text: "[THÔNG TIN] THỜI KHÓA BIỂU KỲ SUMMER 2025" },
-    { date: "01/09/2025 17:10", text: "[THÔNG TIN] THÔNG BÁO LỊCH NGHỈ 02/09/2025" },
-  ];
-
   return (
     <div>
-      {/* TOP: avatar + QR */}
-      <div className="header-top">
+      <div className="user-qr">
         <div className="user">
           <img src="/avatar.png" alt="avatar" />
           <div className="name">Nguyen Van A</div>
@@ -21,35 +13,60 @@ export default function ThongBaoPage() {
         <QRButton />
       </div>
 
-      {/* BOTTOM: thanh tab màu xanh */}
       <div className="header-bottom">
-        <div className="tab active">
-          <i className="fas fa-bell"></i>
-          <span>Thông báo</span>
-        </div>
-        <div className="tab">
-          <i className="fas fa-calendar"></i>
-          <span>Lịch học</span>
-        </div>
-        <div className="tab">
-          <i className="fas fa-history"></i>
-          <span>Lịch sử</span>
-        </div>
+        <div className="tab active">Thông báo</div>
+        <div className="tab">Lịch học</div>
+        <div className="tab">Lịch sử</div>
       </div>
 
-      {/* BODY */}
-      <main className="container">
-        <section className="card">
+      <div className="container">
+        <div className="card">
           <ul className="notifications">
-            {notifications.map((n, idx) => (
-              <li key={idx}>
-                <div className="notif-time">{n.date}</div>
-                <div className="notif-body">{n.text}</div>
-              </li>
-            ))}
+            <li>
+              <div className="notif-time">08/09/25 18:08</div>
+              <div className="notif-body">
+                [KHẢO THÍ] THÔNG BÁO KẾT QUẢ OJT202, OJB202 KỲ SUMMER 2025
+              </div>
+            </li>
+            <li>
+              <div className="notif-time">08/09/25 16:39</div>
+              <div className="notif-body">
+                Đăng ký học chương trình Kỹ sư 57 (KS57) dành cho sinh viên ngành Công nghệ thông tin
+              </div>
+            </li>
+            <li>
+              <div className="notif-time">06/09/25 12:38</div>
+              <div className="notif-body">
+                [KHẢO THÍ] THÔNG BÁO KẾT QUẢ BẢO VỆ LẦN 1 ĐỒ ÁN TỐT NGHIỆP KỲ SUMMER 2025
+              </div>
+            </li>
+            <li>
+              <div className="notif-time">05/09/25 11:36</div>
+              <div className="notif-body">
+                [KHẢO THÍ] THÔNG BÁO KẾT QUẢ THI RETAKE CÁC MÔN TADB H2 & BL3W KỲ SUMMER 2025
+              </div>
+            </li>
+            <li>
+              <div className="notif-time">03/09/25 17:16</div>
+              <div className="notif-body">
+                [KHẢO THÍ] THÔNG BÁO KẾT QUẢ MÔN LAB211 KỲ SUMMER 2025
+              </div>
+            </li>
+            <li>
+              <div className="notif-time">01/09/25 23:08</div>
+              <div className="notif-body">
+                [KHẢO THÍ] THÔNG BÁO Lịch thi Retake TADB_H2 & BL3W 03/09/2025_SUMMER 2025
+              </div>
+            </li>
+            <li>
+              <div className="notif-time">01/09/25 15:40</div>
+              <div className="notif-body">
+                [KHẢO THÍ] THÔNG BÁO KẾT QUẢ THI FINAL CÁC MÔN TADB H2 & BL3W KỲ SUMMER 2025
+              </div>
+            </li>
           </ul>
-        </section>
-      </main>
+        </div>
+      </div>
     </div>
   );
 }
