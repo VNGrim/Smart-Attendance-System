@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import QRButton from "@/app/components/QRButton";
 
 export default function ThongBaoPage() {
@@ -15,7 +16,7 @@ export default function ThongBaoPage() {
 
       <div className="header-bottom">
         <div className="tab active">Thông báo</div>
-        <div className="tab">Lịch học</div>
+        <Link href="/lichhoc_sv" className="tab">Lịch học</Link>
         <div className="tab">Lịch sử</div>
       </div>
 

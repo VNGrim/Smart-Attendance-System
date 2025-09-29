@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useState } from "react";
 import QRButton from "@/app/components/QRButton";
 
@@ -23,10 +24,10 @@ export default function LichHocPage() {
 
       {/* ===== Header Bottom (thanh tab xanh) ===== */}
       <div className="header-bottom">
-        <div className="tab">
+        <Link href="/thongbao_sv" className="tab">
           <i className="fas fa-bell"></i>
           <span>Thông báo</span>
-        </div>
+        </Link>
         <div className="tab active">
           <i className="fas fa-calendar"></i>
           <span>Lịch học</span>

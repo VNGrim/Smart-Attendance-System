@@ -57,7 +57,7 @@ export default function LoginPage() {
         // SINH VIÊN: Chuyển đến trang thông báo
         setMessage(`Chào mừng ${data.name}! Đang chuyển đến trang thông báo...`);
         setTimeout(() => {
-          router.push("/thongbao"); // Chuyển đến trang thông báo
+          router.push("/thongbao_sv"); // Chuyển đến trang thông báo
         }, 1500);
       } else if (data.role === "teacher") {
         // GIÁO VIÊN: Đăng nhập thành công, hiển thị thông báo
