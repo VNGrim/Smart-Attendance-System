@@ -9,6 +9,10 @@ const PORT = 8080;
 app.use(cors());
 app.use(bodyParser.json());
 
+// Mount lichhoc_hienthi routes
+const lichhocRoutes = require("./src/lichhoc_hienthi/lichhoc_hienthi.routes");
+app.use("/api/lichhoc", lichhocRoutes);
+
 // API đăng nhập chung - sử dụng database
 app.post("/api/auth/login", async (req, res) => {
   const { userId, password } = req.body; 
