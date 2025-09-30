@@ -13,6 +13,10 @@ app.use(bodyParser.json());
 const lichhocRoutes = require("./src/lichhoc_hienthi/lichhoc_hienthi.routes");
 app.use("/api/lichhoc", lichhocRoutes);
 
+// Mount thongbao_hienthi routes
+const thongbaoRoutes = require("./src/thongbao_hienthi/thongbao_hienthi.routes");
+app.use("/api/thongbao", thongbaoRoutes);
+
 // API đăng nhập chung - sử dụng database
 app.post("/api/auth/login", async (req, res) => {
   const { userId, password } = req.body; 
@@ -74,37 +78,6 @@ app.post("/api/auth/login", async (req, res) => {
   }
 });
 
-// API thông báo cho sinh viên - sử dụng database
-app.get("/api/thongbao", async (req, res) => {
-  try {
-    // Query database để lấy thông báo
-    const [announcements] = await db.execute(
-      "SELECT id, title, content, created_at FROM announcements ORDER BY created_at DESC"
-    );
-    
-    // Format dữ liệu trả về
-    const notifications = announcements.map(announcement => ({
-      id: announcement.id,
-      title: announcement.title,
-      content: announcement.content,
-      date: announcement.created_at.toISOString().split('T')[0], // Format YYYY-MM-DD
-      type: "general" // Mặc định type là general
-    }));
-    
-    res.json({
-      success: true,
-      data: notifications,
-      message: "Lấy danh sách thông báo thành công"
-    });
-
-  } catch (error) {
-    console.error("Database error:", error);
-    res.status(500).json({
-      success: false,
-      message: "Lỗi hệ thống. Không thể lấy danh sách thông báo."
-    });
-  }
-});
 
 // API xem danh sách lớp
 app.get("/api/classes", (req, res) => {
