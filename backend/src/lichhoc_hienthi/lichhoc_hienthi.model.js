@@ -39,5 +39,3 @@ exports.getStudentSchedule = async (studentId) => {
   );
   return rows;
 };
-
-

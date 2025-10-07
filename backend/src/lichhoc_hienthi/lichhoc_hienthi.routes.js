@@ -9,4 +9,3 @@ router.get("/students/:studentId", Ctr.getStudentInfo);
 router.get("/schedule/:studentId", Ctr.getStudentSchedule);
 
 module.exports = router;
-

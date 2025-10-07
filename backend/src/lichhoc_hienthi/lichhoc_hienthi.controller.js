@@ -58,5 +58,3 @@ function pickColorForClass(name) {
   }
   return palette[hash % palette.length];
 }
-
-
