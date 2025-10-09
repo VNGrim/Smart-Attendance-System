@@ -16,3 +16,4 @@ router.get('/students/:studentId', ThongBaoController.getStudentInfo);
 router.get('/students/by-user/:userCode', ThongBaoController.getStudentByUserCode);
 
 module.exports = router;
+

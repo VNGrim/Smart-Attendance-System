@@ -57,3 +57,4 @@ class ThongBaoModel {
 }
 
 module.exports = ThongBaoModel;
+

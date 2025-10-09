@@ -1,0 +1,191 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap');
+
+:root {
+  --bg-page: #EFF4CB;
+  --header-bg: #48998A;
+  --tab-active-bg: #FFD700;
+  --text-inactive: #FEFFFA;
+  --text-active: #020000;
+  --table-bg: #FEFFFA;
+  --table-text: #82837F;
+  --attended-bg: #52FE54;
+  --absent-bg: #F80500;
+}
+
+body {
+  margin: 0;
+  font-family: 'Inter', sans-serif;
+  background: var(--bg-page);
+}
+
+/* Header với user info và QR button */
+.user-qr {
+  max-width: 1450px; 
+  margin: 0 auto;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 40px 60px 0 60px;
+  box-sizing: border-box;
+}
+
+.user {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.user img {
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+.user .name {
+  font-weight: 600;
+  font-size: 15px;
+  color: #000;
+}
+
+.qrBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--header-bg);
+  color: #fff;
+  border: none;
+  padding: 6px 14px;
+  border-radius: 8px;
+  font-weight: 600;
+  font-size: 14px;
+  cursor: pointer;
+  margin-right: 60px;
+}
+
+/* Navigation bar */
+.header-bottom {
+  width: 100%;
+  height: 48px;
+  background: var(--header-bg);
+  margin-top: 20px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 350px;
+}
+
+.tab {
+  font-weight: 600;
+  font-size: 14px;
+  color: var(--text-inactive);
+  cursor: pointer;
+  padding: 6px 12px;
+  border-radius: 6px;
+  text-decoration: none;
+}
+
+.tab.active {
+  background: var(--tab-active-bg);
+  color: var(--text-active);
+}
+
+/* Main container */
+.container {
+  width: 1137px;
+  margin: 50px auto;
+}
+
+.card {
+  background: var(--table-bg);
+  border-radius: 12px;
+  padding: 28px 24px;
+  box-shadow: 0 6px 18px rgba(0,0,0,0.06);
+  min-height: 320px;
+}
+
+/* Table styles */
+.history-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+
+.history-table thead {
+  background: transparent;
+}
+
+.history-table th {
+  font-weight: 700;
+  color: var(--text-active);
+  text-align: left;
+  padding: 16px 12px;
+  border-bottom: 2px solid #E5E5E5;
+  font-size: 14px;
+}
+
+.history-table td {
+  color: var(--table-text);
+  padding: 16px 12px;
+  border-bottom: 1px solid #E5E5E5;
+  vertical-align: middle;
+}
+
+.history-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.history-table tbody tr:hover {
+  background-color: #F8F9FA;
+}
+
+/* Status badges */
+.status-badge {
+  display: inline-block;
+  padding: 6px 12px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: white;
+  text-align: center;
+  min-width: 80px;
+}
+
+.status-badge.attended {
+  background-color: var(--attended-bg);
+}
+
+.status-badge.absent {
+  background-color: var(--absent-bg);
+}
+
+/* Responsive adjustments */
+@media (max-width: 1200px) {
+  .container {
+    width: 95%;
+    margin: 30px auto;
+  }
+  
+  .user-qr {
+    padding: 20px 30px 0 30px;
+  }
+  
+  .header-bottom {
+    gap: 200px;
+  }
+}
+
+@media (max-width: 768px) {
+  .history-table {
+    font-size: 12px;
+  }
+  
+  .history-table th,
+  .history-table td {
+    padding: 12px 8px;
+  }
+  
+  .header-bottom {
+    gap: 100px;
+  }
+}

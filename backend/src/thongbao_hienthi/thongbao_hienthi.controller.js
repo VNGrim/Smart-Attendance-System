@@ -170,3 +170,4 @@ class ThongBaoController {
 }
 
 module.exports = ThongBaoController;
+
