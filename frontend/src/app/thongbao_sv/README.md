@@ -115,3 +115,4 @@ npm run dev
 - Efficient re-renders với React hooks
 - CSS transitions cho smooth animations
 - Optimized API calls với error handling
+
