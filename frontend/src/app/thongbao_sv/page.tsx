@@ -99,7 +99,7 @@ export default function ThongBaoPage() {
         <div className="header-bottom">
           <div className="tab active">Thông báo</div>
           <Link href="/lichhoc_sv" className="tab">Lịch học</Link>
-          <div className="tab">Lịch sử</div>
+          <Link href="/lichsu_sv" className="tab">Lịch sử</Link>
         </div>
 
         <div className="container">
@@ -128,7 +128,7 @@ export default function ThongBaoPage() {
         <div className="header-bottom">
           <div className="tab active">Thông báo</div>
           <Link href="/lichhoc_sv" className="tab">Lịch học</Link>
-          <div className="tab">Lịch sử</div>
+          <Link href="/lichsu_sv" className="tab">Lịch sử</Link>
         </div>
 
         <div className="container">
