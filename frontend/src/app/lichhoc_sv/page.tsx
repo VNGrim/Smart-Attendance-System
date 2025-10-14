@@ -94,10 +94,10 @@ export default function LichHocPage() {
           <i className="fas fa-calendar"></i>
           <span>Lịch học</span>
         </div>
-        <div className="tab">
+        <Link href="/lichsu_sv" className="tab">
           <i className="fas fa-history"></i>
           <span>Lịch sử</span>
-        </div>
+        </Link>
       </div>
 
       {/* ===== Năm + Tuần dropdown ===== */}
