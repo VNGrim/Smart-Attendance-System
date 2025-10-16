@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 
 const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 const SLOT_IDS = [1, 2, 3, 4];
@@ -9,6 +9,32 @@ const SLOT_IDS = [1, 2, 3, 4];
 export default function LichGiangDayGVPage() {
   const [year, setYear] = useState("2025");
   const [week, setWeek] = useState("13/10 - 19/10");
+  const [teacherInfo, setTeacherInfo] = useState({ 
+    userId: "", 
+    name: "", 
+    teacher_id: "", 
+    full_name: "" 
+  });
+
+  // Lấy thông tin giáo viên từ localStorage
+  useEffect(() => {
+    try {
+      const userData = localStorage.getItem("sas_user");
+      if (userData) {
+        const user = JSON.parse(userData);
+        if (user.role === "teacher") {
+          setTeacherInfo({
+            userId: user.userId,
+            name: user.name,
+            teacher_id: user.teacher_id,
+            full_name: user.full_name
+          });
+        }
+      }
+    } catch (error) {
+      console.error("Error loading teacher info:", error);
+    }
+  }, []);
 
   return (
     <div>
@@ -16,7 +42,7 @@ export default function LichGiangDayGVPage() {
       <div className="user-qr">
         <div className="user">
           <img src="/teacher.png" alt="avatar" />
-          <div className="name">Trần Thị Giao (MAS291)</div>
+          <div className="name">{teacherInfo.full_name || teacherInfo.name || "Giảng viên"} ({teacherInfo.teacher_id || teacherInfo.userId || "N/A"})</div>
         </div>
       </div>
 
