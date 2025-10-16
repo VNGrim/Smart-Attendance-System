@@ -57,7 +57,9 @@ export default function LoginPage() {
         localStorage.setItem("sas_user", JSON.stringify({
           userId: data.userId,
           role: data.role,
-          name: data.name
+          name: data.name,
+          teacher_id: data.teacher_id,
+          full_name: data.full_name
         }));
       } catch {}
 
@@ -69,8 +71,11 @@ export default function LoginPage() {
           router.push("/thongbao_sv"); // Chuyển đến trang thông báo
         }, 1500);
       } else if (data.role === "teacher") {
-        // GIÁO VIÊN: Đăng nhập thành công, hiển thị thông báo
-        setMessage(`Đăng nhập thành công! Chào mừng ${data.name} (Giáo viên)`);
+        // GIÁO VIÊN: Chuyển đến trang lịch giảng dạy
+        setMessage(`Chào mừng ${data.name}! Đang chuyển đến trang lịch giảng dạy...`);
+        setTimeout(() => {
+          router.push("/lichgiangday_gv"); // Chuyển đến trang lịch giảng dạy
+        }, 1500);
       } else if (data.role === "admin") {
         // ADMIN: Đăng nhập thành công, hiển thị thông báo
         setMessage(`Đăng nhập thành công! Chào mừng ${data.name} (Quản trị viên)`);

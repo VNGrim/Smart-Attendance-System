@@ -66,6 +66,8 @@ app.post("/api/auth/login", async (req, res) => {
       role: account.role, 
       userId: account.user_code,
       name: userInfo.full_name || account.user_code,
+      teacher_id: userInfo.teacher_id || account.user_code,
+      full_name: userInfo.full_name || account.user_code,
       message: `Đăng nhập thành công với quyền ${account.role}` 
     });
 
