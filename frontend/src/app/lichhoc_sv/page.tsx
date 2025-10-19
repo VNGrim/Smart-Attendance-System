@@ -108,8 +108,10 @@ export default function LichHocPage() {
     <div className="layout">
       <aside className="sidebar">
         <div className="side-header">
-          <img src="/avatar.png" alt="avatar" width={44} height={44} style={{ borderRadius: 9999 }} />
-          <div className="side-name">{student?.full_name || "Sinh viên"}</div>
+          <div className="side-name">
+            Chào mừng,<br />
+            {student?.full_name || "Sinh viên"}
+          </div>
         </div>
         <nav className="side-nav">
           <Link href="/thongbao_sv" className="side-link">🔔 Thông báo</Link>
@@ -134,6 +136,12 @@ export default function LichHocPage() {
             <option value="13/10 - 19/10">13/10 - 19/10</option>
           </select>
           <button className="qr-btn">📷 Quét QR</button>
+          <button className="qr-btn" onClick={() => { 
+            if (confirm('Bạn có chắc muốn đăng xuất?')) {
+              localStorage.removeItem('sas_user'); 
+              window.location.href = '/login'; 
+            }
+          }}>🚪 Đăng xuất</button>
         </div>
       </header>
       <main className="main">{children}</main>
