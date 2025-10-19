@@ -239,3 +239,35 @@ body {
     gap: 100px;
   }
 }
+
+/* Segmented tabs (đồng bộ với các trang khác) */
+.sas-tabs {
+  display: inline-flex;
+  gap: 6px;
+  background: rgba(255,255,255,0.7);
+  padding: 6px;
+  border-radius: 12px;
+  border: 1px solid rgba(0,0,0,0.08);
+  backdrop-filter: saturate(150%) blur(6px);
+}
+
+.sas-tab {
+  font-weight: 600;
+  font-size: 14px;
+  color: #1a1a1a;
+  cursor: pointer;
+  padding: 8px 14px;
+  border-radius: 10px;
+  text-decoration: none;
+  transition: all 0.2s ease;
+}
+
+.sas-tab:hover {
+  background-color: rgba(0,0,0,0.04);
+}
+
+.sas-tab.active {
+  background: #ffffff;
+  color: #1a1a1a;
+  box-shadow: 0 1px 0 rgba(0,0,0,0.04) inset, 0 4px 10px rgba(0,0,0,0.04);
+}

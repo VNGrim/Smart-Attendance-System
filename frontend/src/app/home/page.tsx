@@ -12,49 +12,31 @@ export default function Home() {
   };
 
   return (
-    <div
-      className="h-screen w-screen flex flex-col items-center relative overflow-hidden"
-      style={{ backgroundColor: "#eff4cb" }}
-    > 
-      {/* Logo chính giữa */}
-      
-      <div className="mt-[10%]">
-        <Image
-          src="/logohome.png"
-          alt="Logo"
-          width={450}
-          height={350}
-          priority
-        />
-      </div>
-      {/* Logo ở góc trên bên trái */}
-      <div className="absolute top-20 left-35">
-        <Image
-          src="/logo.png"
-          alt="Logo"
-          width={300}
-          height={140}
-          priority
-        />
+    <div className="h-screen w-screen flex flex-col items-center relative overflow-hidden role-student">
+      {/* Logo góc trái */}
+      <div className="absolute top-8 left-10">
+        <Image src="/logo.png" alt="Logo" width={240} height={110} priority />
       </div>
 
-      {/* Tiêu đề phụ */}
-      <div
-        className="absolute top-30 font-semibold text-lg"
-        style={{ color: '#49998A', fontSize: '30px' }}
-      >
-        Trang điểm danh dành cho sinh viên và giảng viên
-      </div>
+      {/* Hero */}
+      <div className="flex flex-col items-center justify-center flex-1 text-center px-6">
+        <Image src="/logohome.png" alt="Logo" width={420} height={320} priority />
+        <h1 className="mt-6 font-semibold" style={{ color: '#49998A', fontSize: '28px' }}>
+          Trang điểm danh dành cho sinh viên và giảng viên
+        </h1>
+        <p className="mt-2 text-[#4A4A4A]" style={{ fontSize: '16px' }}>
+          Quản lý lớp học, lịch và điểm danh nhanh chóng bằng QR
+        </p>
 
-
-      {/* Nút */}
-      <div className="flex gap-16 mt-auto mb-[25vh]">
-        <button
-          onClick={() => handleClick("login")}
-          className="px-8 py-4 bg-[#479a8a] text-white rounded-lg font-semibold hover:bg-[#36796e] transition text-2xl"
-        >
-          Đăng nhập
-        </button>
+        <div className="mt-10">
+          <button
+            onClick={() => handleClick("login")}
+            className="px-8 py-4 text-white rounded-lg font-semibold transition text-xl"
+            style={{ backgroundColor: '#49998A' }}
+          >
+            Đăng nhập
+          </button>
+        </div>
       </div>
     </div>
   );

@@ -47,15 +47,17 @@ export default function LichGiangDayGVPage() {
       </div>
 
       {/* ===== Header Bottom (Tabs) ===== */}
-      <div className="header-bottom">
-        <div className="tab active">
+      <div className="header-bottom sas-header-bg" style={{ justifyContent: "center", gap: 0 }}>
+        <div className="sas-tabs">
+          <div className="sas-tab active">
           <i className="fas fa-calendar"></i>
           <span>Lịch giảng dạy</span>
+          </div>
+          <Link href="/lop_gv" className="sas-tab">
+            <i className="fas fa-users"></i>
+            <span>Lớp học</span>
+          </Link>
         </div>
-        <Link href="/lop_gv" className="tab">
-          <i className="fas fa-users"></i>
-          <span>Lớp học</span>
-        </Link>
       </div>
 
       {/* ===== Năm + Tuần dropdown ===== */}
@@ -73,8 +75,8 @@ export default function LichGiangDayGVPage() {
       </div>
 
       {/* ===== Bảng lịch giảng dạy ===== */}
-      <div className="schedule-card">
-        <table className="schedule-table">
+      <div className="schedule-card" style={{ width: "1137px", margin: "30px auto" }}>
+        <table className="schedule-table" style={{ boxShadow: "0 6px 18px rgba(0,0,0,0.06)", borderRadius: 12, overflow: "hidden" }}>
           <thead>
             <tr>
               <th>Slot</th>
