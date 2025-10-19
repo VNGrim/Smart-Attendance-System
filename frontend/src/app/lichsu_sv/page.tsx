@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import QRButton from "@/app/components/QRButton";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 
 interface AttendanceRecord {
   id: number;
@@ -29,7 +29,9 @@ export default function LichSuPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Đọc studentId từ localStorage nếu có
+  const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [dateFilter, setDateFilter] = useState<string>("");
+
   const studentId = (() => {
     if (typeof window === "undefined") return "";
     try {
@@ -52,51 +54,15 @@ export default function LichSuPage() {
       setLoading(true);
       setError(null);
 
-      // Fetch student info
       const studentResponse = await fetch(`http://localhost:8080/api/thongbao/students/${studentId}`);
       const studentData = await studentResponse.json();
+      if (studentData.success) { setStudentInfo(studentData.data); }
 
-      if (studentData.success) {
-        setStudentInfo(studentData.data);
-      }
-
-      // Fetch attendance records (mock data for now)
       const mockRecords: AttendanceRecord[] = [
-        {
-          id: 1,
-          student_id: studentId,
-          student_name: studentData.data?.full_name || "Sinh viên",
-          class_name: "PRN 212",
-          teacher_name: "Phong",
-          date: "8/10/2025",
-          slot: 2,
-          attendance_code: "CT08",
-          status: "attended"
-        },
-        {
-          id: 2,
-          student_id: studentId,
-          student_name: studentData.data?.full_name || "Sinh viên",
-          class_name: "SWT 301",
-          teacher_name: "Vinh",
-          date: "8/10/2025",
-          slot: 1,
-          attendance_code: "CT01",
-          status: "attended"
-        },
-        {
-          id: 3,
-          student_id: studentId,
-          student_name: studentData.data?.full_name || "Sinh viên",
-          class_name: "SWP391",
-          teacher_name: "Phuc",
-          date: "7/10/2025",
-          slot: 1,
-          attendance_code: "CT13",
-          status: "absent"
-        }
+        { id: 1, student_id: studentId, student_name: studentData.data?.full_name || "Sinh viên", class_name: "PRN 212", teacher_name: "Phong", date: "2025-10-08", slot: 2, attendance_code: "CT08", status: "attended" },
+        { id: 2, student_id: studentId, student_name: studentData.data?.full_name || "Sinh viên", class_name: "SWT 301", teacher_name: "Vinh", date: "2025-10-08", slot: 1, attendance_code: "CT01", status: "attended" },
+        { id: 3, student_id: studentId, student_name: studentData.data?.full_name || "Sinh viên", class_name: "SWP391", teacher_name: "Phuc", date: "2025-10-07", slot: 1, attendance_code: "CT13", status: "absent" }
       ];
-
       setAttendanceRecords(mockRecords);
 
     } catch (err) {
@@ -106,147 +72,111 @@ export default function LichSuPage() {
     }
   };
 
-  const getStatusText = (status: string) => {
-    switch (status) {
-      case 'attended': return 'Đã điểm danh';
-      case 'absent': return 'Vắng';
-      case 'late': return 'Đi muộn';
-      default: return 'Không xác định';
-    }
-  };
+  const filtered = useMemo(() => {
+    return attendanceRecords.filter(r => {
+      const matchStatus = statusFilter === 'all' ? true : (statusFilter === 'present' ? r.status === 'attended' : r.status === 'absent');
+      const matchDate = dateFilter ? r.date === dateFilter : true;
+      return matchStatus && matchDate;
+    });
+  }, [attendanceRecords, statusFilter, dateFilter]);
 
-  const getStatusClass = (status: string) => {
-    switch (status) {
-      case 'attended': return 'status-badge attended';
-      case 'absent': return 'status-badge absent';
-      case 'late': return 'status-badge late';
-      default: return 'status-badge';
-    }
-  };
+  const totalSessions = attendanceRecords.length;
+  const totalPresent = attendanceRecords.filter(r => r.status === 'attended').length;
+  const totalAbsent = attendanceRecords.filter(r => r.status === 'absent').length;
+
+  const Shell = ({ children }: { children: React.ReactNode }) => (
+    <div className="layout">
+      <aside className="sidebar">
+        <div className="side-header">
+          <img src="/avatar.png" alt="avatar" width={44} height={44} style={{ borderRadius: 9999 }} />
+          <div className="side-name">{studentInfo?.full_name || "Sinh viên"}</div>
+        </div>
+        <nav className="side-nav">
+          <Link href="/thongbao_sv" className="side-link">🔔 Thông báo</Link>
+          <Link href="/lichhoc_sv" className="side-link">📅 Lịch học</Link>
+          <div className="side-link active">🕘 Lịch sử</div>
+          <a className="side-link" href="#">⚙️ Cài đặt</a>
+        </nav>
+      </aside>
+      <header className="topbar">
+        <button className="qr-btn">📷 Quét QR</button>
+      </header>
+      <main className="main">{children}</main>
+    </div>
+  );
 
   if (loading) {
     return (
-      <div>
-        <div className="user-qr">
-          <div className="user">
-            <img src="/avatar.png" alt="avatar" />
-            <div className="name">{studentInfo?.full_name || "Đang tải..."}</div>
-          </div>
-          <QRButton />
-        </div>
-
-        <div className="header-bottom sas-header-bg" style={{ justifyContent: "center", gap: 0 }}>
-          <div className="sas-tabs">
-            <Link href="/thongbao_sv" className="sas-tab">Thông báo</Link>
-            <Link href="/lichhoc_sv" className="sas-tab">Lịch học</Link>
-            <div className="sas-tab active">Lịch sử</div>
-          </div>
-        </div>
-
+      <Shell>
         <div className="container">
-          <div className="card">
-            <div className="loading">
-              <div className="loading-spinner"></div>
-              <p>Đang tải lịch sử điểm danh...</p>
-            </div>
-          </div>
+          <div className="card" style={{ textAlign: 'center' }}>Đang tải lịch sử điểm danh...</div>
         </div>
-      </div>
+      </Shell>
     );
   }
 
   if (error) {
     return (
-      <div>
-        <div className="user-qr">
-          <div className="user">
-            <img src="/avatar.png" alt="avatar" />
-            <div className="name">{studentInfo?.full_name || "Sinh viên"}</div>
-          </div>
-          <QRButton />
-        </div>
-
-        <div className="header-bottom sas-header-bg" style={{ justifyContent: "center", gap: 0 }}>
-          <div className="sas-tabs">
-            <Link href="/thongbao_sv" className="sas-tab">Thông báo</Link>
-            <Link href="/lichhoc_sv" className="sas-tab">Lịch học</Link>
-            <div className="sas-tab active">Lịch sử</div>
-          </div>
-        </div>
-
+      <Shell>
         <div className="container">
-          <div className="card">
-            <div className="error">
-              <div className="error-icon">⚠️</div>
-              <p>{error}</p>
-              <button onClick={fetchData} className="retry-btn">Thử lại</button>
-            </div>
-          </div>
+          <div className="card" style={{ textAlign: 'center', color: 'red' }}>{error}</div>
         </div>
-      </div>
+      </Shell>
     );
   }
 
   return (
-    <div>
-      {/* Header với user info và QR button */}
-      <div className="user-qr">
-        <div className="user">
-          <img src="/avatar.png" alt="avatar" />
-          <div className="name">{studentInfo?.full_name || "Sinh viên"}</div>
-        </div>
-        <QRButton />
-      </div>
-
-      {/* Navigation bar */}
-      <div className="header-bottom sas-header-bg" style={{ justifyContent: "center", gap: 0 }}>
-        <div className="sas-tabs">
-          <Link href="/thongbao_sv" className="sas-tab">Thông báo</Link>
-          <Link href="/lichhoc_sv" className="sas-tab">Lịch học</Link>
-          <div className="sas-tab active">Lịch sử</div>
-        </div>
-      </div>
-
-      {/* Main content - Bảng lịch sử */}
+    <Shell>
       <div className="container">
-        <div className="card">
-          {attendanceRecords.length === 0 ? (
-            <div className="empty-state">
-              <div className="empty-icon">📋</div>
-              <p>Chưa có lịch sử điểm danh nào</p>
-            </div>
-          ) : (
-            <table className="history-table">
-              <thead>
-                <tr>
-                  <th>MSSV</th>
-                  <th>Lớp</th>
-                  <th>Giáo viên</th>
-                  <th>Ngày</th>
-                  <th>Mã điểm danh</th>
-                  <th>Điểm danh</th>
+        {/* Summary cards */}
+        <div className="summary">
+          <div className="card kpi"><div className="label">Tổng buổi</div><div className="value">{totalSessions}</div></div>
+          <div className="card kpi"><div className="label">Có mặt</div><div className="value" style={{ color: 'var(--accent-green)' }}>{totalPresent}</div></div>
+          <div className="card kpi"><div className="label">Vắng</div><div className="value" style={{ color: 'var(--accent-red)' }}>{totalAbsent}</div></div>
+        </div>
+
+        {/* Filters */}
+        <div className="filters">
+          <input type="date" className="select" value={dateFilter} onChange={(e) => setDateFilter(e.target.value)} />
+          <select className="select" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
+            <option value="all">Tất cả</option>
+            <option value="present">Có mặt</option>
+            <option value="absent">Vắng</option>
+          </select>
+        </div>
+
+        {/* Table */}
+        <div className="table-wrap">
+          <table className="history-table">
+            <thead>
+              <tr>
+                <th>MSSV</th>
+                <th>Lớp</th>
+                <th>Giảng viên</th>
+                <th>Ngày</th>
+                <th>Mã</th>
+                <th>Trạng thái</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.map((record) => (
+                <tr key={record.id}>
+                  <td>{record.student_name} - {record.student_id}</td>
+                  <td>{record.class_name}</td>
+                  <td>{record.teacher_name}</td>
+                  <td>{record.date} - slot {record.slot}</td>
+                  <td>{record.attendance_code}</td>
+                  <td>
+                    <span className={`badge ${record.status === 'attended' ? 'present' : 'absent'}`}>
+                      {record.status === 'attended' ? 'Present' : 'Absent'}
+                    </span>
+                  </td>
                 </tr>
-              </thead>
-              <tbody>
-                {attendanceRecords.map((record) => (
-                  <tr key={record.id}>
-                    <td>{record.student_name} - {record.student_id}</td>
-                    <td>{record.class_name}</td>
-                    <td>{record.teacher_name}</td>
-                    <td>{record.date} - slot {record.slot}</td>
-                    <td>{record.attendance_code}</td>
-                    <td>
-                      <span className={getStatusClass(record.status)}>
-                        {getStatusText(record.status)}
-                      </span>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
+              ))}
+            </tbody>
+          </table>
         </div>
       </div>
-    </div>
+    </Shell>
   );
 }
