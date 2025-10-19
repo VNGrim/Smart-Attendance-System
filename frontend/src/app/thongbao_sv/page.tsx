@@ -27,8 +27,19 @@ export default function ThongBaoPage() {
   const [error, setError] = useState<string | null>(null);
   const [selectedAnnouncement, setSelectedAnnouncement] = useState<Announcement | null>(null);
 
+  const studentId = (() => {
+    if (typeof window === "undefined") return "";
+    try {
+      const raw = localStorage.getItem("sas_user");
+      if (!raw) return "";
+      const u = JSON.parse(raw);
+      if (u?.role === "student" && typeof u?.userId === "string") return u.userId;
+      return "";
+    } catch { return ""; }
+  })();
+
   useEffect(() => {
-    fetchData();
+    if (studentId) fetchData();
     const saved = localStorage.getItem('sas_settings');
     if (saved) {
       try {
@@ -43,7 +54,7 @@ export default function ThongBaoPage() {
     };
     window.addEventListener('sas_settings_changed' as any, handler);
     return () => window.removeEventListener('sas_settings_changed' as any, handler);
-  }, []);
+  }, [studentId]);
 
   const fetchData = async () => {
     try {
@@ -60,8 +71,8 @@ export default function ThongBaoPage() {
         throw new Error(announcementsData.message);
       }
 
-      // Fetch student info (using SV001 as example)
-      const studentResponse = await fetch('http://localhost:8080/api/thongbao/students/SV001');
+      // Fetch student info
+      const studentResponse = await fetch(`http://localhost:8080/api/thongbao/students/${studentId}`);
       const studentData = await studentResponse.json();
 
       if (studentData.success) {
@@ -103,8 +114,10 @@ export default function ThongBaoPage() {
     <div className="layout">
       <aside className="sidebar">
         <div className="side-header">
-          <img src="/avatar.png" alt="avatar" width={44} height={44} style={{ borderRadius: 9999 }} />
-          <div className="side-name">{studentInfo?.full_name || "Sinh viên"}</div>
+          <div className="side-name">
+            Chào mừng,<br />
+            {studentInfo?.full_name || "Sinh viên"}
+          </div>
         </div>
         <nav className="side-nav">
           <div className="side-link active">🔔 Thông báo</div>
@@ -114,7 +127,13 @@ export default function ThongBaoPage() {
         </nav>
       </aside>
       <header className="topbar">
-        <button className="qr-btn">📷 Scan QR</button>
+        <button className="qr-btn">📷 Quét QR</button>
+        <button className="qr-btn" onClick={() => { 
+          if (confirm('Bạn có chắc muốn đăng xuất?')) {
+            localStorage.removeItem('sas_user'); 
+            window.location.href = '/login'; 
+          }
+        }}>🚪 Đăng xuất</button>
       </header>
       <main className="main">
         {children}

@@ -50,8 +50,10 @@ export default function CaiDatPage() {
     <div className="layout">
       <aside className="sidebar">
         <div className="side-header">
-          <img src={photoUrl} alt="avatar" width={44} height={44} style={{ borderRadius: 9999 }} />
-          <div className="side-name">{student?.full_name || "Sinh viên"}</div>
+          <div className="side-name">
+            Chào mừng,<br />
+            {student?.full_name || "Sinh viên"}
+          </div>
         </div>
         <nav className="side-nav">
           <Link href="/thongbao_sv" className="side-link">🔔 Thông báo</Link>
@@ -62,6 +64,12 @@ export default function CaiDatPage() {
       </aside>
       <header className="topbar">
         <button className="qr-btn">📷 Quét QR</button>
+        <button className="qr-btn" onClick={() => { 
+          if (confirm('Bạn có chắc muốn đăng xuất?')) {
+            localStorage.removeItem('sas_user'); 
+            window.location.href = '/login'; 
+          }
+        }}>🚪 Đăng xuất</button>
       </header>
       <main className="main">{children}</main>
     </div>
