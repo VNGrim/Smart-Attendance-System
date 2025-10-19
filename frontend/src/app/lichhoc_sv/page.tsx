@@ -59,6 +59,20 @@ export default function LichHocPage() {
       }
     }
     if (studentId) fetchData();
+    // Apply settings theme from localStorage and subscribe changes
+    try {
+      const saved = localStorage.getItem('sas_settings');
+      if (saved) {
+        const s = JSON.parse(saved);
+        document.documentElement.style.colorScheme = s.themeDark ? 'dark' : 'light';
+      }
+    } catch {}
+    const handler = (e: any) => {
+      const s = e?.detail;
+      if (!s) return;
+      document.documentElement.style.colorScheme = s.themeDark ? 'dark' : 'light';
+    };
+    window.addEventListener('sas_settings_changed' as any, handler);
     return () => { isMounted = false; };
   }, [studentId]);
 
@@ -101,7 +115,7 @@ export default function LichHocPage() {
           <Link href="/thongbao_sv" className="side-link">🔔 Thông báo</Link>
           <div className="side-link active">📅 Lịch học</div>
           <Link href="/lichsu_sv" className="side-link">🕘 Lịch sử</Link>
-          <a className="side-link" href="#">⚙️ Cài đặt</a>
+          <Link href="/caidat_sv" className="side-link">⚙️ Cài đặt</Link>
         </nav>
       </aside>
       <header className="topbar">

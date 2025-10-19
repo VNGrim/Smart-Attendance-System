@@ -47,6 +47,20 @@ export default function LichSuPage() {
 
   useEffect(() => {
     fetchData();
+    // Theme from settings
+    try {
+      const saved = localStorage.getItem('sas_settings');
+      if (saved) {
+        const s = JSON.parse(saved);
+        document.documentElement.style.colorScheme = s.themeDark ? 'dark' : 'light';
+      }
+    } catch {}
+    const handler = (e: any) => {
+      const s = e?.detail; if (!s) return;
+      document.documentElement.style.colorScheme = s.themeDark ? 'dark' : 'light';
+    };
+    window.addEventListener('sas_settings_changed' as any, handler);
+    return () => window.removeEventListener('sas_settings_changed' as any, handler);
   }, [studentId]);
 
   const fetchData = async () => {
@@ -95,7 +109,7 @@ export default function LichSuPage() {
           <Link href="/thongbao_sv" className="side-link">🔔 Thông báo</Link>
           <Link href="/lichhoc_sv" className="side-link">📅 Lịch học</Link>
           <div className="side-link active">🕘 Lịch sử</div>
-          <a className="side-link" href="#">⚙️ Cài đặt</a>
+          <Link href="/caidat_sv" className="side-link">⚙️ Cài đặt</Link>
         </nav>
       </aside>
       <header className="topbar">

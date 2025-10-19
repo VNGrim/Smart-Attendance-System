@@ -29,6 +29,20 @@ export default function ThongBaoPage() {
 
   useEffect(() => {
     fetchData();
+    const saved = localStorage.getItem('sas_settings');
+    if (saved) {
+      try {
+        const s = JSON.parse(saved);
+        document.documentElement.style.colorScheme = s.themeDark ? 'dark' : 'light';
+      } catch {}
+    }
+    const handler = (e: any) => {
+      const s = e?.detail;
+      if (!s) return;
+      document.documentElement.style.colorScheme = s.themeDark ? 'dark' : 'light';
+    };
+    window.addEventListener('sas_settings_changed' as any, handler);
+    return () => window.removeEventListener('sas_settings_changed' as any, handler);
   }, []);
 
   const fetchData = async () => {
@@ -96,7 +110,7 @@ export default function ThongBaoPage() {
           <div className="side-link active">🔔 Thông báo</div>
           <Link href="/lichhoc_sv" className="side-link">📅 Lịch học</Link>
           <Link href="/lichsu_sv" className="side-link">🕘 Lịch sử</Link>
-          <a className="side-link" href="#">⚙️ Cài đặt</a>
+          <Link href="/caidat_sv" className="side-link">⚙️ Cài đặt</Link>
         </nav>
       </aside>
       <header className="topbar">
