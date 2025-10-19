@@ -16,7 +16,7 @@ export default function LichHocLayout({
 }) {
   return (
     <html lang="vi">
-      <body className={inter.className}>{children}</body>
+      <body className={`${inter.className} role-student`}>{children}</body>
     </html>
   );
 }

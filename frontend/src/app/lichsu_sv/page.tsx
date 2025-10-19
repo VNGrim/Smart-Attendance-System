@@ -135,10 +135,12 @@ export default function LichSuPage() {
           <QRButton />
         </div>
 
-        <div className="header-bottom">
-          <Link href="/thongbao_sv" className="tab">Thông báo</Link>
-          <Link href="/lichhoc_sv" className="tab">Lịch học</Link>
-          <div className="tab active">Lịch sử</div>
+        <div className="header-bottom sas-header-bg" style={{ justifyContent: "center", gap: 0 }}>
+          <div className="sas-tabs">
+            <Link href="/thongbao_sv" className="sas-tab">Thông báo</Link>
+            <Link href="/lichhoc_sv" className="sas-tab">Lịch học</Link>
+            <div className="sas-tab active">Lịch sử</div>
+          </div>
         </div>
 
         <div className="container">
@@ -164,10 +166,12 @@ export default function LichSuPage() {
           <QRButton />
         </div>
 
-        <div className="header-bottom">
-          <Link href="/thongbao_sv" className="tab">Thông báo</Link>
-          <Link href="/lichhoc_sv" className="tab">Lịch học</Link>
-          <div className="tab active">Lịch sử</div>
+        <div className="header-bottom sas-header-bg" style={{ justifyContent: "center", gap: 0 }}>
+          <div className="sas-tabs">
+            <Link href="/thongbao_sv" className="sas-tab">Thông báo</Link>
+            <Link href="/lichhoc_sv" className="sas-tab">Lịch học</Link>
+            <div className="sas-tab active">Lịch sử</div>
+          </div>
         </div>
 
         <div className="container">
@@ -195,10 +199,12 @@ export default function LichSuPage() {
       </div>
 
       {/* Navigation bar */}
-      <div className="header-bottom">
-        <Link href="/thongbao_sv" className="tab">Thông báo</Link>
-        <Link href="/lichhoc_sv" className="tab">Lịch học</Link>
-        <div className="tab active">Lịch sử</div>
+      <div className="header-bottom sas-header-bg" style={{ justifyContent: "center", gap: 0 }}>
+        <div className="sas-tabs">
+          <Link href="/thongbao_sv" className="sas-tab">Thông báo</Link>
+          <Link href="/lichhoc_sv" className="sas-tab">Lịch học</Link>
+          <div className="sas-tab active">Lịch sử</div>
+        </div>
       </div>
 
       {/* Main content - Bảng lịch sử */}

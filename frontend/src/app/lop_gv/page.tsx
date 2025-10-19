@@ -23,14 +23,16 @@ export default function LopGVPage() {
       </div>
 
       {/* ===== Header Bottom (Tabs) ===== */}
-      <div className="header-bottom">
-        <Link href="/lichgiangday_gv" className="tab">
-          <i className="fas fa-calendar"></i>
-          <span>Lịch giảng dạy</span>
-        </Link>
-        <div className="tab active">
-          <i className="fas fa-users"></i>
-          <span>Lớp học</span>
+      <div className="header-bottom sas-header-bg" style={{ justifyContent: "center", gap: 0 }}>
+        <div className="sas-tabs">
+          <Link href="/lichgiangday_gv" className="sas-tab">
+            <i className="fas fa-calendar"></i>
+            <span>Lịch giảng dạy</span>
+          </Link>
+          <div className="sas-tab active">
+            <i className="fas fa-users"></i>
+            <span>Lớp học</span>
+          </div>
         </div>
       </div>
 
@@ -45,12 +47,14 @@ export default function LopGVPage() {
                 display: "flex",
                 justifyContent: "space-between",
                 alignItems: "center",
-                background: bgColor,
+                background: "#fff",
                 padding: "16px 24px",
-                borderRadius: "10px",
+                borderRadius: "12px",
                 marginBottom: "16px",
                 fontWeight: 600,
                 color: "#333",
+                boxShadow: "0 6px 18px rgba(0,0,0,0.06)",
+                border: `2px solid ${bgColor}`,
               }}
             >
               <div>

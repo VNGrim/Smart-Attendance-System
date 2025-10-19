@@ -16,7 +16,6 @@ export default function LichHocPage() {
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string>("");
 
-  // Đọc studentId từ localStorage nếu có
   const studentId = (() => {
     if (typeof window === "undefined") return "";
     try {
@@ -73,106 +72,128 @@ export default function LichHocPage() {
     return map;
   }, [flat]);
 
-  return (
-    <div>
-      {/* ===== Header Top (avatar + QR) ===== */}
-      <div className="user-qr">
-        <div className="user">
-          <img src="/avatar.png" alt="avatar" />
-          <div className="name">{student?.full_name || "Sinh viên"}</div>
+  const getSubjectColor = (className: string) => {
+    const colors = ['card-blue', 'card-teal', 'card-purple', 'card-green', 'card-orange', 'card-pink', 'card-indigo', 'card-red'];
+    const hash = className.split('').reduce((a, b) => a + b.charCodeAt(0), 0);
+    return colors[hash % colors.length];
+  };
+
+  const getSubjectIcon = (className: string) => {
+    if (className.includes('Web') || className.includes('WEB')) return '🌐';
+    if (className.includes('Database') || className.includes('DB')) return '🗄️';
+    if (className.includes('Algorithm') || className.includes('ALG')) return '🧮';
+    if (className.includes('Network') || className.includes('NET')) return '🌐';
+    if (className.includes('AI') || className.includes('Machine')) return '🤖';
+    if (className.includes('Mobile') || className.includes('APP')) return '📱';
+    if (className.includes('Game') || className.includes('GAME')) return '🎮';
+    if (className.includes('Security') || className.includes('SEC')) return '🔒';
+    return '📚';
+  };
+
+  const Shell = ({ children }: { children: React.ReactNode }) => (
+    <div className="layout">
+      <aside className="sidebar">
+        <div className="side-header">
+          <img src="/avatar.png" alt="avatar" width={44} height={44} style={{ borderRadius: 9999 }} />
+          <div className="side-name">{student?.full_name || "Sinh viên"}</div>
         </div>
-        <QRButton />
-      </div>
-
-      {/* ===== Header Bottom (thanh tab xanh) ===== */}
-      <div className="header-bottom">
-        <Link href="/thongbao_sv" className="tab">
-          <i className="fas fa-bell"></i>
-          <span>Thông báo</span>
-        </Link>
-        <div className="tab active">
-          <i className="fas fa-calendar"></i>
-          <span>Lịch học</span>
+        <nav className="side-nav">
+          <Link href="/thongbao_sv" className="side-link">🔔 Thông báo</Link>
+          <div className="side-link active">📅 Lịch học</div>
+          <Link href="/lichsu_sv" className="side-link">🕘 Lịch sử</Link>
+          <a className="side-link" href="#">⚙️ Cài đặt</a>
+        </nav>
+      </aside>
+      <header className="topbar">
+        <div className="side-header" style={{ padding: 0 }}>
+          <strong style={{ color: "white" }}>Lịch học</strong>
         </div>
-        <Link href="/lichsu_sv" className="tab">
-          <i className="fas fa-history"></i>
-          <span>Lịch sử</span>
-        </Link>
-      </div>
-
-      {/* ===== Năm + Tuần dropdown ===== */}
-      <div className="schedule-header">
-        <select value={year} onChange={(e) => setYear(e.target.value)}>
-          <option value="2024">2024</option>
-          <option value="2025">2025</option>
-          <option value="2026">2026</option>
-        </select>
-        <select value={week} onChange={(e) => setWeek(e.target.value)}>
-          <option value="29/09 - 05/10">29/09 - 05/10</option>
-          <option value="06/10 - 12/10">06/10 - 12/10</option>
-          <option value="13/10 - 19/10">13/10 - 19/10</option>
-        </select>
-      </div>
-
-      {/* ===== Bảng lịch ===== */}
-      <div className="schedule-card">
-        {loading ? (
-          <div>Đang tải thời khóa biểu...</div>
-        ) : error ? (
-          <div style={{ color: "red" }}>{error}</div>
-        ) : (
-        <table className="schedule-table">
-          <thead>
-            <tr>
-              <th>Slot</th>
-              {DAYS.map((d) => (
-                <th key={d}>{d}</th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {SLOT_IDS.map((slotId) => (
-              <tr key={slotId}>
-                <td>
-                  <b>Slot {slotId}</b>
-                  {slotTimeById[slotId] && (
-                    <div style={{ fontSize: 12, color: "#64748b" }}>
-                      {slotTimeById[slotId].start} - {slotTimeById[slotId].end}
-                    </div>
-                  )}
-                </td>
-                {DAYS.map((day) => {
-                  const cell = grid?.[slotId]?.[day] || null;
-                  if (!cell) return <td key={`${day}-${slotId}`}></td>;
-                  return (
-                    <td key={`${day}-${slotId}`}>
-                      <div
-                        style={{
-                          backgroundColor: cell.color || "#e2e8f0",
-                          color: "#fff",
-                          borderRadius: 8,
-                          padding: 8,
-                          lineHeight: 1.2,
-                        }}
-                      >
-                        <div style={{ fontWeight: 700 }}>{cell.className}</div>
-                        <div style={{ fontSize: 12 }}>
-                          {cell.startTime?.slice(0,5)} - {cell.endTime?.slice(0,5)}
-                        </div>
-                        <div style={{ fontSize: 12 }}>{cell.teacherName}</div>
-                        {cell.room ? (
-                          <div style={{ fontSize: 12 }}>Phòng {cell.room}</div>
-                        ) : null}
-                      </div>
-                    </td>
-                  );
-                })}
-              </tr>
-            ))}
-          </tbody>
-        </table>
-        )}
-      </div>
+        <div className="controls">
+          <select className="select" value={year} onChange={(e) => setYear(e.target.value)}>
+            <option value="2024">2024</option>
+            <option value="2025">2025</option>
+            <option value="2026">2026</option>
+          </select>
+          <select className="select" value={week} onChange={(e) => setWeek(e.target.value)}>
+            <option value="29/09 - 05/10">29/09 - 05/10</option>
+            <option value="06/10 - 12/10">06/10 - 12/10</option>
+            <option value="13/10 - 19/10">13/10 - 19/10</option>
+          </select>
+          <button className="qr-btn">📷 Quét QR</button>
+        </div>
+      </header>
+      <main className="main">{children}</main>
     </div>
+  );
+
+  if (loading) {
+    return (
+      <Shell>
+        <div className="schedule-shell">
+          <div>Đang tải thời khóa biểu...</div>
+        </div>
+      </Shell>
+    );
+  }
+
+  if (error) {
+    return (
+      <Shell>
+        <div className="schedule-shell" style={{ color: "red" }}>{error}</div>
+      </Shell>
+    );
+  }
+
+  return (
+    <Shell>
+      <div className="schedule-shell">
+        {/* Headers */}
+        <div className="grid" style={{ marginBottom: 6 }}>
+          <div></div>
+          {DAYS.map((d) => (
+            <div key={d} className="col-header">{d}</div>
+          ))}
+        </div>
+        {/* Grid */}
+        <div className="grid">
+          {SLOT_IDS.map((slotId) => (
+            <>
+              <div key={`slot-${slotId}`} className="row-header">
+                <div className="slot-badge">Slot {slotId}</div>
+                {slotTimeById[slotId] && (
+                  <div style={{ fontSize: 11, color: "#64748b", marginTop: 2 }}>
+                    {slotTimeById[slotId].start} - {slotTimeById[slotId].end}
+                  </div>
+                )}
+              </div>
+              {DAYS.map((day) => {
+                const cell = grid?.[slotId]?.[day] || null;
+                return (
+                  <div key={`${day}-${slotId}`} className="cell">
+                    {cell ? (
+                      <>
+                        <div className={`class-card ${getSubjectColor(cell.className)}`}>
+                          <div style={{ fontSize: 16 }}>{getSubjectIcon(cell.className)}</div>
+                          <div style={{ fontSize: 13, fontWeight: 900, lineHeight: 1.15, textShadow: '0 1px 0 rgba(0,0,0,0.15)' }}>{cell.className}</div>
+                          <div className="class-time" style={{ fontSize: 12 }}>{cell.startTime?.slice(0,5)} - {cell.endTime?.slice(0,5)}</div>
+                          <div className="class-lecturer" style={{ fontSize: 12 }}>{cell.teacherName}</div>
+                          {cell.room && <div className="class-room" style={{ fontSize: 12 }}>Phòng {cell.room}</div>}
+                        </div>
+                        <div className="pop">
+                          <h4>{cell.className}</h4>
+                          <p><strong>Thời gian:</strong> {cell.startTime?.slice(0,5)} - {cell.endTime?.slice(0,5)}</p>
+                          <p><strong>Giảng viên:</strong> {cell.teacherName}</p>
+                          {cell.room && <p><strong>Phòng:</strong> {cell.room}</p>}
+                        </div>
+                      </>
+                    ) : null}
+                  </div>
+                );
+              })}
+            </>
+          ))}
+        </div>
+      </div>
+    </Shell>
   );
 }

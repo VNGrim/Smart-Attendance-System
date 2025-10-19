@@ -85,23 +85,32 @@ export default function ThongBaoPage() {
     });
   };
 
+  const Shell = ({ children }: { children: React.ReactNode }) => (
+    <div className="layout">
+      <aside className="sidebar">
+        <div className="side-header">
+          <img src="/avatar.png" alt="avatar" width={44} height={44} style={{ borderRadius: 9999 }} />
+          <div className="side-name">{studentInfo?.full_name || "Sinh viên"}</div>
+        </div>
+        <nav className="side-nav">
+          <div className="side-link active">🔔 Thông báo</div>
+          <Link href="/lichhoc_sv" className="side-link">📅 Lịch học</Link>
+          <Link href="/lichsu_sv" className="side-link">🕘 Lịch sử</Link>
+          <a className="side-link" href="#">⚙️ Cài đặt</a>
+        </nav>
+      </aside>
+      <header className="topbar">
+        <button className="qr-btn">📷 Scan QR</button>
+      </header>
+      <main className="main">
+        {children}
+      </main>
+    </div>
+  );
+
   if (loading) {
     return (
-      <div>
-        <div className="user-qr">
-          <div className="user">
-            <img src="/avatar.png" alt="avatar" />
-            <div className="name">{studentInfo?.full_name || "Đang tải..."}</div>
-          </div>
-          <QRButton />
-        </div>
-
-        <div className="header-bottom">
-          <div className="tab active">Thông báo</div>
-          <Link href="/lichhoc_sv" className="tab">Lịch học</Link>
-          <Link href="/lichsu_sv" className="tab">Lịch sử</Link>
-        </div>
-
+      <Shell>
         <div className="container">
           <div className="card">
             <div className="loading">
@@ -110,27 +119,13 @@ export default function ThongBaoPage() {
             </div>
           </div>
         </div>
-      </div>
+      </Shell>
     );
   }
 
   if (error) {
     return (
-      <div>
-        <div className="user-qr">
-          <div className="user">
-            <img src="/avatar.png" alt="avatar" />
-            <div className="name">{studentInfo?.full_name || "Sinh viên"}</div>
-          </div>
-          <QRButton />
-        </div>
-
-        <div className="header-bottom">
-          <div className="tab active">Thông báo</div>
-          <Link href="/lichhoc_sv" className="tab">Lịch học</Link>
-          <Link href="/lichsu_sv" className="tab">Lịch sử</Link>
-        </div>
-
+      <Shell>
         <div className="container">
           <div className="card">
             <div className="error">
@@ -140,78 +135,62 @@ export default function ThongBaoPage() {
             </div>
           </div>
         </div>
-      </div>
+      </Shell>
     );
   }
 
   return (
-    <div>
-      <div className="user-qr">
-        <div className="user">
-          <img src="/avatar.png" alt="avatar" />
-          <div className="name">{studentInfo?.full_name || "Sinh viên"}</div>
-        </div>
-        <QRButton />
-      </div>
-
-      <div className="header-bottom">
-        <div className="tab active">Thông báo</div>
-        <Link href="/lichhoc_sv" className="tab">Lịch học</Link>
-        <Link href="/lichsu_sv" className="tab">Lịch sử</Link>
-      </div>
-
+    <Shell>
       <div className="container">
-        <div className="card">
-          {announcements.length === 0 ? (
-            <div className="empty-state">
-              <div className="empty-icon">📢</div>
-              <p>Chưa có thông báo nào</p>
-            </div>
-          ) : (
-            <ul className="notifications">
-              {announcements.map((announcement) => (
-                <li 
-                  key={announcement.id} 
-                  className="notification-item"
-                  onClick={() => handleAnnouncementClick(announcement)}
-                >
+        {announcements.length === 0 ? (
+          <div className="card empty-state">
+            <div className="empty-icon">📢</div>
+            <p>Chưa có thông báo nào</p>
+          </div>
+        ) : (
+          <ul className="notifications">
+            {announcements.map((announcement) => (
+              <li key={announcement.id} className="notification-item" onClick={() => handleAnnouncementClick(announcement)}>
+                <div style={{
+                  width: 44,
+                  height: 44,
+                  borderRadius: 12,
+                  background: "#E0F2FE",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  color: "#0369A1",
+                  fontSize: 20,
+                  fontWeight: 800
+                }}>🗓️</div>
+                <div className="notif-body">
+                  <div className="notif-title">{announcement.title}</div>
+                  <div className="notif-preview">{announcement.content}</div>
+                </div>
+                <div>
                   <div className="notif-time">{formatDate(announcement.created_at)}</div>
-                  <div className="notif-body">
-                    <div className="notif-title">{announcement.title}</div>
-                    <div className="notif-preview">{announcement.content}</div>
-                  </div>
-                  <div className="notif-arrow">→</div>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
+                  <div className="notif-arrow" style={{ textAlign: "right", marginTop: 8 }}>View</div>
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
       </div>
 
-      {/* Modal chi tiết thông báo */}
       {selectedAnnouncement && (
         <div className="modal-overlay" onClick={() => setSelectedAnnouncement(null)}>
           <div className="modal-content" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
               <h2>{selectedAnnouncement.title}</h2>
-              <button 
-                className="close-btn" 
-                onClick={() => setSelectedAnnouncement(null)}
-              >
-                ×
-              </button>
+              <button className="close-btn" onClick={() => setSelectedAnnouncement(null)}>×</button>
             </div>
             <div className="modal-body">
-              <div className="modal-date">
-                Ngày đăng: {formatDate(selectedAnnouncement.created_at)}
-              </div>
-              <div className="modal-content-text">
-                {selectedAnnouncement.content}
-              </div>
+              <div className="modal-date">Ngày đăng: {formatDate(selectedAnnouncement.created_at)}</div>
+              <div className="modal-content-text">{selectedAnnouncement.content}</div>
             </div>
           </div>
         </div>
       )}
-    </div>
+    </Shell>
   );
 }
