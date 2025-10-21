@@ -6,8 +6,9 @@ import { useRouter } from "next/navigation";
 export default function Home() {
   const router = useRouter();
 
-  const handleClick = () => {
-    router.push("/login"); // Điều hướng đến trang đăng nhập
+  const handleClick = (_role?: string) => {
+    // All roles use the same login route now
+    router.push("/login");
   };
 
   return (
@@ -52,7 +53,7 @@ export default function Home() {
 
           <div className="mt-6 flex justify-center">
             <button
-              onClick={handleClick}
+              onClick={() => handleClick("login")}
               className="px-10 py-3 bg-[#2e8b7a] text-white rounded-lg font-semibold hover:bg-[#256b5d] transition text-lg"
               aria-label="Đăng nhập"
             >
