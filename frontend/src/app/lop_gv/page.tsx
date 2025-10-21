@@ -12,31 +12,36 @@ const classes = [
 const colors = ["#F9A8D4", "#A7F3D0", "#BFDBFE", "#FDE68A", "#C7D2FE", "#FDBA74"];
 
 export default function LopGVPage() {
-  return (
-    <div>
-      {/* ===== Header Top ===== */}
-      <div className="user-qr">
-        <div className="user">
-          <img src="/teacher.png" alt="avatar" />
-          <div className="name">Trần Thị Giao (MAS291)</div>
-        </div>
-      </div>
+  const teacherInfo = { full_name: 'Giảng viên', teacher_id: 'MAS291' };
 
-      {/* ===== Header Bottom (Tabs) ===== */}
-      <div className="header-bottom sas-header-bg" style={{ justifyContent: "center", gap: 0 }}>
-        <div className="sas-tabs">
-          <Link href="/lichgiangday_gv" className="sas-tab">
-            <i className="fas fa-calendar"></i>
-            <span>Lịch giảng dạy</span>
-          </Link>
-          <div className="sas-tab active">
-            <i className="fas fa-users"></i>
-            <span>Lớp học</span>
+  const Shell = ({ children }: { children: React.ReactNode }) => (
+    <div className="layout">
+      <aside className="sidebar">
+        <div className="side-header">
+          <div className="side-name">
+            Chào mừng,<br />
+            {teacherInfo.full_name}
           </div>
         </div>
-      </div>
+        <nav className="side-nav">
+          <Link href="/thongbao_gv" className="side-link">🔔 Thông báo</Link>
+          <Link href="/lichgiangday_gv" className="side-link">📅 Lịch giảng dạy</Link>
+          <div className="side-link active">👥 Lớp học</div>
+          <Link href="/caidat_gv" className="side-link">⚙️ Cài đặt</Link>
+        </nav>
+      </aside>
+      <header className="topbar">
+        <div className="side-header" style={{ padding: 0 }}>
+          <strong style={{ color: "white" }}>Lớp học</strong>
+        </div>
+        <div className="controls"></div>
+      </header>
+      <main className="main">{children}</main>
+    </div>
+  );
 
-      {/* ===== Danh sách lớp ===== */}
+  return (
+    <Shell>
       <div style={{ width: "1137px", margin: "40px auto" }}>
         {classes.map((cls, idx) => {
           const bgColor = colors[idx % colors.length];
@@ -91,6 +96,6 @@ export default function LopGVPage() {
           );
         })}
       </div>
-    </div>
+    </Shell>
   );
 }
