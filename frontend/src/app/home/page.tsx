@@ -2,16 +2,14 @@
 
 import Image from "next/image";
 import { useRouter } from "next/navigation";
-// removed unused icon import (lucide-react) to fix missing module
 
 export default function Home() {
   const router = useRouter();
 
-  const handleClick = (_role?: string) => {
-    // All roles use the same login route now
-    router.push("/login");
+  const handleClick = () => {
+    router.push("/login"); // Điều hướng đến trang đăng nhập
   };
-  
+
   return (
     <div className="h-screen w-screen flex flex-col items-center relative overflow-hidden">
       {/* Background image (covers full screen) */}
@@ -23,9 +21,10 @@ export default function Home() {
           style={{ objectFit: "cover" }}
           priority
         />
-        {/* subtle overlay to make content readable */}
+        {/* Subtle overlay to make content readable */}
         <div className="absolute inset-0 bg-black/20" />
       </div>
+
       {/* Top-left small logo */}
       <div className="absolute top-6 left-6">
         <Image src="/logo.png" alt="Logo" width={160} height={70} priority />
@@ -40,18 +39,20 @@ export default function Home() {
         </div>
       </div>
 
-      {/* Center card with title and actions (removed home logo temporarily) */}
+      {/* Center card */}
       <div className="flex-1 flex items-center justify-center px-4">
         <div className="bg-white/6 backdrop-blur-sm border border-white/10 rounded-2xl p-8 md:p-12 max-w-3xl w-full text-center shadow-lg">
           <h1 className="text-2xl md:text-4xl font-bold text-white mb-4">
-            Trang điểm đanh dành cho sinh viên và giảng viên
+            Trang điểm danh dành cho sinh viên và giảng viên
           </h1>
 
-          <p className="text-sm text-white/90 mb-6">Hệ thống điểm danh thông minh</p>
+          <p className="text-sm text-white/90 mb-6">
+            Hệ thống điểm danh thông minh
+          </p>
 
           <div className="mt-6 flex justify-center">
             <button
-              onClick={() => handleClick("login")}
+              onClick={handleClick}
               className="px-10 py-3 bg-[#2e8b7a] text-white rounded-lg font-semibold hover:bg-[#256b5d] transition text-lg"
               aria-label="Đăng nhập"
             >
@@ -60,6 +61,7 @@ export default function Home() {
           </div>
         </div>
       </div>
+
       {/* Bottom black address strip */}
       <div className="absolute left-0 right-0 bottom-0">
         <div className="w-full bg-black text-white py-3 px-6 flex justify-center items-center text-sm md:text-base">
