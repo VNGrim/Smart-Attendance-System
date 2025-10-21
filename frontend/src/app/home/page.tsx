@@ -11,7 +11,7 @@ export default function Home() {
     // All roles use the same login route now
     router.push("/login");
   };
-
+  
   return (
     <div className="h-screen w-screen flex flex-col items-center relative overflow-hidden">
       {/* Background image (covers full screen) */}
