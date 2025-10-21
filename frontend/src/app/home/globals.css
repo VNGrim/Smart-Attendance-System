@@ -1,6 +1,67 @@
 @import "tailwindcss";
 
 :root {
+  --background: #ffffff;
+  --foreground: #171717;
+}
+
+/* Removed @theme inline block because it's not a standard CSS at-rule and caused linter errors.
+   If you need theme tokens, consider using :root variables or Tailwind config. */
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #0a0a0a;
+    --foreground: #ededed;
+  }
+}
+
+body {
+  /* let page-level backgrounds show through (we use next/image in the page) */
+  background: transparent;
+  color: var(--foreground);
+  font-family: Arial, Helvetica, sans-serif;
+  min-height: 100vh;
+}
+
+/* Utility for a semi-opaque black strip if needed elsewhere */
+.address-strip {
+  background: rgba(0, 0, 0, 0.95);
+  color: #fff;
+}
+
+/* Marquee (left-to-right) for subtitle */
+.marquee-container {
+  background: rgba(0,0,0,0.5); /* semi-transparent dark background */
+  overflow: hidden;
+  max-width: 95%;
+  padding: 6px 12px;
+  border-radius: 8px;
+}
+
+.marquee {
+  display: block;
+  white-space: nowrap;
+}
+
+.marquee-text {
+  display: inline-block;
+  color: #fff;
+  font-weight: 700;
+  font-size: 1.15rem; /* a bit larger */
+  padding-left: 100%; /* start off-screen left */
+  /* slower so users can read; runs left-to-right */
+  animation: marqueeMove 22s linear infinite;
+}
+
+/* marquee will run continuously; removed pause-on-hover per user request */
+
+@keyframes marqueeMove {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(100%); }
+}
+
+/* --- Project design tokens and utility classes (fixed from provided snippet) --- */
+:root {
   /* Core neutrals */
   --background: #ffffff;
   --foreground: #171717;
@@ -15,35 +76,10 @@
   --bg-teacher: #FFF3E0;    /* nền giảng viên: cam rất nhẹ */
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-
-  /* expose brand colors to tailwind token usage if needed */
-  --color-brand-primary: var(--brand-primary);
-  --color-brand-accent: var(--brand-accent);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
-}
-
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
-}
-
 /* Utility: role-based backgrounds */
 .role-student {
   background: var(--bg-student);
 }
-
 .role-teacher {
   background: var(--bg-teacher);
 }
@@ -84,3 +120,5 @@ body {
   color: #1a1a1a;
   box-shadow: 0 1px 0 rgba(0,0,0,0.04) inset, 0 4px 10px rgba(0,0,0,0.04);
 }
+
+/* end of appended design tokens */
