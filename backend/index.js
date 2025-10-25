@@ -17,6 +17,10 @@ app.use("/api/lichhoc", lichhocRoutes);
 const thongbaoRoutes = require("./src/thongbao_hienthi/thongbao_hienthi.routes");
 app.use("/api/thongbao", thongbaoRoutes);
 
+// Mount lop_gv routes
+const lopRoutes = require("./src/lop_gv/lop_gv.routes");
+app.use("/api/lop", lopRoutes);
+
 // API đăng nhập chung - sử dụng database
 app.post("/api/auth/login", async (req, res) => {
   const { userId, password } = req.body; 
