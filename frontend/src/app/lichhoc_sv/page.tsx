@@ -8,6 +8,7 @@ const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 const SLOT_IDS = [1, 2, 3, 4];
 
 export default function LichHocPage() {
+  const [collapsed, setCollapsed] = useState(false);
   const [year, setYear] = useState("2025");
   const [week, setWeek] = useState("29/09 - 05/10");
   const [student, setStudent] = useState<{ student_id: string; full_name: string; course: string } | null>(null);
@@ -105,15 +106,19 @@ export default function LichHocPage() {
   };
 
   const Shell = ({ children }: { children: React.ReactNode }) => (
-    <div className="layout">
+    <div className={`layout ${collapsed ? 'collapsed' : ''}`}>
       <aside className="sidebar">
         <div className="side-header">
+          <button className="collapse-btn" onClick={() => setCollapsed(v => !v)} title={collapsed ? 'Mở rộng' : 'Thu gọn'}>
+            {collapsed ? '⮞' : '⮜'}
+          </button>
           <div className="side-name">
             Chào mừng,<br />
             {student?.full_name || "Sinh viên"}
           </div>
         </div>
         <nav className="side-nav">
+          <Link href="/tongquan_sv" className="side-link">🏠 Trang tổng quan</Link>
           <Link href="/thongbao_sv" className="side-link">🔔 Thông báo</Link>
           <div className="side-link active">📅 Lịch học</div>
           <Link href="/lichsu_sv" className="side-link">🕘 Lịch sử</Link>
@@ -121,20 +126,11 @@ export default function LichHocPage() {
         </nav>
       </aside>
       <header className="topbar">
-        <div className="side-header" style={{ padding: 0 }}>
-          <strong style={{ color: "white" }}>Lịch học</strong>
+        <div className="welcome">
+          <div className="hello">Xin chào, {student?.full_name || "Sinh viên"} 👋</div>
+          <div className="date">Hôm nay: {new Date().toLocaleDateString('vi-VN', { weekday: 'long', day: '2-digit', month: '2-digit', year: 'numeric' })}</div>
         </div>
         <div className="controls">
-          <select className="select" value={year} onChange={(e) => setYear(e.target.value)}>
-            <option value="2024">2024</option>
-            <option value="2025">2025</option>
-            <option value="2026">2026</option>
-          </select>
-          <select className="select" value={week} onChange={(e) => setWeek(e.target.value)}>
-            <option value="29/09 - 05/10">29/09 - 05/10</option>
-            <option value="06/10 - 12/10">06/10 - 12/10</option>
-            <option value="13/10 - 19/10">13/10 - 19/10</option>
-          </select>
           <button className="qr-btn">📷 Quét QR</button>
           <button className="qr-btn" onClick={() => { 
             if (confirm('Bạn có chắc muốn đăng xuất?')) {
@@ -169,6 +165,19 @@ export default function LichHocPage() {
   return (
     <Shell>
       <div className="schedule-shell">
+        {/* Lọc tuần/năm */}
+        <div className="filters" style={{ display: 'flex', gap: 12, alignItems: 'center', marginBottom: 8 }}>
+          <select className="select" value={year} onChange={(e) => setYear(e.target.value)}>
+            <option value="2024">2024</option>
+            <option value="2025">2025</option>
+            <option value="2026">2026</option>
+          </select>
+          <select className="select" value={week} onChange={(e) => setWeek(e.target.value)}>
+            <option value="29/09 - 05/10">29/09 - 05/10</option>
+            <option value="06/10 - 12/10">06/10 - 12/10</option>
+            <option value="13/10 - 19/10">13/10 - 19/10</option>
+          </select>
+        </div>
         {/* Headers */}
         <div className="grid" style={{ marginBottom: 6 }}>
           <div></div>
