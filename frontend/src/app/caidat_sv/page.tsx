@@ -11,6 +11,7 @@ interface StudentInfo {
 
 export default function CaiDatPage() {
   const [student, setStudent] = useState<StudentInfo | null>(null);
+  const [collapsed, setCollapsed] = useState(false);
   const [photoUrl, setPhotoUrl] = useState<string>("/avatar.png");
   const [notifEnabled, setNotifEnabled] = useState<boolean>(true);
   const [themeDark, setThemeDark] = useState<boolean>(true);
@@ -47,15 +48,19 @@ export default function CaiDatPage() {
   }, [studentId]);
 
   const Shell = ({ children }: { children: React.ReactNode }) => (
-    <div className="layout">
+    <div className={`layout ${collapsed ? 'collapsed' : ''}`}>
       <aside className="sidebar">
         <div className="side-header">
+          <button className="collapse-btn" onClick={() => setCollapsed(v => !v)} title={collapsed ? 'Mở rộng' : 'Thu gọn'}>
+            {collapsed ? '⮞' : '⮜'}
+          </button>
           <div className="side-name">
             Chào mừng,<br />
             {student?.full_name || "Sinh viên"}
           </div>
         </div>
         <nav className="side-nav">
+          <Link href="/tongquan_sv" className="side-link">🏠 Trang tổng quan</Link>
           <Link href="/thongbao_sv" className="side-link">🔔 Thông báo</Link>
           <Link href="/lichhoc_sv" className="side-link">📅 Lịch học</Link>
           <Link href="/lichsu_sv" className="side-link">🕘 Lịch sử</Link>
@@ -63,13 +68,19 @@ export default function CaiDatPage() {
         </nav>
       </aside>
       <header className="topbar">
-        <button className="qr-btn">📷 Quét QR</button>
-        <button className="qr-btn" onClick={() => { 
-          if (confirm('Bạn có chắc muốn đăng xuất?')) {
-            localStorage.removeItem('sas_user'); 
-            window.location.href = '/login'; 
-          }
-        }}>🚪 Đăng xuất</button>
+        <div className="welcome">
+          <div className="hello">Xin chào, {student?.full_name || "Sinh viên"} 👋</div>
+          <div className="date">Hôm nay: {new Date().toLocaleDateString('vi-VN', { weekday: 'long', day: '2-digit', month: '2-digit', year: 'numeric' })}</div>
+        </div>
+        <div className="controls">
+          <button className="qr-btn">📷 Quét QR</button>
+          <button className="qr-btn" onClick={() => { 
+            if (confirm('Bạn có chắc muốn đăng xuất?')) {
+              localStorage.removeItem('sas_user'); 
+              window.location.href = '/login'; 
+            }
+          }}>🚪 Đăng xuất</button>
+        </div>
       </header>
       <main className="main">{children}</main>
     </div>

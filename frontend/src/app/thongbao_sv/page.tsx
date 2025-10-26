@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import QRButton from "@/app/components/QRButton";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 
 interface Announcement {
   id: number;
@@ -22,10 +22,20 @@ interface StudentInfo {
 
 export default function ThongBaoPage() {
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
+  const [collapsed, setCollapsed] = useState(false);
   const [studentInfo, setStudentInfo] = useState<StudentInfo | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedAnnouncement, setSelectedAnnouncement] = useState<Announcement | null>(null);
+
+  const todayStr = useMemo(() => {
+    const now = new Date();
+    const weekday = ["Chủ nhật","Thứ Hai","Thứ Ba","Thứ Tư","Thứ Năm","Thứ Sáu","Thứ Bảy"][now.getDay()];
+    const dd = String(now.getDate()).padStart(2,'0');
+    const mm = String(now.getMonth()+1).padStart(2,'0');
+    const yyyy = now.getFullYear();
+    return `${weekday}, ${dd}/${mm}/${yyyy}`;
+  }, []);
 
   const studentId = (() => {
     if (typeof window === "undefined") return "";
@@ -111,15 +121,19 @@ export default function ThongBaoPage() {
   };
 
   const Shell = ({ children }: { children: React.ReactNode }) => (
-    <div className="layout">
+    <div className={`layout ${collapsed ? 'collapsed' : ''}`}>
       <aside className="sidebar">
         <div className="side-header">
+          <button className="collapse-btn" onClick={() => setCollapsed(v => !v)} title={collapsed ? 'Mở rộng' : 'Thu gọn'}>
+            {collapsed ? '⮞' : '⮜'}
+          </button>
           <div className="side-name">
             Chào mừng,<br />
             {studentInfo?.full_name || "Sinh viên"}
           </div>
         </div>
         <nav className="side-nav">
+          <Link href="/tongquan_sv" className="side-link">🏠 Trang tổng quan</Link>
           <div className="side-link active">🔔 Thông báo</div>
           <Link href="/lichhoc_sv" className="side-link">📅 Lịch học</Link>
           <Link href="/lichsu_sv" className="side-link">🕘 Lịch sử</Link>
@@ -127,13 +141,19 @@ export default function ThongBaoPage() {
         </nav>
       </aside>
       <header className="topbar">
-        <button className="qr-btn">📷 Quét QR</button>
-        <button className="qr-btn" onClick={() => { 
+        <div className="welcome">
+          <div className="hello">Xin chào, {studentInfo?.full_name || "Sinh viên"} 👋</div>
+          <div className="date">Hôm nay: {todayStr}</div>
+        </div>
+        <div className="controls">
+          <button className="qr-btn">📷 Quét QR</button>
+          <button className="qr-btn" onClick={() => { 
           if (confirm('Bạn có chắc muốn đăng xuất?')) {
             localStorage.removeItem('sas_user'); 
             window.location.href = '/login'; 
           }
         }}>🚪 Đăng xuất</button>
+        </div>
       </header>
       <main className="main">
         {children}
