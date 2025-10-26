@@ -5,18 +5,18 @@ import { Inter } from "next/font/google";
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata = {
-  title: "Lịch học sinh viên",
-  description: "Trang lịch học của hệ thống điểm danh",
+  title: "Lớp học giảng viên",
+  description: "Quản lý lớp học cho giảng viên - Smart Attendance System",
 };
 
-export default function LichHocLayout({
+export default function LopHocGVLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
   return (
     <html lang="vi">
-      <body className={`${inter.className} role-teacher`}>{children}</body>
+      <body className={`${inter.className} role-lecturer`}>{children}</body>
     </html>
   );
 }

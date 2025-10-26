@@ -1,397 +1,256 @@
 "use client";
 
 import Link from "next/link";
-import { useState, useEffect } from "react";
+import { useEffect, useMemo, useState } from "react";
 
-const colors = ["#F9A8D4", "#A7F3D0", "#BFDBFE", "#FDE68A", "#C7D2FE", "#FDBA74"];
+type ClassInfo = { id: string; code: string; subject: string; size: number; schedule: string; room: string };
+type Student = { id: string; name: string; email: string; attendance: number; note?: string };
+type Material = { name: string; size: string; date: string };
+type Grade = { id: string; name: string; attendance: number; assignment: number; midterm: number; final: number };
 
-interface ClassInfo {
-  class_id: string;
-  class_name: string;
-  subject_name: string;
-  students: number;
-  semester: string;
-  school_year: string;
-}
+type TabKey = "students" | "materials" | "grades";
 
-export default function LopGVPage() {
+export default function LecturerClassesPage() {
+  const [collapsed, setCollapsed] = useState(false);
+  const [dark, setDark] = useState(false);
+  const [notifCount] = useState(2);
+
   const [classes, setClasses] = useState<ClassInfo[]>([]);
-  const [teacherInfo, setTeacherInfo] = useState({ full_name: 'Giảng viên', teacher_id: 'MAS291' });
-  const [loading, setLoading] = useState(true);
-  const [showAnnouncementModal, setShowAnnouncementModal] = useState(false);
-  const [selectedClass, setSelectedClass] = useState<ClassInfo | null>(null);
-  const [announcementData, setAnnouncementData] = useState({
-    title: '',
-    content: ''
-  });
-  const [submitting, setSubmitting] = useState(false);
+  const [activeClass, setActiveClass] = useState<ClassInfo | null>(null);
+  const [tab, setTab] = useState<TabKey>("students");
 
-  // Fetch classes data from backend
+  const [students, setStudents] = useState<Student[]>([]);
+  const [materials, setMaterials] = useState<Material[]>([]);
+  const [grades, setGrades] = useState<Grade[]>([]);
+  const [search, setSearch] = useState("");
+
   useEffect(() => {
-    const fetchClasses = async () => {
-      try {
-        // For now, using mock data. In real implementation, you would call:
-        // const response = await fetch(`/api/lop/teacher/${teacherInfo.teacher_id}/classes`);
-        // const data = await response.json();
-        
-        // Mock data for demonstration
-        const mockClasses = [
-          { class_id: "1", class_name: "SE18A", subject_name: "Lập trình Web", students: 17, semester: "1", school_year: "2024-2025" },
-          { class_id: "2", class_name: "SE19C", subject_name: "Cơ sở dữ liệu", students: 19, semester: "1", school_year: "2024-2025" },
-          { class_id: "3", class_name: "QE18B", subject_name: "Toán rời rạc", students: 19, semester: "1", school_year: "2024-2025" },
-          { class_id: "4", class_name: "SE18C", subject_name: "Cấu trúc dữ liệu", students: 20, semester: "1", school_year: "2024-2025" },
-        ];
-        
-        setClasses(mockClasses);
-        setLoading(false);
-      } catch (error) {
-        console.error("Error fetching classes:", error);
-        setLoading(false);
-      }
-    };
-
-    fetchClasses();
+    const mock: ClassInfo[] = [
+      { id: "CN201", code: "CN201", subject: "Lập trình .NET", size: 50, schedule: "Thứ 2 – 08:00", room: "A304" },
+      { id: "CN202", code: "CN202", subject: "Cơ sở dữ liệu", size: 45, schedule: "Thứ 3 – 13:00", room: "B206" },
+      { id: "CN203", code: "CN203", subject: "Cấu trúc dữ liệu", size: 48, schedule: "Thứ 4 – 09:00", room: "B202" },
+    ];
+    setClasses(mock);
+    setActiveClass(mock[0]);
   }, []);
 
-  // Handle escape key to close modal
   useEffect(() => {
-    const handleEscape = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && showAnnouncementModal) {
-        handleCloseModal();
-      }
-    };
-
-    if (showAnnouncementModal) {
-      document.addEventListener('keydown', handleEscape);
-      // Prevent body scroll when modal is open
-      document.body.style.overflow = 'hidden';
-    }
-
-    return () => {
-      document.removeEventListener('keydown', handleEscape);
-      document.body.style.overflow = 'unset';
-    };
-  }, [showAnnouncementModal]);
-
-  const handleViewStudents = (classId: string) => {
-    // Navigate to student list page or show modal
-    console.log("View students for class:", classId);
-    // You can implement navigation or modal here
-  };
-
-  const handleViewAnnouncements = (classId: string) => {
-    // Find the selected class
-    const classInfo = classes.find(cls => cls.class_id === classId);
-    if (classInfo) {
-      setSelectedClass(classInfo);
-      setShowAnnouncementModal(true);
-    }
-  };
-
-  const handleCloseModal = () => {
-    setShowAnnouncementModal(false);
-    setSelectedClass(null);
-    setAnnouncementData({ title: '', content: '' });
-  };
-
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
-    const { name, value } = e.target;
-    setAnnouncementData(prev => ({
-      ...prev,
-      [name]: value
-    }));
-  };
-
-  const handleSubmitAnnouncement = async (e: React.FormEvent) => {
-    e.preventDefault();
-    
-    if (!announcementData.title.trim() || !announcementData.content.trim()) {
-      alert('Vui lòng điền đầy đủ tiêu đề và nội dung thông báo');
-      return;
-    }
-
-    setSubmitting(true);
-    
     try {
-      // Call API to create announcement
-      const response = await fetch(`/api/lop/classes/${selectedClass?.class_id}/announcements`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          title: announcementData.title,
-          content: announcementData.content,
-          teacherId: teacherInfo.teacher_id
-        })
-      });
-
-      const result = await response.json();
-      
-      if (result.success) {
-        alert('Gửi thông báo thành công!');
-        handleCloseModal();
-      } else {
-        alert('Có lỗi xảy ra: ' + result.message);
+      const saved = localStorage.getItem("sas_settings");
+      if (saved) {
+        const s = JSON.parse(saved);
+        setDark(!!s.themeDark);
+        document.documentElement.style.colorScheme = s.themeDark ? "dark" : "light";
       }
-    } catch (error) {
-      console.error('Error creating announcement:', error);
-      alert('Có lỗi xảy ra khi gửi thông báo');
-    } finally {
-      setSubmitting(false);
-    }
+    } catch {}
+  }, []);
+
+  useEffect(() => {
+    if (!activeClass) return;
+    const ss: Student[] = Array.from({ length: activeClass.size }).map((_, i) => ({
+      id: `SV${(i + 1).toString().padStart(3, "0")}`,
+      name: `Sinh viên ${i + 1}`,
+      email: `sv${i + 1}@example.edu.vn`,
+      attendance: Math.floor(75 + Math.random() * 25),
+      note: "",
+    }));
+    const mm: Material[] = [
+      { name: "Đề cương môn học.pdf", size: "320KB", date: "01/09/2025" },
+      { name: "Slide tuần 1.pptx", size: "2.1MB", date: "05/09/2025" },
+      { name: "Bài tập 01.pdf", size: "180KB", date: "07/09/2025" },
+    ];
+    const gg: Grade[] = ss.map((s) => ({ id: s.id, name: s.name, attendance: 9, assignment: 8, midterm: 7.5, final: 8 }));
+    setStudents(ss);
+    setMaterials(mm);
+    setGrades(gg);
+  }, [activeClass?.id]);
+
+  const toggleDark = () => {
+    const next = !dark;
+    setDark(next);
+    try {
+      const saved = localStorage.getItem("sas_settings");
+      const prev = saved ? JSON.parse(saved) : {};
+      const merged = { ...prev, themeDark: next };
+      localStorage.setItem("sas_settings", JSON.stringify(merged));
+      document.documentElement.style.colorScheme = next ? "dark" : "light";
+      window.dispatchEvent(new CustomEvent("sas_settings_changed" as any, { detail: merged }));
+    } catch {}
+  };
+
+  const filteredStudents = useMemo(() => {
+    const q = search.toLowerCase();
+    return students.filter((s) => s.id.toLowerCase().includes(q) || s.name.toLowerCase().includes(q) || s.email.toLowerCase().includes(q));
+  }, [students, search]);
+
+  const exportStudentsCsv = () => {
+    if (!activeClass) return;
+    const header = ["MaSV", "HoTen", "Email", "DiemDanh(%)", "GhiChu"];
+    const rows = filteredStudents.map((s) => [s.id, s.name, s.email, String(s.attendance), s.note || ""]);
+    const csv = [header, ...rows].map((r) => r.map((v) => `"${String(v).replace(/"/g, '""')}"`).join(",")).join("\n");
+    const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${activeClass.code}-students.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
   };
 
   const Shell = ({ children }: { children: React.ReactNode }) => (
-    <div className="layout">
+    <div className={`layout ${collapsed ? "collapsed" : ""}`}>
       <aside className="sidebar">
         <div className="side-header">
-          <div className="side-name">
-            Chào mừng,<br />
-            {teacherInfo.full_name}
-          </div>
+          <button className="collapse-btn" onClick={() => setCollapsed(!collapsed)} title={collapsed ? "Mở rộng" : "Thu gọn"}>
+            {collapsed ? "➡️" : "⬅️"}
+          </button>
+          {!collapsed && <div className="side-name">Smart Attendance</div>}
         </div>
         <nav className="side-nav">
-          <Link href="/thongbao_gv" className="side-link">🔔 Thông báo</Link>
-          <Link href="/lichgiangday_gv" className="side-link">📅 Lịch giảng dạy</Link>
-          <div className="side-link active">👥 Lớp học</div>
-          <Link href="/caidat_gv" className="side-link">⚙️ Cài đặt</Link>
+          <Link href="/tongquan_gv" className="side-link">🏠 {!collapsed && "Tổng quan"}</Link>
+          <Link href="/thongbao_gv" className="side-link">📢 {!collapsed && "Thông báo"}</Link>
+          <Link href="/lichday_gv" className="side-link">📅 {!collapsed && "Lịch giảng dạy"}</Link>
+          <Link href="/lophoc_gv" className="side-link active">🏫 {!collapsed && "Lớp học"}</Link>
+          <Link href="/diemdanh_gv" className="side-link">🧍‍♂️ {!collapsed && "Điểm danh"}</Link>
+          <Link href="/caidat_gv" className="side-link">⚙️ {!collapsed && "Cài đặt"}</Link>
         </nav>
       </aside>
+
       <header className="topbar">
-        <div className="side-header" style={{ padding: 0 }}>
-          <strong style={{ color: "white" }}>Lớp học</strong>
+        <div className="page-title">Lớp học</div>
+        <div className="controls">
+          <button className="icon-btn" onClick={toggleDark}>{dark ? "🌙" : "🌞"}</button>
+          <button className="icon-btn notif">🔔{notifCount > 0 && <span className="badge">{notifCount}</span>}</button>
         </div>
-        <div className="controls"></div>
       </header>
+
       <main className="main">{children}</main>
     </div>
   );
 
-  if (loading) {
-    return (
-      <Shell>
-        <div style={{ width: "1137px", margin: "40px auto", textAlign: "center" }}>
-          <div style={{ fontSize: "18px", color: "#666" }}>Đang tải dữ liệu...</div>
-        </div>
-      </Shell>
-    );
-  }
-
   return (
     <Shell>
-      <div style={{ width: "1137px", margin: "40px auto" }}>
-        {classes.length === 0 ? (
-          <div style={{ textAlign: "center", padding: "40px", color: "#666" }}>
-            <div style={{ fontSize: "18px" }}>Chưa có lớp học nào</div>
-          </div>
-        ) : (
-          classes.map((cls, idx) => {
-            const bgColor = colors[idx % colors.length];
-            return (
-              <div
-                key={cls.class_id}
-                style={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  alignItems: "center",
-                  background: "#fff",
-                  padding: "16px 24px",
-                  borderRadius: "12px",
-                  marginBottom: "16px",
-                  fontWeight: 600,
-                  color: "#333",
-                  boxShadow: "0 6px 18px rgba(0,0,0,0.06)",
-                  border: `2px solid ${bgColor}`,
-                }}
-              >
-                <div>
-                  <div style={{ fontSize: "16px", fontWeight: "700" }}>
-                    {cls.class_name} - {cls.subject_name}
-                  </div>
-                  <div style={{ fontSize: "14px", color: "#555", marginTop: "4px" }}>
-                    {cls.semester} - {cls.school_year} &nbsp; ({cls.students} sinh viên)
-                  </div>
-                </div>
-                <div style={{ display: "flex", gap: "10px" }}>
-                  <button
-                    onClick={() => handleViewStudents(cls.class_id)}
-                    style={{
-                      background: "#49998A",
-                      color: "#fff",
-                      border: "none",
-                      borderRadius: "8px",
-                      padding: "6px 14px",
-                      cursor: "pointer",
-                    }}
-                  >
-                    Danh sách
-                  </button>
-                  <button
-                    onClick={() => handleViewAnnouncements(cls.class_id)}
-                    style={{
-                      background: "#FFD700",
-                      color: "#000",
-                      border: "none",
-                      borderRadius: "8px",
-                      padding: "6px 14px",
-                      cursor: "pointer",
-                      fontWeight: 600,
-                    }}
-                  >
-                    Thông báo
-                  </button>
-                </div>
+      <div className="two-col">
+        <div className="left-list">
+          <div className="list-title">Lớp đang dạy</div>
+          <div className="class-list">
+            {classes.map((c) => (
+              <div key={c.id} className={`class-item ${activeClass?.id === c.id ? "active" : ""}`} onClick={() => setActiveClass(c)}>
+                <div className="c-title">{c.code} – {c.subject}</div>
+                <div className="c-sub">Sĩ số: {c.size}</div>
               </div>
-            );
-          })
-        )}
-      </div>
-
-      {/* Announcement Modal */}
-      {showAnnouncementModal && (
-        <div 
-          className="modal-overlay"
-          onClick={handleCloseModal}
-        >
-          <div 
-            className="modal-content"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div style={{
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-              marginBottom: '20px',
-              paddingBottom: '16px',
-              borderBottom: '1px solid #e5e7eb'
-            }}>
-              <h2 style={{
-                margin: 0,
-                fontSize: '20px',
-                fontWeight: '700',
-                color: '#1f2937'
-              }}>
-                Gửi thông báo cho lớp {selectedClass?.class_name}
-              </h2>
-              <button
-                onClick={handleCloseModal}
-                style={{
-                  background: 'none',
-                  border: 'none',
-                  fontSize: '24px',
-                  cursor: 'pointer',
-                  color: '#6b7280',
-                  padding: '4px'
-                }}
-              >
-                ×
-              </button>
-            </div>
-
-            <form onSubmit={handleSubmitAnnouncement}>
-              <div style={{ marginBottom: '20px' }}>
-                <label style={{
-                  display: 'block',
-                  marginBottom: '8px',
-                  fontWeight: '600',
-                  color: '#374151'
-                }}>
-                  Tiêu đề thông báo *
-                </label>
-                <input
-                  type="text"
-                  name="title"
-                  value={announcementData.title}
-                  onChange={handleInputChange}
-                  placeholder="Nhập tiêu đề thông báo..."
-                  className="modal-input"
-                  style={{
-                    width: '100%',
-                    padding: '12px',
-                    border: '1px solid #d1d5db',
-                    borderRadius: '8px',
-                    fontSize: '14px',
-                    outline: 'none',
-                    boxSizing: 'border-box'
-                  }}
-                  required
-                />
-              </div>
-
-              <div style={{ marginBottom: '24px' }}>
-                <label style={{
-                  display: 'block',
-                  marginBottom: '8px',
-                  fontWeight: '600',
-                  color: '#374151'
-                }}>
-                  Nội dung thông báo *
-                </label>
-                <textarea
-                  name="content"
-                  value={announcementData.content}
-                  onChange={handleInputChange}
-                  placeholder="Nhập nội dung thông báo..."
-                  rows={6}
-                  className="modal-textarea"
-                  style={{
-                    width: '100%',
-                    padding: '12px',
-                    border: '1px solid #d1d5db',
-                    borderRadius: '8px',
-                    fontSize: '14px',
-                    outline: 'none',
-                    resize: 'vertical',
-                    boxSizing: 'border-box',
-                    fontFamily: 'inherit'
-                  }}
-                  required
-                />
-              </div>
-
-              <div style={{
-                display: 'flex',
-                gap: '12px',
-                justifyContent: 'flex-end'
-              }}>
-                <button
-                  type="button"
-                  onClick={handleCloseModal}
-                  className="modal-button"
-                  style={{
-                    padding: '10px 20px',
-                    border: '1px solid #d1d5db',
-                    borderRadius: '8px',
-                    backgroundColor: 'white',
-                    color: '#374151',
-                    cursor: 'pointer',
-                    fontWeight: '600'
-                  }}
-                >
-                  Hủy
-                </button>
-                <button
-                  type="submit"
-                  disabled={submitting}
-                  className="modal-button"
-                  style={{
-                    padding: '10px 20px',
-                    border: 'none',
-                    borderRadius: '8px',
-                    backgroundColor: submitting ? '#9ca3af' : '#3b82f6',
-                    color: 'white',
-                    cursor: submitting ? 'not-allowed' : 'pointer',
-                    fontWeight: '600'
-                  }}
-                >
-                  {submitting ? 'Đang gửi...' : 'Gửi thông báo'}
-                </button>
-              </div>
-            </form>
+            ))}
           </div>
         </div>
-      )}
+
+        <div className="right-detail">
+          {activeClass && (
+            <>
+              <div className="class-info">
+                <div className="title">{activeClass.code} – {activeClass.subject}</div>
+                <div className="meta">Giảng viên: Bạn • Lịch: {activeClass.schedule}, Phòng {activeClass.room} • Số SV: {activeClass.size}</div>
+              </div>
+
+              <div className="tabs">
+                <button className={`tab ${tab==='students'?'active':''}`} onClick={()=>setTab('students')}>👨‍🎓 Sinh viên</button>
+                <button className={`tab ${tab==='materials'?'active':''}`} onClick={()=>setTab('materials')}>📄 Tài liệu</button>
+                <button className={`tab ${tab==='grades'?'active':''}`} onClick={()=>setTab('grades')}>🧾 Bảng điểm</button>
+              </div>
+
+              {tab === 'students' && (
+                <div className="panel">
+                  <div className="row-actions">
+                    <input className="input" placeholder="Tìm kiếm sinh viên" value={search} onChange={(e)=>setSearch(e.target.value)} />
+                    <button className="btn-outline" onClick={()=>alert('Lịch sử điểm danh (demo)')}>Lịch sử điểm danh</button>
+                    <button className="btn-primary" onClick={exportStudentsCsv}>Xuất danh sách Excel</button>
+                  </div>
+                  <div className="table-wrap">
+                    <table>
+                      <thead>
+                        <tr>
+                          <th>Mã SV</th>
+                          <th>Họ tên</th>
+                          <th>Email</th>
+                          <th>Điểm danh</th>
+                          <th>Ghi chú</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {filteredStudents.map((s) => (
+                          <tr key={s.id}>
+                            <td>{s.id}</td>
+                            <td>{s.name}</td>
+                            <td>{s.email}</td>
+                            <td>{s.attendance}%</td>
+                            <td>
+                              <input className="input" value={s.note||''} onChange={(e)=>{ const v=e.target.value; setStudents(prev=> prev.map(x=> x.id===s.id?{...x, note:v}:x)); }} />
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
+              {tab === 'materials' && (
+                <div className="panel">
+                  <div className="row-actions">
+                    <div className="label-strong">Tài liệu môn học</div>
+                    <input className="input" type="file" onChange={(e)=>{ const f=e.target.files?.[0]; if(!f) return; setMaterials(prev=>[...prev,{ name:f.name, size:`${(f.size/1024).toFixed(0)}KB`, date: new Date().toLocaleDateString('vi-VN')}]); }} />
+                  </div>
+                  <div className="list">
+                    {materials.map((m,i)=> (
+                      <div key={i} className="mat-item">
+                        <div>
+                          <div className="mat-title">{m.name}</div>
+                          <div className="mat-sub">{m.size} • {m.date}</div>
+                        </div>
+                        <button className="btn-outline" onClick={()=>alert('Tải xuống (demo)')}>Tải xuống</button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {tab === 'grades' && (
+                <div className="panel">
+                  <div className="row-actions end">
+                    <button className="btn-success" onClick={()=>alert('Đã lưu điểm (demo)')}>Lưu thay đổi</button>
+                  </div>
+                  <div className="table-wrap">
+                    <table>
+                      <thead>
+                        <tr>
+                          <th>Mã SV</th>
+                          <th>Họ tên</th>
+                          <th>Chuyên cần</th>
+                          <th>Bài tập</th>
+                          <th>Giữa kỳ</th>
+                          <th>Cuối kỳ</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {grades.map((g)=> (
+                          <tr key={g.id}>
+                            <td>{g.id}</td>
+                            <td>{g.name}</td>
+                            <td><input className="input" type="number" min={0} max={10} step={0.5} value={g.attendance} onChange={(e)=>{ const v=parseFloat(e.target.value||'0'); setGrades(prev=> prev.map(x=> x.id===g.id?{...x, attendance:v}:x)); }} /></td>
+                            <td><input className="input" type="number" min={0} max={10} step={0.5} value={g.assignment} onChange={(e)=>{ const v=parseFloat(e.target.value||'0'); setGrades(prev=> prev.map(x=> x.id===g.id?{...x, assignment:v}:x)); }} /></td>
+                            <td><input className="input" type="number" min={0} max={10} step={0.5} value={g.midterm} onChange={(e)=>{ const v=parseFloat(e.target.value||'0'); setGrades(prev=> prev.map(x=> x.id===g.id?{...x, midterm:v}:x)); }} /></td>
+                            <td><input className="input" type="number" min={0} max={10} step={0.5} value={g.final} onChange={(e)=>{ const v=parseFloat(e.target.value||'0'); setGrades(prev=> prev.map(x=> x.id===g.id?{...x, final:v}:x)); }} /></td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      </div>
     </Shell>
   );
 }
+
