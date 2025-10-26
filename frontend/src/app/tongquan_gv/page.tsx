@@ -65,12 +65,12 @@ export default function LecturerDashboardPage() {
       <aside className="sidebar">
         <div className="side-header">
           <button className="collapse-btn" onClick={() => setCollapsed(!collapsed)} title={collapsed ? "Mở rộng" : "Thu gọn"}>
-            {collapsed ? "➡️" : "⬅️"}
+            {collapsed ? "⮞" : "⮜"}
           </button>
           {!collapsed && <div className="side-name">Smart Attendance</div>}
         </div>
         <nav className="side-nav">
-          <Link href="/tongquan_gv" className="side-link active">🏠 {!collapsed && "Tổng quan"}</Link>
+          <Link href="/tongquan_gv" className="side-link active">🏠 {!collapsed && "Dashboard"}</Link>
           <Link href="/thongbao_gv" className="side-link">📢 {!collapsed && "Thông báo"}</Link>
           <Link href="/lichday_gv" className="side-link">📅 {!collapsed && "Lịch giảng dạy"}</Link>
           <Link href="/lophoc_gv" className="side-link">🏫 {!collapsed && "Lớp học"}</Link>

@@ -1,7 +1,7 @@
 const express = require("express");
 const cors = require("cors");
 const bodyParser = require("body-parser");
-const db = require("./src/config/db"); // Import cấu hình database
+const prisma = require("./src/config/prisma"); // Import cấu hình Prisma
 
 const app = express();
 const PORT = 8080;
@@ -35,10 +35,9 @@ app.post("/api/auth/login", async (req, res) => {
 
   try {
     // Query database để tìm user
-    const [accounts] = await db.execute(
-      "SELECT * FROM accounts WHERE user_code = ? AND password = ?",
-      [userId, password]
-    );
+    const accounts = await prisma.$queryRaw`
+      SELECT * FROM accounts WHERE user_code = ${userId} AND password = ${password}
+    `;
 
     if (accounts.length === 0) {
       return res.status(401).json({ 
@@ -52,16 +51,14 @@ app.post("/api/auth/login", async (req, res) => {
 
     // Lấy thông tin chi tiết theo role
     if (account.role === 'student') {
-      const [students] = await db.execute(
-        "SELECT * FROM students WHERE student_id = ?",
-        [userId]
-      );
+      const students = await prisma.$queryRaw`
+        SELECT * FROM students WHERE student_id = ${userId}
+      `;
       userInfo = students[0] || {};
     } else if (account.role === 'teacher') {
-      const [teachers] = await db.execute(
-        "SELECT * FROM teachers WHERE teacher_id = ?",
-        [userId]
-      );
+      const teachers = await prisma.$queryRaw`
+        SELECT * FROM teachers WHERE teacher_id = ${userId}
+      `;
       userInfo = teachers[0] || {};
     }
 

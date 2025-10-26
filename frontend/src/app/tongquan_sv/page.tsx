@@ -86,14 +86,14 @@ export default function StudentDashboardPage() {
           <button className="collapse-btn" onClick={() => setCollapsed(v => !v)} title={collapsed ? 'Mở rộng' : 'Thu gọn'}>
             {collapsed ? '⮞' : '⮜'}
           </button>
-          <div className="side-name">Xin chào, {student?.name || "Sinh viên"} 👋</div>
+          {!collapsed && <div className="side-name">Xin chào, {student?.name || "Sinh viên"} 👋</div>}
         </div>
         <nav className="side-nav">
-          <div className="side-link active">🏠 Trang tổng quan</div>
-          <Link href="/thongbao_sv" className="side-link">📢 Thông báo</Link>
-          <Link href="/lichhoc_sv" className="side-link">📅 Lịch học</Link>
-          <Link href="/lichsu_sv" className="side-link">🧾 Lịch sử</Link>
-          <Link href="/caidat_sv" className="side-link">⚙️ Cài đặt</Link>
+          <Link href="/tongquan_sv" className="side-link active">🏠 {!collapsed && "Dashboard"}</Link>
+          <Link href="/thongbao_sv" className="side-link">📢 {!collapsed && "Thông báo"}</Link>
+          <Link href="/lichhoc_sv" className="side-link">📅 {!collapsed && "Lịch học"}</Link>
+          <Link href="/lichsu_sv" className="side-link">🧾 {!collapsed && "Lịch sử"}</Link>
+          <Link href="/caidat_sv" className="side-link">⚙️ {!collapsed && "Cài đặt"}</Link>
         </nav>
       </aside>
       <header className="topbar">
