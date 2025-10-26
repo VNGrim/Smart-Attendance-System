@@ -1,13 +1,15 @@
 const express = require("express");
 const cors = require("cors");
 const bodyParser = require("body-parser");
+const cookieParser = require("cookie-parser");
 const prisma = require("./src/config/prisma"); // Import cấu hình Prisma
 
 const app = express();
 const PORT = 8080;
 
-app.use(cors());
+app.use(cors({ origin: true, credentials: true }));
 app.use(bodyParser.json());
+app.use(cookieParser());
 
 // Mount lichhoc_hienthi routes
 const lichhocRoutes = require("./src/lichhoc_hienthi/lichhoc_hienthi.routes");
@@ -21,65 +23,11 @@ app.use("/api/thongbao", thongbaoRoutes);
 const lopRoutes = require("./src/lop_gv/lop_gv.routes");
 app.use("/api/lop", lopRoutes);
 
-// API đăng nhập chung - sử dụng database
-app.post("/api/auth/login", async (req, res) => {
-  const { userId, password } = req.body; 
-  
-  // Kiểm tra input
-  if (!userId || !password) {
-    return res.status(400).json({ 
-      success: false, 
-      message: "Vui lòng nhập đầy đủ mã đăng nhập và mật khẩu" 
-    });
-  }
-
-  try {
-    // Query database để tìm user
-    const accounts = await prisma.$queryRaw`
-      SELECT * FROM accounts WHERE user_code = ${userId} AND password = ${password}
-    `;
-
-    if (accounts.length === 0) {
-      return res.status(401).json({ 
-        success: false, 
-        message: "Mã đăng nhập hoặc mật khẩu không đúng" 
-      });
-    }
-
-    const account = accounts[0];
-    let userInfo = {};
-
-    // Lấy thông tin chi tiết theo role
-    if (account.role === 'student') {
-      const students = await prisma.$queryRaw`
-        SELECT * FROM students WHERE student_id = ${userId}
-      `;
-      userInfo = students[0] || {};
-    } else if (account.role === 'teacher') {
-      const teachers = await prisma.$queryRaw`
-        SELECT * FROM teachers WHERE teacher_id = ${userId}
-      `;
-      userInfo = teachers[0] || {};
-    }
-
-    res.json({ 
-      success: true, 
-      role: account.role, 
-      userId: account.user_code,
-      name: userInfo.full_name || account.user_code,
-      teacher_id: userInfo.teacher_id || account.user_code,
-      full_name: userInfo.full_name || account.user_code,
-      message: `Đăng nhập thành công với quyền ${account.role}` 
-    });
-
-  } catch (error) {
-    console.error("Database error:", error);
-    res.status(500).json({ 
-      success: false, 
-      message: "Lỗi hệ thống. Vui lòng thử lại sau." 
-    });
-  }
-});
+// Auth & User routes (JWT + cookie)
+const authRoutes = require("./src/routes/auth.routes");
+const userRoutes = require("./src/routes/user.routes");
+app.use("/api/auth", authRoutes);
+app.use("/api", userRoutes);
 
 
 // API xem danh sách lớp
