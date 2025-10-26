@@ -102,7 +102,7 @@ export default function AdminSettingsPage() {
       <aside className="sidebar">
         <div className="side-header">
           <button className="collapse-btn" onClick={() => setCollapsed(!collapsed)} title={collapsed ? "Mở rộng" : "Thu gọn"}>
-            {collapsed ? "➡️" : "⬅️"}
+            {collapsed ? "⮞" : "⮜"}
           </button>
           {!collapsed && <div className="side-name">Smart Attendance</div>}
         </div>
@@ -124,7 +124,14 @@ export default function AdminSettingsPage() {
           <button className="btn-outline" onClick={restoreDefaults}>🔁 Khôi phục mặc định</button>
           <button className="btn-primary" onClick={saveAll} disabled={saving}>{saving?"Đang lưu...":"💾 Lưu thay đổi"}</button>
           <button className="icon-btn" onClick={toggleDark} title="Chuyển giao diện">{dark?"🌙":"🌞"}</button>
-          <button className="icon-btn" title="Thông báo">🔔{notifCount>0 && <span className="badge">{notifCount}</span>}</button>
+          
+          <button className="qr-btn" onClick={async ()=>{ 
+            if (confirm('Bạn có chắc muốn đăng xuất?')) {
+              try { await fetch('http://localhost:8080/api/auth/logout', { method: 'POST', credentials: 'include' }); } catch {}
+              try { localStorage.removeItem('sas_user'); } catch {}
+              window.location.href = '/login';
+            }
+          }}>🚪 Đăng xuất</button>
         </div>
       </header>
 

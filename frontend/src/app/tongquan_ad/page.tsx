@@ -74,10 +74,10 @@ export default function AdminOverviewPage() {
   };
 
   const onCardClick = (key: string) => {
-    if (key === "students") router.push("/quanly_sinhvien");
-    if (key === "lecturers") router.push("/quanly_giangvien");
-    if (key === "classes") router.push("/quanly_lophoc");
-    if (key === "sessionsToday") router.push("/lichgiangday_gv");
+    if (key === "students") router.push("/sinhvien_ad");
+    if (key === "lecturers") router.push("/giangvien_ad");
+    if (key === "classes") router.push("/lophoc_ad");
+    if (key === "sessionsToday") router.push("/lichhoc_ad");
   };
 
   const donutStroke = 100; // circumference percentage base for SVG stroke-dasharray
@@ -103,13 +103,13 @@ export default function AdminOverviewPage() {
         </div>
         <nav className="side-nav">
           <Link href="/tongquan_ad" className="side-link active" title="Dashboard">🏠 {!collapsed && "Dashboard"}</Link>
-          <Link href="/thongbao_sv" className="side-link" title="Thông báo">📢 {!collapsed && "Thông báo"}</Link>
-          <a className="side-link" href="#" onClick={(e)=>{e.preventDefault(); router.push("/quanly_sinhvien");}} title="Sinh viên">👨‍🎓 {!collapsed && "Sinh viên"}</a>
-          <a className="side-link" href="#" onClick={(e)=>{e.preventDefault(); router.push("/quanly_giangvien");}} title="Giảng viên">👩‍🏫 {!collapsed && "Giảng viên"}</a>
-          <a className="side-link" href="#" onClick={(e)=>{e.preventDefault(); router.push("/quanly_lophoc");}} title="Lớp học">🏫 {!collapsed && "Lớp học"}</a>
-          <Link href="/lichgiangday_gv" className="side-link" title="Lịch học">📅 {!collapsed && "Lịch học"}</Link>
-          <Link href="/login" className="side-link" title="Tài khoản">🔑 {!collapsed && "Tài khoản"}</Link>
-          <Link href="/caidat_sv" className="side-link" title="Cấu hình">⚙️ {!collapsed && "Cấu hình"}</Link>
+          <Link href="/thongbao_ad" className="side-link" title="Thông báo">📢 {!collapsed && "Thông báo"}</Link>
+          <Link href="/sinhvien_ad" className="side-link" title="Sinh viên">👨‍🎓 {!collapsed && "Sinh viên"}</Link>
+          <Link href="/giangvien_ad" className="side-link" title="Giảng viên">👩‍🏫 {!collapsed && "Giảng viên"}</Link>
+          <Link href="/lophoc_ad" className="side-link" title="Lớp học">🏫 {!collapsed && "Lớp học"}</Link>
+          <Link href="/lichhoc_ad" className="side-link" title="Lịch học">📅 {!collapsed && "Lịch học"}</Link>
+          <Link href="/taikhoan_ad" className="side-link" title="Tài khoản">🔑 {!collapsed && "Tài khoản"}</Link>
+          <Link href="/caidat_ad" className="side-link" title="Cấu hình">⚙️ {!collapsed && "Cấu hình"}</Link>
         </nav>
       </aside>
 
@@ -140,6 +140,13 @@ export default function AdminOverviewPage() {
               <a href="#" onClick={(e)=>{e.preventDefault(); if(confirm("Đăng xuất?")){ localStorage.removeItem("sas_user"); router.push("/login"); }}}>Đăng xuất</a>
             </div>
           </div>
+          <button className="qr-btn" onClick={async ()=>{ 
+            if (confirm('Bạn có chắc muốn đăng xuất?')) {
+              try { await fetch('http://localhost:8080/api/auth/logout', { method: 'POST', credentials: 'include' }); } catch {}
+              try { localStorage.removeItem('sas_user'); } catch {}
+              router.push('/login');
+            }
+          }}>🚪 Đăng xuất</button>
         </div>
       </header>
 

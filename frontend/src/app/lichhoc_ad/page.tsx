@@ -143,7 +143,7 @@ export default function AdminSchedulePage() {
       <aside className="sidebar">
         <div className="side-header">
           <button className="collapse-btn" onClick={() => setCollapsed(!collapsed)} title={collapsed ? "Mở rộng" : "Thu gọn"}>
-            {collapsed ? "➡️" : "⬅️"}
+            {collapsed ? "⮞" : "⮜"}
           </button>
           {!collapsed && <div className="side-name">Smart Attendance</div>}
         </div>
@@ -154,8 +154,8 @@ export default function AdminSchedulePage() {
           <Link href="/giangvien_ad" className="side-link" title="Giảng viên">👩‍🏫 {!collapsed && "Giảng viên"}</Link>
           <Link href="/lophoc_ad" className="side-link" title="Lớp học">🏫 {!collapsed && "Lớp học"}</Link>
           <Link href="/lichhoc_ad" className="side-link active" title="Lịch học">📅 {!collapsed && "Lịch học"}</Link>
-          <Link href="/login" className="side-link" title="Tài khoản">🔑 {!collapsed && "Tài khoản"}</Link>
-          <Link href="/caidat_sv" className="side-link" title="Cấu hình">⚙️ {!collapsed && "Cấu hình"}</Link>
+          <Link href="/taikhoan_ad" className="side-link" title="Tài khoản">🔑 {!collapsed && "Tài khoản"}</Link>
+          <Link href="/caidat_ad" className="side-link" title="Cấu hình">⚙️ {!collapsed && "Cấu hình"}</Link>
         </nav>
       </aside>
 
@@ -207,6 +207,13 @@ export default function AdminSchedulePage() {
               <a href="#" onClick={(e)=>{e.preventDefault(); if(confirm("Đăng xuất?")){ localStorage.removeItem("sas_user"); router.push("/login"); }}}>Đăng xuất</a>
             </div>
           </div>
+          <button className="qr-btn" onClick={async ()=>{ 
+            if (confirm('Bạn có chắc muốn đăng xuất?')) {
+              try { await fetch('http://localhost:8080/api/auth/logout', { method: 'POST', credentials: 'include' }); } catch {}
+              try { localStorage.removeItem('sas_user'); } catch {}
+              router.push('/login');
+            }
+          }}>🚪 Đăng xuất</button>
         </div>
       </header>
 
