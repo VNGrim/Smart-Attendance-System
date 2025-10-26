@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap');
+@import "../_styles/sas.css";
 
 :root { --background: radial-gradient(ellipse at center, #f8fafc 0%, #e2e8f0 50%, #cbd5e1 100%); --foreground: #0f172a; --card-bg: rgba(255,255,255,0.96); --card-border: rgba(15,23,42,0.08); --shadow-soft: 0 8px 24px rgba(2,6,23,0.06); --nav-start: #38BDF8; --nav-end: #3B82F6; }
 @media (prefers-color-scheme: dark) { :root { --background: radial-gradient(ellipse at center, #0F172A 0%, #020617 50%, #000000 100%); --foreground: #e2e8f0; --card-bg: rgba(30,41,59,0.9); --card-border: rgba(255,255,255,0.08); --shadow-soft: 0 8px 24px rgba(2,6,23,0.45); } }

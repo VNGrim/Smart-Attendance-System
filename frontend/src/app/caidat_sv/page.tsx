@@ -54,17 +54,19 @@ export default function CaiDatPage() {
           <button className="collapse-btn" onClick={() => setCollapsed(v => !v)} title={collapsed ? 'Mở rộng' : 'Thu gọn'}>
             {collapsed ? '⮞' : '⮜'}
           </button>
-          <div className="side-name">
-            Chào mừng,<br />
-            {student?.full_name || "Sinh viên"}
-          </div>
+          {!collapsed && (
+            <div className="side-name">
+              Chào mừng,<br />
+              {student?.full_name || "Sinh viên"}
+            </div>
+          )}
         </div>
         <nav className="side-nav">
-          <Link href="/tongquan_sv" className="side-link">🏠 Trang tổng quan</Link>
-          <Link href="/thongbao_sv" className="side-link">🔔 Thông báo</Link>
-          <Link href="/lichhoc_sv" className="side-link">📅 Lịch học</Link>
-          <Link href="/lichsu_sv" className="side-link">🕘 Lịch sử</Link>
-          <div className="side-link active">⚙️ Cài đặt</div>
+          <Link href="/tongquan_sv" className="side-link">🏠 {!collapsed && "Trang tổng quan"}</Link>
+          <Link href="/thongbao_sv" className="side-link">🔔 {!collapsed && "Thông báo"}</Link>
+          <Link href="/lichhoc_sv" className="side-link">📅 {!collapsed && "Lịch học"}</Link>
+          <Link href="/lichsu_sv" className="side-link">🕘 {!collapsed && "Lịch sử"}</Link>
+          <div className="side-link active">⚙️ {!collapsed && "Cài đặt"}</div>
         </nav>
       </aside>
       <header className="topbar">

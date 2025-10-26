@@ -63,6 +63,7 @@ export default function LoginPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ userId, password }), // Gửi userId và password
+        credentials: "include",
       });
 
       const data = await res.json();
@@ -86,20 +87,23 @@ export default function LoginPage() {
 
       // Đăng nhập thành công - xử lý theo từng loại người dùng
       if (data.role === "student") {
-        // SINH VIÊN: Chuyển đến trang thông báo
-        setMessage(`Chào mừng ${data.name}! Đang chuyển đến trang thông báo...`);
+        // SINH VIÊN: Chuyển đến trang tổng quan sinh viên
+        setMessage(`Chào mừng ${data.name}! Đang chuyển đến Dashboard sinh viên...`);
         setTimeout(() => {
-          router.push("/thongbao_sv"); // Chuyển đến trang thông báo
-        }, 1500);
+          router.push("/tongquan_sv");
+        }, 1000);
       } else if (data.role === "teacher") {
-        // GIÁO VIÊN: Chuyển đến trang lịch giảng dạy
-        setMessage(`Chào mừng ${data.name}! Đang chuyển đến trang lịch giảng dạy...`);
+        // GIÁO VIÊN: Chuyển đến trang tổng quan giảng viên
+        setMessage(`Chào mừng ${data.name}! Đang chuyển đến Dashboard giảng viên...`);
         setTimeout(() => {
-          router.push("/lichgiangday_gv"); // Chuyển đến trang lịch giảng dạy
-        }, 1500);
+          router.push("/tongquan_gv");
+        }, 1000);
       } else if (data.role === "admin") {
-        // ADMIN: Đăng nhập thành công, hiển thị thông báo
+        // ADMIN: Đăng nhập thành công, chuyển đến Dashboard admin
         setMessage(`Đăng nhập thành công! Chào mừng ${data.name} (Quản trị viên)`);
+        setTimeout(() => {
+          router.push("/tongquan_ad");
+        }, 1000);
       }
     } catch (err) {
       // Xử lý lỗi kết nối

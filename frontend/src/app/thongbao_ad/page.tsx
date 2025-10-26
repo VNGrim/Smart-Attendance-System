@@ -94,19 +94,19 @@ export default function AdminNotifyPage() {
       <aside className="sidebar">
         <div className="side-header">
           <button className="collapse-btn" onClick={() => setCollapsed(!collapsed)} title={collapsed ? "Mở rộng" : "Thu gọn"}>
-            {collapsed ? "➡️" : "⬅️"}
+            {collapsed ? "⮞" : "⮜"}
           </button>
           {!collapsed && <div className="side-name">Smart Attendance</div>}
         </div>
         <nav className="side-nav">
           <Link href="/tongquan_ad" className="side-link" title="Dashboard">🏠 {!collapsed && "Dashboard"}</Link>
           <Link href="/thongbao_ad" className="side-link active" title="Thông báo">📢 {!collapsed && "Thông báo"}</Link>
-          <a className="side-link" href="#" onClick={(e)=>{e.preventDefault(); router.push("/quanly_sinhvien");}} title="Sinh viên">👨‍🎓 {!collapsed && "Sinh viên"}</a>
-          <a className="side-link" href="#" onClick={(e)=>{e.preventDefault(); router.push("/quanly_giangvien");}} title="Giảng viên">👩‍🏫 {!collapsed && "Giảng viên"}</a>
-          <a className="side-link" href="#" onClick={(e)=>{e.preventDefault(); router.push("/quanly_lophoc");}} title="Lớp học">🏫 {!collapsed && "Lớp học"}</a>
-          <Link href="/lichgiangday_gv" className="side-link" title="Lịch học">📅 {!collapsed && "Lịch học"}</Link>
-          <Link href="/login" className="side-link" title="Tài khoản">🔑 {!collapsed && "Tài khoản"}</Link>
-          <Link href="/caidat_sv" className="side-link" title="Cấu hình">⚙️ {!collapsed && "Cấu hình"}</Link>
+          <Link href="/sinhvien_ad" className="side-link" title="Sinh viên">👨‍🎓 {!collapsed && "Sinh viên"}</Link>
+          <Link href="/giangvien_ad" className="side-link" title="Giảng viên">👩‍🏫 {!collapsed && "Giảng viên"}</Link>
+          <Link href="/lophoc_ad" className="side-link" title="Lớp học">🏫 {!collapsed && "Lớp học"}</Link>
+          <Link href="/lichhoc_ad" className="side-link" title="Lịch học">📅 {!collapsed && "Lịch học"}</Link>
+          <Link href="/taikhoan_ad" className="side-link" title="Tài khoản">🔑 {!collapsed && "Tài khoản"}</Link>
+          <Link href="/caidat_ad" className="side-link" title="Cấu hình">⚙️ {!collapsed && "Cấu hình"}</Link>
         </nav>
       </aside>
 
@@ -129,6 +129,13 @@ export default function AdminNotifyPage() {
               <a href="#" onClick={(e)=>{e.preventDefault(); if(confirm("Đăng xuất?")){ localStorage.removeItem("sas_user"); router.push("/login"); }}}>Đăng xuất</a>
             </div>
           </div>
+          <button className="qr-btn" onClick={async ()=>{ 
+            if (confirm('Bạn có chắc muốn đăng xuất?')) {
+              try { await fetch('http://localhost:8080/api/auth/logout', { method: 'POST', credentials: 'include' }); } catch {}
+              try { localStorage.removeItem('sas_user'); } catch {}
+              router.push('/login');
+            }
+          }}>🚪 Đăng xuất</button>
         </div>
       </header>
 

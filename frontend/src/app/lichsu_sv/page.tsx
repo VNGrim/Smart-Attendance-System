@@ -112,11 +112,11 @@ export default function LichSuPage() {
           </div>
         </div>
         <nav className="side-nav">
-          <Link href="/tongquan_sv" className="side-link">🏠 Trang tổng quan</Link>
-          <Link href="/thongbao_sv" className="side-link">🔔 Thông báo</Link>
-          <Link href="/lichhoc_sv" className="side-link">📅 Lịch học</Link>
-          <div className="side-link active">🕘 Lịch sử</div>
-          <Link href="/caidat_sv" className="side-link">⚙️ Cài đặt</Link>
+          <Link href="/tongquan_sv" className="side-link">🏠 {!collapsed && "Trang tổng quan"}</Link>
+          <Link href="/thongbao_sv" className="side-link">🔔 {!collapsed && "Thông báo"}</Link>
+          <Link href="/lichhoc_sv" className="side-link">📅 {!collapsed && "Lịch học"}</Link>
+          <div className="side-link active">🕘 {!collapsed && "Lịch sử"}</div>
+          <Link href="/caidat_sv" className="side-link">⚙️ {!collapsed && "Cài đặt"}</Link>
         </nav>
       </aside>
       <header className="topbar">

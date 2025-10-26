@@ -133,11 +133,11 @@ export default function ThongBaoPage() {
           </div>
         </div>
         <nav className="side-nav">
-          <Link href="/tongquan_sv" className="side-link">🏠 Trang tổng quan</Link>
-          <div className="side-link active">🔔 Thông báo</div>
-          <Link href="/lichhoc_sv" className="side-link">📅 Lịch học</Link>
-          <Link href="/lichsu_sv" className="side-link">🕘 Lịch sử</Link>
-          <Link href="/caidat_sv" className="side-link">⚙️ Cài đặt</Link>
+          <Link href="/tongquan_sv" className="side-link">🏠 {!collapsed && "Trang tổng quan"}</Link>
+          <div className="side-link active">🔔 {!collapsed && "Thông báo"}</div>
+          <Link href="/lichhoc_sv" className="side-link">📅 {!collapsed && "Lịch học"}</Link>
+          <Link href="/lichsu_sv" className="side-link">🕘 {!collapsed && "Lịch sử"}</Link>
+          <Link href="/caidat_sv" className="side-link">⚙️ {!collapsed && "Cài đặt"}</Link>
         </nav>
       </aside>
       <header className="topbar">

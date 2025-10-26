@@ -94,6 +94,13 @@ export default function LecturerDashboardPage() {
               <a href="#" onClick={(e)=>{e.preventDefault(); if(confirm("Đăng xuất?")){ localStorage.removeItem("sas_user"); router.push("/login"); }}}>Đăng xuất</a>
             </div>
           </div>
+          <button className="qr-btn" onClick={async ()=>{ 
+            if (confirm('Bạn có chắc muốn đăng xuất?')) {
+              try { await fetch('http://localhost:8080/api/auth/logout', { method: 'POST', credentials: 'include' }); } catch {}
+              try { localStorage.removeItem('sas_user'); } catch {}
+              router.push('/login');
+            }
+          }}>🚪 Đăng xuất</button>
         </div>
       </header>
 

@@ -56,12 +56,12 @@ export default function LecturerSettingsPage() {
       <aside className="sidebar">
         <div className="side-header">
           <button className="collapse-btn" onClick={() => setCollapsed(!collapsed)} title={collapsed ? "Mở rộng" : "Thu gọn"}>
-            {collapsed ? "➡️" : "⬅️"}
+            {collapsed ? "⮞" : "⮜"}
           </button>
           {!collapsed && <div className="side-name">Smart Attendance</div>}
         </div>
         <nav className="side-nav">
-          <Link href="/tongquan_gv" className="side-link">🏠 {!collapsed && "Tổng quan"}</Link>
+          <Link href="/tongquan_gv" className="side-link">🏠 {!collapsed && "Dashboard"}</Link>
           <Link href="/thongbao_gv" className="side-link">📢 {!collapsed && "Thông báo"}</Link>
           <Link href="/lichday_gv" className="side-link">📅 {!collapsed && "Lịch giảng dạy"}</Link>
           <Link href="/lophoc_gv" className="side-link">🏫 {!collapsed && "Lớp học"}</Link>
@@ -75,6 +75,13 @@ export default function LecturerSettingsPage() {
         <div className="controls">
           <button className="icon-btn" onClick={toggleDark}>{dark?"🌙":"🌞"}</button>
           <button className="icon-btn notif">🔔{notifCount>0 && <span className="badge">{notifCount}</span>}</button>
+          <button className="qr-btn" onClick={async ()=>{ 
+            if (confirm('Bạn có chắc muốn đăng xuất?')) {
+              try { await fetch('http://localhost:8080/api/auth/logout', { method: 'POST', credentials: 'include' }); } catch {}
+              try { localStorage.removeItem('sas_user'); } catch {}
+              window.location.href = '/login';
+            }
+          }}>🚪 Đăng xuất</button>
         </div>
       </header>
 

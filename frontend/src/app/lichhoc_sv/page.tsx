@@ -118,11 +118,11 @@ export default function LichHocPage() {
           </div>
         </div>
         <nav className="side-nav">
-          <Link href="/tongquan_sv" className="side-link">🏠 Trang tổng quan</Link>
-          <Link href="/thongbao_sv" className="side-link">🔔 Thông báo</Link>
-          <div className="side-link active">📅 Lịch học</div>
-          <Link href="/lichsu_sv" className="side-link">🕘 Lịch sử</Link>
-          <Link href="/caidat_sv" className="side-link">⚙️ Cài đặt</Link>
+          <Link href="/tongquan_sv" className="side-link">🏠 {!collapsed && "Trang tổng quan"}</Link>
+          <Link href="/thongbao_sv" className="side-link">🔔 {!collapsed && "Thông báo"}</Link>
+          <div className="side-link active">📅 {!collapsed && "Lịch học"}</div>
+          <Link href="/lichsu_sv" className="side-link">🕘 {!collapsed && "Lịch sử"}</Link>
+          <Link href="/caidat_sv" className="side-link">⚙️ {!collapsed && "Cài đặt"}</Link>
         </nav>
       </aside>
       <header className="topbar">
