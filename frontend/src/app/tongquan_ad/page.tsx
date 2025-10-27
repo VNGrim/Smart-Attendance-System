@@ -21,11 +21,17 @@ export default function AdminOverviewPage() {
   const [selectedSemester, setSelectedSemester] = useState<string | null>(null);
   const [activity, setActivity] = useState<Activity[]>([]);
   const [modal, setModal] = useState<Activity | null>(null);
+  const [studentCount, setStudentCount] = useState<number | null>(null);
+  const [studentDelta, setStudentDelta] = useState<number | null>(null);
+  const [lecturerCount, setLecturerCount] = useState<number | null>(null);
+  const [lecturerDelta, setLecturerDelta] = useState<number | null>(null);
+  const [classCount, setClassCount] = useState<number | null>(null);
+  const [sessionsTodayCount, setSessionsTodayCount] = useState<number | null>(null);
 
   // Mock summary numbers
   const stats = {
     students: { value: 2340, delta: "+50 so với tháng trước" },
-    lecturers: { value: 128 },
+    lecturers: { value: 128, delta: "+10 so với tháng trước" },
     classes: { value: 64 },
     sessionsToday: { value: 32 },
   };
@@ -58,6 +64,90 @@ export default function AdminOverviewPage() {
         document.documentElement.style.colorScheme = s.themeDark ? "dark" : "light";
       }
     } catch {}
+  }, []);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await fetch("http://localhost:8080/api/admin/overview/students/count", {
+          credentials: "include",
+        });
+        if (res.ok) {
+          const data = await res.json();
+          if (typeof data?.count === "number") setStudentCount(data.count);
+        }
+      } catch {}
+    })();
+  }, []);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await fetch("http://localhost:8080/api/admin/overview/lecturers/count", {
+          credentials: "include",
+        });
+        if (res.ok) {
+          const data = await res.json();
+          if (typeof data?.count === "number") setLecturerCount(data.count);
+        }
+      } catch {}
+    })();
+  }, []);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await fetch("http://localhost:8080/api/admin/overview/classes/count", {
+          credentials: "include",
+        });
+        if (res.ok) {
+          const data = await res.json();
+          if (typeof data?.count === "number") setClassCount(data.count);
+        }
+      } catch {}
+    })();
+  }, []);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await fetch("http://localhost:8080/api/admin/overview/sessions/today/count", {
+          credentials: "include",
+        });
+        if (res.ok) {
+          const data = await res.json();
+          if (typeof data?.count === "number") setSessionsTodayCount(data.count);
+        }
+      } catch {}
+    })();
+  }, []);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await fetch("http://localhost:8080/api/admin/overview/students/monthly-delta", {
+          credentials: "include",
+        });
+        if (res.ok) {
+          const data = await res.json();
+          if (typeof data?.delta === "number") setStudentDelta(data.delta);
+        }
+      } catch {}
+    })();
+  }, []);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await fetch("http://localhost:8080/api/admin/overview/lecturers/monthly-delta", {
+          credentials: "include",
+        });
+        if (res.ok) {
+          const data = await res.json();
+          if (typeof data?.delta === "number") setLecturerDelta(data.delta);
+        }
+      } catch {}
+    })();
   }, []);
 
   const toggleDark = () => {
@@ -160,25 +250,26 @@ export default function AdminOverviewPage() {
       <section className="cards">
         <div className="card stat-card gradient-blue" onClick={() => onCardClick("students")}>
           <div className="card-top">👨‍🎓 Sinh viên</div>
-          <div className="card-num">{stats.students.value.toLocaleString()}</div>
-          <div className="card-sub">{stats.students.delta}</div>
+          <div className="card-num">{(studentCount ?? stats.students.value).toLocaleString()}</div>
+          <div className="card-sub">{typeof studentDelta === 'number' ? `${studentDelta >= 0 ? '+' : ''}${studentDelta.toLocaleString()} so với tháng trước` : stats.students.delta}</div>
           <div className="spark" aria-hidden>
             <svg width="120" height="36" viewBox="0 0 120 36">
               <polyline fill="none" stroke="rgba(255,255,255,.9)" strokeWidth="2" points="0,28 20,30 40,18 60,22 80,10 100,14 120,8" />
             </svg>
           </div>
         </div>
-        <div className="card stat-card" onClick={() => onCardClick("lecturers")}> 
+        <div className="card stat-card" onClick={() => onCardClick("lecturers")}>
           <div className="card-top">👩‍🏫 Giảng viên</div>
-          <div className="card-num">{stats.lecturers.value.toLocaleString()}</div>
+          <div className="card-num">{(lecturerCount ?? stats.lecturers.value).toLocaleString()}</div>
+          <div className="card-sub">{typeof lecturerDelta === 'number' ? `${lecturerDelta >= 0 ? '+' : ''}${lecturerDelta.toLocaleString()} so với tháng trước` : ''}</div>
         </div>
-        <div className="card stat-card" onClick={() => onCardClick("classes")}>
+        <div className="card stat-card" onClick={() => onCardClick("classes")}> 
           <div className="card-top">🏫 Lớp học</div>
-          <div className="card-num">{stats.classes.value.toLocaleString()}</div>
+          <div className="card-num">{(classCount ?? stats.classes.value).toLocaleString()}</div>
         </div>
         <div className="card stat-card" onClick={() => onCardClick("sessionsToday")}>
           <div className="card-top">📅 Buổi học hôm nay</div>
-          <div className="card-num">{stats.sessionsToday.value.toLocaleString()}</div>
+          <div className="card-num">{(sessionsTodayCount ?? stats.sessionsToday.value).toLocaleString()}</div>
         </div>
       </section>
 
