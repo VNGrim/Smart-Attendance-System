@@ -33,6 +33,10 @@ app.use("/api", userRoutes);
 const adminOverviewRoutes = require("./src/tongquan_ad/tongquan_ad.routes");
 app.use("/api/admin/overview", adminOverviewRoutes);
 
+// Admin announcements routes
+const adminAnnouncementRoutes = require("./src/thongbao_ad/thongbao_ad.routes");
+app.use("/api/admin/notifications", adminAnnouncementRoutes);
+
 // API xem danh sách lớp
 app.get("/api/classes", (req, res) => {
   res.json([

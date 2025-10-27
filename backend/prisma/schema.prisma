@@ -17,10 +17,23 @@ model accounts {
 }
 
 model announcements {
-  id         Int       @id @default(autoincrement())
-  title      String    @db.VarChar(200)
-  content    String    @db.Text
-  created_at DateTime? @default(now()) @db.Timestamp(0)
+  id           Int       @id @default(autoincrement())
+  code         String?   @unique @default(uuid()) @db.VarChar(64)
+  title        String    @db.VarChar(200)
+  content      String    @db.Text
+  sender       String    @default("Admin") @db.VarChar(100)
+  target       String    @default("Toàn trường") @db.VarChar(255)
+  category     String    @default("general") @db.VarChar(50)
+  type         String    @default("Khác") @db.VarChar(50)
+  status       String    @default("Đã gửi") @db.VarChar(30)
+  send_time    DateTime? @db.Timestamp(0)
+  scheduled_at DateTime? @db.Timestamp(0)
+  recipients   Json?
+  history      Json?
+  created_at   DateTime  @default(now()) @db.Timestamp(0)
+  updated_at   DateTime  @default(now()) @updatedAt @db.Timestamp(0)
+
+  @@index([created_at])
 }
 
 model students {

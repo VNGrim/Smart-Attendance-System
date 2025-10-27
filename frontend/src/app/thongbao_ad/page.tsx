@@ -4,31 +4,122 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 
+type NoticeCategory = "toantruong" | "giangvien" | "sinhvien" | "scheduled" | "deleted" | "khac";
+
 type Notice = {
   id: string;
   title: string;
   sender: string;
   target: string;
-  category: "toantruong" | "giangvien" | "sinhvien" | "scheduled" | "deleted" | "khac";
+  category: NoticeCategory;
   type: string;
   sendTime: string;
-  status: "Đã gửi" | "Lên lịch" | "Đang gửi" | "Đã ẩn" | "Đã xóa";
+  status: string;
   content: string;
   recipients?: string[];
   history?: string[];
   scheduledAt?: string | null;
+  createdAt?: string | null;
+  updatedAt?: string | null;
 };
+
+function formatDateTime(input: unknown): string {
+  if (!input) return "--";
+  const value = input instanceof Date ? input : new Date(String(input));
+  if (Number.isNaN(value.getTime())) return "--";
+  return new Intl.DateTimeFormat("vi-VN", {
+    dateStyle: "short",
+    timeStyle: "short",
+  }).format(value);
+}
+
+function toArray(value: unknown): string[] {
+  if (!value) return [];
+  if (Array.isArray(value)) return value.map((item) => String(item)).filter(Boolean);
+  if (typeof value === "string") {
+    try {
+      const parsed = JSON.parse(value);
+      if (Array.isArray(parsed)) return parsed.map((item) => String(item)).filter(Boolean);
+    } catch {}
+    return value
+      .split(/[;,]/)
+      .map((item) => item.trim())
+      .filter(Boolean);
+  }
+  return [String(value)];
+}
+
+function normalizeCategory(category?: unknown, target?: unknown, status?: unknown): NoticeCategory {
+  const statusLower = String(status ?? "").toLowerCase();
+  if (statusLower.includes("xóa")) return "deleted";
+  if (statusLower.includes("schedule") || statusLower.includes("lịch")) return "scheduled";
+
+  const cat = String(category ?? "").toLowerCase();
+  const tgt = String(target ?? "").toLowerCase();
+  if (cat.includes("giảng") || tgt.includes("giảng")) return "giangvien";
+  if (cat.includes("sinh") || tgt.includes("sinh")) return "sinhvien";
+  if (cat.includes("toàn") || tgt.includes("toàn") || tgt.includes("all")) return "toantruong";
+  return "khac";
+}
+
+function inferCategoryFromTarget(target?: string | null): NoticeCategory {
+  const tgt = (target ?? "").toLowerCase();
+  if (tgt.includes("giảng")) return "giangvien";
+  if (tgt.includes("sinh")) return "sinhvien";
+  return "toantruong";
+}
+
+function mapServerNotice(raw: any): Notice {
+  const id = typeof raw?.id === "string" && raw.id
+    ? raw.id
+    : raw?.code
+      ? String(raw.code)
+      : raw?.dbId
+        ? `ANN-${raw.dbId}`
+        : Math.random().toString(36).slice(2, 10);
+
+  const sendSource = raw?.sendTime ?? raw?.send_time ?? raw?.createdAt ?? raw?.created_at;
+  const scheduledSource = raw?.scheduledAt ?? raw?.scheduled_at;
+  const createdSource = raw?.createdAt ?? raw?.created_at;
+  const updatedSource = raw?.updatedAt ?? raw?.updated_at;
+
+  const notice: Notice = {
+    id,
+    title: String(raw?.title ?? ""),
+    sender: String(raw?.sender ?? "Admin"),
+    target: String(raw?.target ?? "Toàn trường"),
+    category: normalizeCategory(raw?.category, raw?.target, raw?.status),
+    type: String(raw?.type ?? "Khác"),
+    sendTime: formatDateTime(sendSource),
+    status: String(raw?.status ?? "Đã gửi"),
+    content: String(raw?.content ?? ""),
+    recipients: toArray(raw?.recipients),
+    history: toArray(raw?.history),
+    scheduledAt: scheduledSource ? formatDateTime(scheduledSource) : null,
+    createdAt: createdSource ? formatDateTime(createdSource) : null,
+    updatedAt: updatedSource ? formatDateTime(updatedSource) : null,
+  };
+
+  if (!notice.recipients?.length) delete notice.recipients;
+  if (!notice.history?.length) delete notice.history;
+  if (!notice.createdAt) delete notice.createdAt;
+  if (!notice.updatedAt) delete notice.updatedAt;
+
+  return notice;
+}
 
 export default function AdminNotifyPage() {
   const router = useRouter();
   const [collapsed, setCollapsed] = useState(false);
   const [dark, setDark] = useState(false);
-  const [notifCount] = useState(2);
+  const [notifCount, setNotifCount] = useState(0);
   const [filter, setFilter] = useState<string>("all");
   const [drawer, setDrawer] = useState<Notice | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
   const [edit, setEdit] = useState<Notice | null>(null);
   const [list, setList] = useState<Notice[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   const filters = [
     { key: "all", label: "Tất cả" },
@@ -40,11 +131,6 @@ export default function AdminNotifyPage() {
   ];
 
   useEffect(() => {
-    setList([
-      { id: "1", title: "Hạn nộp đồ án", sender: "Admin", target: "Sinh viên K19", category: "sinhvien", type: "Học vụ", sendTime: "24/10/2025", status: "Đã gửi", content: "Nhắc nhở hạn nộp đồ án tuần này.", recipients: ["SVK19"], history: ["Tạo 22/10", "Chỉnh sửa 23/10"] },
-      { id: "2", title: "Lịch họp giảng viên", sender: "Admin", target: "Giảng viên", category: "giangvien", type: "Nội bộ", sendTime: "25/10/2025", status: "Lên lịch", content: "Họp chuyên môn tổ CNPM lúc 14:00.", recipients: ["GV"], scheduledAt: "25/10/2025 13:30" },
-      { id: "3", title: "Bảo trì hệ thống", sender: "Admin", target: "Toàn trường", category: "toantruong", type: "Hệ thống", sendTime: "--", status: "Đang gửi", content: "Bảo trì 02:00-03:00 sáng mai." },
-    ]);
     try {
       const saved = localStorage.getItem("sas_settings");
       if (saved) {
@@ -53,6 +139,47 @@ export default function AdminNotifyPage() {
         document.documentElement.style.colorScheme = s.themeDark ? "dark" : "light";
       }
     } catch {}
+  }, []);
+
+  useEffect(() => {
+    let ignore = false;
+
+    const loadAnnouncements = async () => {
+      setLoading(true);
+      setError(null);
+      try {
+        const response = await fetch("http://localhost:8080/api/admin/notifications", {
+          credentials: "include",
+        });
+        if (!response.ok) throw new Error(await response.text());
+        const data = await response.json();
+        const rawList = Array.isArray(data?.announcements) ? data.announcements : [];
+        const mapped: Notice[] = rawList.map(mapServerNotice);
+        if (!ignore) {
+          setList(mapped);
+          setDrawer(null);
+          setEdit(null);
+          const pendingCount = mapped.filter((item: Notice) => {
+            const status = item.status.toLowerCase();
+            return status.includes("lên lịch") || status.includes("đang gửi") || status.includes("pending");
+          }).length;
+          setNotifCount(pendingCount);
+        }
+      } catch (err: any) {
+        if (!ignore) {
+          console.error("admin notifications fetch error", err);
+          setError("Không tải được danh sách thông báo");
+        }
+      } finally {
+        if (!ignore) setLoading(false);
+      }
+    };
+
+    loadAnnouncements();
+
+    return () => {
+      ignore = true;
+    };
   }, []);
 
   const toggleDark = () => {
@@ -84,7 +211,9 @@ export default function AdminNotifyPage() {
       setList((prev) => prev.map((n) => (n.id === edit.id ? { ...n, ...payload, title: payload.title || n.title, content: payload.content || n.content, target: payload.target || n.target, type: payload.type || n.type, status: payload.action === "send" ? "Đã gửi" : "Lên lịch", sendTime: payload.action === "send" ? new Date().toLocaleString("vi-VN") : n.sendTime, scheduledAt: payload.action === "schedule" ? (payload.scheduledAt as string) : null } as Notice : n)));
     } else {
       const id = Math.random().toString(36).slice(2, 9);
-      setList((prev) => prev.concat({ id, title: payload.title || "", sender: "Admin", target: payload.target || "Toàn trường", category: (payload.category as any) || "toantruong", type: payload.type || "Khác", sendTime: payload.action === "send" ? new Date().toLocaleString("vi-VN") : "--", status: payload.action === "send" ? "Đã gửi" : "Lên lịch", content: payload.content || "", recipients: payload.recipients as any, scheduledAt: payload.action === "schedule" ? (payload.scheduledAt as string) : null }));
+      const category = (payload.category as NoticeCategory) || inferCategoryFromTarget(payload.target || "");
+      const sendTime = payload.action === "send" ? formatDateTime(new Date()) : "--";
+      setList((prev) => prev.concat({ id, title: payload.title || "", sender: "Admin", target: payload.target || "Toàn trường", category, type: payload.type || "Khác", sendTime, status: payload.action === "send" ? "Đã gửi" : "Lên lịch", content: payload.content || "", recipients: (payload.recipients as string[] | undefined) ?? undefined, scheduledAt: payload.action === "schedule" ? (payload.scheduledAt as string) : null }));
     }
     setModalOpen(false);
   };
@@ -213,7 +342,10 @@ export default function AdminNotifyPage() {
             <div>Thao tác</div>
           </div>
           <div className="tbody">
-            {dataView.map((n) => (
+            {loading && <div className="trow">Đang tải dữ liệu...</div>}
+            {error && !loading && <div className="trow error">{error}</div>}
+            {!loading && !error && dataView.length === 0 && <div className="trow">Không có thông báo</div>}
+            {!loading && !error && dataView.map((n) => (
               <div className="trow" key={n.id} onMouseEnter={() => setDrawer(n)} onClick={() => setDrawer(n)}>
                 <div className="ttitle" title={n.content}>{n.title}</div>
                 <div>{n.sender}</div>
@@ -225,7 +357,7 @@ export default function AdminNotifyPage() {
                 </div>
                 <div className="actions">
                   <button className="icon-btn" title="Chỉnh sửa" onClick={(e)=>{e.stopPropagation(); openEdit(n);}}>✏️</button>
-                  {n.status !== "Đã xóa" && <button className="icon-btn" title="Xóa" onClick={(e)=>{e.stopPropagation(); if(confirm("Xóa thông báo?")) softDelete(n.id);}}>🗑</button>}
+                  {!n.status.toLowerCase().includes("xóa") && <button className="icon-btn" title="Xóa" onClick={(e)=>{e.stopPropagation(); if(confirm("Xóa thông báo?")) softDelete(n.id);}}>🗑</button>}
                 </div>
               </div>
             ))}

@@ -5,8 +5,23 @@ class ThongBaoModel {
   static async getAllAnnouncements() {
     try {
       const announcements = await prisma.$queryRaw`
-        SELECT id, title, content, created_at 
-        FROM announcements 
+        SELECT
+          id,
+          COALESCE(code, CONCAT('ANN-', id)) AS code,
+          title,
+          content,
+          sender,
+          target,
+          category,
+          type,
+          status,
+          send_time,
+          scheduled_at,
+          recipients,
+          history,
+          created_at,
+          updated_at
+        FROM announcements
         ORDER BY created_at DESC
       `;
       return announcements;
@@ -19,8 +34,23 @@ class ThongBaoModel {
   static async getAnnouncementById(id) {
     try {
       const announcements = await prisma.$queryRaw`
-        SELECT id, title, content, created_at 
-        FROM announcements 
+        SELECT
+          id,
+          COALESCE(code, CONCAT('ANN-', id)) AS code,
+          title,
+          content,
+          sender,
+          target,
+          category,
+          type,
+          status,
+          send_time,
+          scheduled_at,
+          recipients,
+          history,
+          created_at,
+          updated_at
+        FROM announcements
         WHERE id = ${id}
       `;
       return announcements[0] || null;
