@@ -48,6 +48,31 @@ router.get('/sessions/today/count', async (req, res) => {
   }
 });
 
+// GET /api/admin/overview/composition
+// Return counts of users by role for donut chart
+router.get('/composition', async (req, res) => {
+  try {
+    const [studentAccounts, teacherAccounts, adminAccounts] = await Promise.all([
+      prisma.accounts.count({ where: { role: 'student' } }),
+      prisma.accounts.count({ where: { role: 'teacher' } }),
+      prisma.accounts.count({ where: { role: 'admin' } }),
+    ]);
+
+    const total = studentAccounts + teacherAccounts + adminAccounts;
+    return res.json({
+      total,
+      breakdown: {
+        students: studentAccounts,
+        lecturers: teacherAccounts,
+        admins: adminAccounts,
+      },
+    });
+  } catch (err) {
+    console.error('composition error:', err);
+    return res.status(500).json({ success: false, message: 'Lỗi hệ thống' });
+  }
+});
+
 // GET /api/admin/overview/activities/recent
 // Aggregate recent activity from announcements, newly created students & teachers
 router.get('/activities/recent', async (req, res) => {
