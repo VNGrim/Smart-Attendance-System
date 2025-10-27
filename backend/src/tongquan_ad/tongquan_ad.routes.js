@@ -19,6 +19,21 @@ router.get('/students/count', async (req, res) => {
   }
 });
 
+// GET /api/admin/overview/classes/count
+// Count distinct class identifiers from timetable
+router.get('/classes/count', async (req, res) => {
+  try {
+    const distinct = await prisma.timetable.findMany({
+      select: { classes: true },
+      distinct: ['classes'],
+    });
+    return res.json({ count: distinct.length });
+  } catch (err) {
+    console.error('classes count error:', err);
+    return res.status(500).json({ success: false, message: 'Lỗi hệ thống' });
+  }
+});
+
 // GET /api/admin/overview/lecturers/count
 router.get('/lecturers/count', async (req, res) => {
   try {

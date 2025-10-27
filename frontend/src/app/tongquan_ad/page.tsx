@@ -25,6 +25,7 @@ export default function AdminOverviewPage() {
   const [studentDelta, setStudentDelta] = useState<number | null>(null);
   const [lecturerCount, setLecturerCount] = useState<number | null>(null);
   const [lecturerDelta, setLecturerDelta] = useState<number | null>(null);
+  const [classCount, setClassCount] = useState<number | null>(null);
 
   // Mock summary numbers
   const stats = {
@@ -87,6 +88,20 @@ export default function AdminOverviewPage() {
         if (res.ok) {
           const data = await res.json();
           if (typeof data?.count === "number") setLecturerCount(data.count);
+        }
+      } catch {}
+    })();
+  }, []);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await fetch("http://localhost:8080/api/admin/overview/classes/count", {
+          credentials: "include",
+        });
+        if (res.ok) {
+          const data = await res.json();
+          if (typeof data?.count === "number") setClassCount(data.count);
         }
       } catch {}
     })();
@@ -233,9 +248,9 @@ export default function AdminOverviewPage() {
           <div className="card-num">{(lecturerCount ?? stats.lecturers.value).toLocaleString()}</div>
           <div className="card-sub">{typeof lecturerDelta === 'number' ? `${lecturerDelta >= 0 ? '+' : ''}${lecturerDelta.toLocaleString()} so với tháng trước` : ''}</div>
         </div>
-        <div className="card stat-card" onClick={() => onCardClick("classes")}>
+        <div className="card stat-card" onClick={() => onCardClick("classes")}> 
           <div className="card-top">🏫 Lớp học</div>
-          <div className="card-num">{stats.classes.value.toLocaleString()}</div>
+          <div className="card-num">{(classCount ?? stats.classes.value).toLocaleString()}</div>
         </div>
         <div className="card stat-card" onClick={() => onCardClick("sessionsToday")}>
           <div className="card-top">📅 Buổi học hôm nay</div>
