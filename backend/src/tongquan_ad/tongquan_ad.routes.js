@@ -5,6 +5,22 @@ const { requireRole } = require('../middleware/roles');
 
 const router = express.Router();
 
+const DEFAULT_SEMESTER_CODES = [
+  { code: 'K18', name: 'Khoá K18' },
+  { code: 'K19', name: 'Khoá K19' },
+  { code: 'K20', name: 'Khoá K20' },
+  { code: 'K21', name: 'Khoá K21' },
+];
+
+function mapSemester(record) {
+  return {
+    code: record.code,
+    name: record.name,
+    totalStudents: record.total_students,
+    attendanceRatio: record.attendance_ratio,
+  };
+}
+
 // All routes under this router require admin authentication
 router.use(auth, requireRole('admin'));
 
@@ -15,6 +31,59 @@ router.get('/students/count', async (req, res) => {
     return res.json({ count });
   } catch (err) {
     console.error('students count error:', err);
+    return res.status(500).json({ success: false, message: 'Lỗi hệ thống' });
+  }
+});
+
+// GET /api/admin/overview/semesters/attendance
+router.get('/semesters/attendance', async (req, res) => {
+  try {
+    const records = await prisma.semester_attendance_stats.findMany({
+      orderBy: { code: 'asc' },
+    });
+
+    if (!records.length) {
+      return res.json({
+        semesters: DEFAULT_SEMESTER_CODES.map((item) => ({
+          code: item.code,
+          name: item.name,
+          totalStudents: 0,
+          attendanceRatio: 0,
+        })),
+      });
+    }
+
+    return res.json({ semesters: records.map(mapSemester) });
+  } catch (err) {
+    console.error('semesters attendance error:', err);
+    return res.status(500).json({ success: false, message: 'Lỗi hệ thống' });
+  }
+});
+
+// GET /api/admin/overview/semesters/attendance/:code
+router.get('/semesters/attendance/:code', async (req, res) => {
+  try {
+    const { code } = req.params;
+    const record = await prisma.semester_attendance_stats.findUnique({ where: { code } });
+
+    if (!record) {
+      const fallback = DEFAULT_SEMESTER_CODES.find((item) => item.code.toLowerCase() === code.toLowerCase());
+      if (!fallback) {
+        return res.status(404).json({ success: false, message: 'Không tìm thấy học kỳ' });
+      }
+      return res.json({
+        semester: {
+          code: fallback.code,
+          name: fallback.name,
+          totalStudents: 0,
+          attendanceRatio: 0,
+        },
+      });
+    }
+
+    return res.json({ semester: mapSemester(record) });
+  } catch (err) {
+    console.error('semester attendance detail error:', err);
     return res.status(500).json({ success: false, message: 'Lỗi hệ thống' });
   }
 });
@@ -44,6 +113,99 @@ router.get('/sessions/today/count', async (req, res) => {
     return res.json({ count, day_of_week: todayEnum });
   } catch (err) {
     console.error('sessions today count error:', err);
+    return res.status(500).json({ success: false, message: 'Lỗi hệ thống' });
+  }
+});
+
+// GET /api/admin/overview/composition
+// Return counts of users by role for donut chart
+router.get('/composition', async (req, res) => {
+  try {
+    const [studentAccounts, teacherAccounts, adminAccounts] = await Promise.all([
+      prisma.accounts.count({ where: { role: 'student' } }),
+      prisma.accounts.count({ where: { role: 'teacher' } }),
+      prisma.accounts.count({ where: { role: 'admin' } }),
+    ]);
+
+    const total = studentAccounts + teacherAccounts + adminAccounts;
+    return res.json({
+      total,
+      breakdown: {
+        students: studentAccounts,
+        lecturers: teacherAccounts,
+        admins: adminAccounts,
+      },
+    });
+  } catch (err) {
+    console.error('composition error:', err);
+    return res.status(500).json({ success: false, message: 'Lỗi hệ thống' });
+  }
+});
+
+// GET /api/admin/overview/activities/recent
+// Aggregate recent activity from announcements, newly created students & teachers
+router.get('/activities/recent', async (req, res) => {
+  try {
+    const [announcements, students, teachers] = await Promise.all([
+      prisma.announcements.findMany({
+        orderBy: { created_at: 'desc' },
+        take: 5,
+      }),
+      prisma.students.findMany({
+        where: { created_at: { not: null } },
+        orderBy: { created_at: 'desc' },
+        take: 5,
+      }),
+      prisma.teachers.findMany({
+        where: { created_at: { not: null } },
+        orderBy: { created_at: 'desc' },
+        take: 5,
+      }),
+    ]);
+
+    const items = [];
+
+    for (const ann of announcements) {
+      if (!ann.created_at) continue;
+      items.push({
+        id: `announcement-${ann.id}`,
+        type: 'announcement',
+        time: ann.created_at,
+        action: `Gửi thông báo "${ann.title}"`,
+        actor: 'Admin',
+        detail: ann.content,
+      });
+    }
+
+    for (const st of students) {
+      if (!st.created_at) continue;
+      items.push({
+        id: `student-${st.student_id}`,
+        type: 'student_created',
+        time: st.created_at,
+        action: `Thêm sinh viên ${st.student_id}`,
+        actor: 'Admin',
+        detail: `${st.full_name}${st.classes ? ` · Lớp ${st.classes}` : ''}${st.course ? ` · Khóa ${st.course}` : ''}`,
+      });
+    }
+
+    for (const tc of teachers) {
+      if (!tc.created_at) continue;
+      items.push({
+        id: `teacher-${tc.teacher_id}`,
+        type: 'teacher_created',
+        time: tc.created_at,
+        action: `Thêm giảng viên ${tc.teacher_id}`,
+        actor: 'Admin',
+        detail: `${tc.full_name}${tc.subject ? ` · Môn ${tc.subject}` : ''}${tc.classes ? ` · Lớp ${tc.classes}` : ''}`,
+      });
+    }
+
+    items.sort((a, b) => new Date(b.time).getTime() - new Date(a.time).getTime());
+
+    return res.json({ items: items.slice(0, 10) });
+  } catch (err) {
+    console.error('activities recent error:', err);
     return res.status(500).json({ success: false, message: 'Lỗi hệ thống' });
   }
 });

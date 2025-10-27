@@ -1,4 +1,4 @@
-"use client";
+      "use client";
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
@@ -10,7 +10,48 @@ type Activity = {
   actor: string;
   id: string;
   detail?: string;
+  rawTime?: string;
 };
+
+type CompositionBreakdown = Record<'students' | 'lecturers' | 'admins', number>;
+
+type SemesterStat = {
+  code: string;
+  name: string;
+  totalStudents: number;
+  attendanceRatio: number;
+};
+
+function formatDateTime(input: unknown) {
+  if (!input) return "—";
+  const date = input instanceof Date ? input : new Date(input as string);
+  if (Number.isNaN(date.getTime())) return "—";
+  return new Intl.DateTimeFormat("vi-VN", {
+    dateStyle: "short",
+    timeStyle: "short",
+  }).format(date);
+}
+
+const DONUT_CONFIG = [
+  { key: 'students', label: 'Sinh viên', color: '#3B82F6' },
+  { key: 'lecturers', label: 'Giảng viên', color: '#10B981' },
+  { key: 'admins', label: 'Admin', color: '#8B5CF6' },
+] as const;
+
+const DEFAULT_SEMESTERS: SemesterStat[] = [
+  { code: 'K18', name: 'Khoá K18', totalStudents: 0, attendanceRatio: 0 },
+  { code: 'K19', name: 'Khoá K19', totalStudents: 0, attendanceRatio: 0 },
+  { code: 'K20', name: 'Khoá K20', totalStudents: 0, attendanceRatio: 0 },
+  { code: 'K21', name: 'Khoá K21', totalStudents: 0, attendanceRatio: 0 },
+];
+
+const DEFAULT_COMPOSITION_PERCENT: CompositionBreakdown = {
+  students: 0.9,
+  lecturers: 0.05,
+  admins: 0.05,
+};
+
+const DEFAULT_TOTAL_USERS = 2473;
 
 export default function AdminOverviewPage() {
   const router = useRouter();
@@ -27,6 +68,17 @@ export default function AdminOverviewPage() {
   const [lecturerDelta, setLecturerDelta] = useState<number | null>(null);
   const [classCount, setClassCount] = useState<number | null>(null);
   const [sessionsTodayCount, setSessionsTodayCount] = useState<number | null>(null);
+  const [activityLoading, setActivityLoading] = useState(true);
+  const [activityError, setActivityError] = useState<string | null>(null);
+  const [showAllActivities, setShowAllActivities] = useState(false);
+  const [composition, setComposition] = useState<{ total: number; breakdown: CompositionBreakdown } | null>(null);
+  const [compositionLoading, setCompositionLoading] = useState(true);
+  const [compositionError, setCompositionError] = useState<string | null>(null);
+  const [semesters, setSemesters] = useState<SemesterStat[]>(DEFAULT_SEMESTERS);
+  const [semesterLoading, setSemesterLoading] = useState(true);
+  const [semesterError, setSemesterError] = useState<string | null>(null);
+  const [semesterDetail, setSemesterDetail] = useState<SemesterStat | null>(null);
+  const [semesterDetailLoading, setSemesterDetailLoading] = useState(false);
 
   // Mock summary numbers
   const stats = {
@@ -36,26 +88,28 @@ export default function AdminOverviewPage() {
     sessionsToday: { value: 32 },
   };
 
-  // Mock chart data
-  const semesters = ["HK1", "HK2", "HK3", "HK4"] as const;
-  const barData = [520, 610, 480, 710];
-  const maxBar = Math.max(...barData) || 1;
+  const semesterBar = useMemo(() => semesters.map((s) => Math.max(0, Math.min(1, s.attendanceRatio))), [semesters]);
+  const maxBar = Math.max(...semesterBar, 0.01);
 
-  const totalUsers = 2473;
-  const donutParts = [
-    { label: "Sinh viên", value: 0.9, color: "#3B82F6" },
-    { label: "Giảng viên", value: 0.05, color: "#10B981" },
-    { label: "Admin", value: 0.05, color: "#8B5CF6" },
-  ];
+  const totalUsers = composition?.total ?? DEFAULT_TOTAL_USERS;
+  const donutParts = useMemo(() => {
+    if (composition && composition.total > 0) {
+      return DONUT_CONFIG.map((cfg) => ({
+        key: cfg.key,
+        label: cfg.label,
+        color: cfg.color,
+        value: composition.breakdown[cfg.key] / composition.total,
+      }));
+    }
+    return DONUT_CONFIG.map((cfg) => ({
+      key: cfg.key,
+      label: cfg.label,
+      color: cfg.color,
+      value: DEFAULT_COMPOSITION_PERCENT[cfg.key],
+    }));
+  }, [composition]);
 
   useEffect(() => {
-    // Seed activity list
-    setActivity([
-      { id: "1", time: "10:45 25/10/2025", action: "Tạo lớp CNTT_K24_1", actor: "Admin Nguyễn A", detail: "Đã tạo lớp mới cho khóa K24 ngành CNTT, sĩ số dự kiến 45" },
-      { id: "2", time: "09:20 25/10/2025", action: "Cập nhật lịch học lớp JS22", actor: "GV001", detail: "Điều chỉnh ca học từ Slot 2 sang Slot 3" },
-      { id: "3", time: "08:55 25/10/2025", action: "Gửi thông báo \"Nghỉ học 26/10\"", actor: "Admin", detail: "Thông báo toàn trường về lịch nghỉ đột xuất ngày 26/10" },
-      { id: "4", time: "08:30 25/10/2025", action: "Thêm tài khoản sinh viên SV2025123", actor: "Admin", detail: "Cấp tài khoản mới cho tân sinh viên khóa 2025" },
-    ]);
     try {
       const saved = localStorage.getItem("sas_settings");
       if (saved) {
@@ -64,6 +118,105 @@ export default function AdminOverviewPage() {
         document.documentElement.style.colorScheme = s.themeDark ? "dark" : "light";
       }
     } catch {}
+  }, []);
+
+  useEffect(() => {
+    (async () => {
+      setCompositionLoading(true);
+      setCompositionError(null);
+      try {
+        const res = await fetch("http://localhost:8080/api/admin/overview/composition", {
+          credentials: "include",
+        });
+        if (!res.ok) throw new Error(await res.text());
+        const data = await res.json();
+        if (typeof data?.total === "number" && data?.breakdown) {
+          setComposition({
+            total: data.total,
+            breakdown: {
+              students: Number(data.breakdown.students ?? 0),
+              lecturers: Number(data.breakdown.lecturers ?? 0),
+              admins: Number(data.breakdown.admins ?? 0),
+            },
+          });
+        } else {
+          setComposition(null);
+        }
+      } catch (err) {
+        setCompositionError("Không tải được tỉ lệ thành phần");
+        console.error("composition fetch error", err);
+      } finally {
+        setCompositionLoading(false);
+      }
+    })();
+  }, []);
+
+  useEffect(() => {
+    (async () => {
+      setSemesterLoading(true);
+      setSemesterError(null);
+      try {
+        const res = await fetch("http://localhost:8080/api/admin/overview/semesters/attendance", {
+          credentials: "include",
+        });
+        if (!res.ok) throw new Error(await res.text());
+        const data = await res.json();
+        if (Array.isArray(data?.semesters)) {
+          setSemesters(
+            data.semesters.map((item: any) => ({
+              code: String(item.code ?? ""),
+              name: String(item.name ?? ""),
+              totalStudents: Number(item.totalStudents ?? item.total_students ?? 0),
+              attendanceRatio: Number(item.attendanceRatio ?? item.attendance_ratio ?? 0),
+            }))
+          );
+        } else {
+          setSemesters(DEFAULT_SEMESTERS);
+        }
+      } catch (err) {
+        setSemesterError("Không tải được tổng quan học kỳ");
+        setSemesters(DEFAULT_SEMESTERS);
+        console.error("semester stats fetch error", err);
+      } finally {
+        setSemesterLoading(false);
+      }
+    })();
+  }, []);
+
+  useEffect(() => {
+    (async () => {
+      setActivityLoading(true);
+      setActivityError(null);
+      try {
+        const res = await fetch("http://localhost:8080/api/admin/overview/activities/recent", {
+          credentials: "include",
+        });
+        if (!res.ok) throw new Error(await res.text());
+        const data = await res.json();
+        if (Array.isArray(data?.items)) {
+          setActivity(
+            data.items.map((item: any) => {
+              const rawTime = typeof item.time === "string" ? item.time : item.time?.toString?.() ?? "";
+              return {
+                id: String(item.id ?? ""),
+                action: String(item.action ?? ""),
+                actor: String(item.actor ?? ""),
+                detail: typeof item.detail === "string" ? item.detail : undefined,
+                time: formatDateTime(rawTime),
+                rawTime,
+              } as Activity;
+            })
+          );
+        } else {
+          setActivity([]);
+        }
+      } catch (err: any) {
+        setActivityError("Không tải được hoạt động gần đây");
+        console.error("activities fetch error", err);
+      } finally {
+        setActivityLoading(false);
+      }
+    })();
   }, []);
 
   useEffect(() => {
@@ -175,12 +328,15 @@ export default function AdminOverviewPage() {
     const arr: { start: number; len: number; color: string; label: string }[] = [];
     let acc = 0;
     for (const p of donutParts) {
-      const len = p.value * donutStroke;
+      const ratio = Number.isFinite(p.value) ? Math.max(0, p.value) : 0;
+      const len = Math.min(donutStroke, Math.max(0, ratio * donutStroke));
       arr.push({ start: acc, len, color: p.color, label: p.label });
       acc += len;
     }
     return arr;
-  }, []);
+  }, [donutParts]);
+
+  const breakdownCounts = composition?.breakdown;
 
   const Shell = ({ children }: { children: React.ReactNode }) => (
     <div className={`layout ${collapsed ? "collapsed" : ""}`}>
@@ -216,27 +372,22 @@ export default function AdminOverviewPage() {
               placeholder="Tìm sinh viên, giảng viên, lớp…"
             />
           </div>
-          <button className="icon-btn" onClick={toggleDark} title="Chuyển giao diện">
-            {dark ? "🌙" : "🌞"}
+          <button
+            className="qr-btn"
+            onClick={async () => {
+              if (confirm("Bạn có chắc muốn đăng xuất?")) {
+                try {
+                  await fetch("http://localhost:8080/api/auth/logout", { method: "POST", credentials: "include" });
+                } catch {}
+                try {
+                  localStorage.removeItem("sas_user");
+                } catch {}
+                router.push("/login");
+              }
+            }}
+          >
+            🚪 Đăng xuất
           </button>
-          <button className="icon-btn notif" title="Thông báo">
-            🔔
-            {notifCount > 0 && <span className="badge">{notifCount}</span>}
-          </button>
-          <div className="avatar-menu">
-            <div className="avatar">🧑‍💼</div>
-            <div className="dropdown">
-              <a href="#" onClick={(e)=>e.preventDefault()}>Hồ sơ</a>
-              <a href="#" onClick={(e)=>{e.preventDefault(); if(confirm("Đăng xuất?")){ localStorage.removeItem("sas_user"); router.push("/login"); }}}>Đăng xuất</a>
-            </div>
-          </div>
-          <button className="qr-btn" onClick={async ()=>{ 
-            if (confirm('Bạn có chắc muốn đăng xuất?')) {
-              try { await fetch('http://localhost:8080/api/auth/logout', { method: 'POST', credentials: 'include' }); } catch {}
-              try { localStorage.removeItem('sas_user'); } catch {}
-              router.push('/login');
-            }
-          }}>🚪 Đăng xuất</button>
         </div>
       </header>
 
@@ -275,43 +426,102 @@ export default function AdminOverviewPage() {
 
       {/* B. Charts Row */}
       <section className="charts">
-        <div className="panel">
+        <div className="panel composition-panel">
           <div className="panel-head">Tổng quan học kỳ</div>
           <div className="bar-wrap">
             {semesters.map((s, idx) => {
-              const v = barData[idx];
-              const h = Math.max(6, Math.round((v / maxBar) * 180));
-              const active = selectedSemester === s;
+              const value = semesterBar[idx] ?? 0;
+              const h = Math.max(6, Math.round((value / maxBar) * 180));
+              const active = selectedSemester === s.code;
               return (
-                <div key={s} className={`bar-col ${active ? "active" : ""}`} onClick={() => setSelectedSemester(active ? null : s)} title={`$${s}: ${v} sinh viên`.replace("$", "")}> 
+                <div
+                  key={s.code}
+                  className={`bar-col ${active ? "active" : ""}`}
+                  onClick={async () => {
+                    if (active) {
+                      setSelectedSemester(null);
+                      setSemesterDetail(null);
+                      setSemesterDetailLoading(false);
+                      return;
+                    }
+                    setSelectedSemester(s.code);
+                    setSemesterDetail(null);
+                    setSemesterDetailLoading(true);
+                    try {
+                      const res = await fetch(`http://localhost:8080/api/admin/overview/semesters/attendance/${s.code}`, {
+                        credentials: "include",
+                      });
+                      if (res.ok) {
+                        const data = await res.json();
+                        if (data?.semester) {
+                          setSemesterDetail({
+                            code: String(data.semester.code ?? s.code),
+                            name: String(data.semester.name ?? s.name),
+                            totalStudents: Number(data.semester.totalStudents ?? data.semester.total_students ?? 0),
+                            attendanceRatio: Number(data.semester.attendanceRatio ?? data.semester.attendance_ratio ?? 0),
+                          });
+                        } else {
+                          setSemesterDetail(null);
+                        }
+                      } else {
+                        setSemesterDetail(null);
+                      }
+                    } catch (err) {
+                      console.error("semester detail fetch error", err);
+                      setSemesterDetail(null);
+                    } finally {
+                      setSemesterDetailLoading(false);
+                    }
+                  }}
+                  title={`${s.name}: ${(value * 100).toFixed(1)}%`}
+                >
                   <div className="bar" style={{ height: h }} />
-                  <div className="bar-x">{s}</div>
+                  <div className="bar-x">{s.code}</div>
                 </div>
               );
             })}
+          </div>
+          <div className="chart-note">
+            {semesterLoading && <span>Đang tải dữ liệu học kỳ...</span>}
+            {semesterError && !semesterLoading && <span className="error">{semesterError}</span>}
           </div>
         </div>
         <div className="panel">
           <div className="panel-head">Tỉ lệ thành phần</div>
           <div className="donut-wrap">
-            <svg viewBox="0 0 36 36" className="donut">
-              <circle className="donut-ring" cx="18" cy="18" r="15.915" fill="transparent" stroke="#e5e7eb" strokeWidth="3" />
-              {cumulative.map((seg, i) => (
-                <circle key={i} cx="18" cy="18" r="15.915" fill="transparent" stroke={seg.color} strokeWidth="3" strokeDasharray={`${seg.len} ${donutStroke - seg.len}`} strokeDashoffset={-seg.start} />
-              ))}
-            </svg>
-            <div className="donut-center">
-              <div className="donut-total">Tổng</div>
-              <div className="donut-number">{totalUsers.toLocaleString()} người</div>
+            <div className="donut-figure">
+              <svg viewBox="0 0 36 36" className="donut">
+                <circle className="donut-ring" cx="18" cy="18" r="15.915" fill="transparent" stroke="#e5e7eb" strokeWidth="3" />
+                {cumulative.map((seg, i) => (
+                  <circle key={i} cx="18" cy="18" r="15.915" fill="transparent" stroke={seg.color} strokeWidth="3" strokeDasharray={`${seg.len} ${donutStroke - seg.len}`} strokeDashoffset={-seg.start} />
+                ))}
+              </svg>
+              <div className="donut-center">
+                <div className="donut-total">Tổng</div>
+                <div className="donut-number">{totalUsers.toLocaleString()} người</div>
+              </div>
             </div>
             <div className="legend">
-              {donutParts.map((p) => (
-                <div key={p.label} className="legend-item">
-                  <span className="dot" style={{ background: p.color }} />
-                  <span>{p.label}</span>
-                  <strong>{Math.round(p.value * 100)}%</strong>
-                </div>
-              ))}
+              {donutParts.map((p) => {
+                const percent = Math.round((Number.isFinite(p.value) ? Math.max(0, p.value) : 0) * 100);
+                const count = breakdownCounts?.[p.key as keyof CompositionBreakdown];
+                return (
+                  <div key={p.key} className="legend-item">
+                    <span className="dot" style={{ background: p.color }} />
+                    <div className="legend-text">
+                      <div className="legend-line">
+                        <span className="legend-label">{p.label}</span>
+                        <span className="legend-percent">{percent}%</span>
+                      </div>
+                      {typeof count === 'number' && (
+                        <div className="legend-count">{count.toLocaleString()} người</div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+              {compositionLoading && <div className="legend-note">Đang cập nhật tỉ lệ thành phần...</div>}
+              {compositionError && <div className="legend-note error">{compositionError}</div>}
             </div>
           </div>
         </div>
@@ -328,17 +538,23 @@ export default function AdminOverviewPage() {
               <div>Người thực hiện</div>
             </div>
             <div className="tbody">
-              {activity.slice(0, 6).map((row) => (
-                <div className="trow" key={row.id} onClick={() => setModal(row)}>
-                  <div>{row.time}</div>
-                  <div>{row.action}</div>
-                  <div>{row.actor}</div>
-                </div>
-              ))}
+              {activityLoading && <div className="trow">Đang tải hoạt động...</div>}
+              {activityError && !activityLoading && <div className="trow error">{activityError}</div>}
+              {!activityLoading && !activityError && activity.length === 0 && <div className="trow">Không có hoạt động gần đây</div>}
+              {!activityLoading && !activityError &&
+                activity.slice(0, 6).map((row) => (
+                  <div className="trow" key={row.id} onClick={() => setModal(row)}>
+                    <div>{row.time}</div>
+                    <div>{row.action}</div>
+                    <div>{row.actor}</div>
+                  </div>
+                ))}
             </div>
           </div>
           <div className="panel-foot">
-            <button className="link-btn" onClick={() => alert("Đi tới trang nhật ký hệ thống")}>Xem tất cả</button>
+            <button className="link-btn" onClick={() => setShowAllActivities(true)} disabled={activityLoading || (!!activityError && activity.length === 0)}>
+              Xem tất cả
+            </button>
           </div>
         </div>
       </section>
@@ -358,6 +574,101 @@ export default function AdminOverviewPage() {
             </div>
             <div className="modal-foot">
               <button className="qr-btn" onClick={() => setModal(null)}>Đóng</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {selectedSemester && (
+        <div className="modal" onClick={() => { setSelectedSemester(null); setSemesterDetail(null); setSemesterDetailLoading(false); }}>
+          <div className="modal-content" onClick={(e)=>e.stopPropagation()}>
+            <div className="modal-head">
+              <div className="title">Tổng quan {semesterDetail?.name || selectedSemester}</div>
+              <button className="icon-btn" onClick={() => { setSelectedSemester(null); setSemesterDetail(null); setSemesterDetailLoading(false); }}>✖</button>
+            </div>
+            <div className="modal-body">
+              <table className="semester-table">
+                <thead>
+                  <tr>
+                    <th>Học kỳ</th>
+                    <th>Tổng sinh viên</th>
+                    <th>Tỉ lệ điểm danh</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {semesterDetailLoading && (
+                    <tr>
+                      <td colSpan={3}>Đang tải dữ liệu...</td>
+                    </tr>
+                  )}
+                  {!semesterDetailLoading && semesterDetail && (
+                    <tr>
+                      <td>{semesterDetail.code}</td>
+                      <td>{semesterDetail.totalStudents.toLocaleString()}</td>
+                      <td>{Math.round(semesterDetail.attendanceRatio * 100)}%</td>
+                    </tr>
+                  )}
+                  {!semesterDetailLoading && !semesterDetail && (
+                    <tr>
+                      <td colSpan={3}>Không có dữ liệu cho học kỳ này</td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+            <div className="modal-foot">
+              <button className="qr-btn" onClick={() => { setSelectedSemester(null); setSemesterDetail(null); setSemesterDetailLoading(false); }}>Đóng</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showAllActivities && (
+        <div className="modal" onClick={() => setShowAllActivities(false)}>
+          <div className="modal-content wide" onClick={(e)=>e.stopPropagation()}>
+            <div className="modal-head">
+              <div className="title">Toàn bộ hoạt động gần đây</div>
+              <button className="icon-btn" onClick={() => setShowAllActivities(false)}>✖</button>
+            </div>
+            <div className="modal-body scroll">
+              <table className="full-activity-table">
+                <thead>
+                  <tr>
+                    <th>Thời gian</th>
+                    <th>Hành động</th>
+                    <th>Người thực hiện</th>
+                    <th>Chi tiết</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {activity.map((row) => (
+                    <tr key={row.id}>
+                      <td>{row.time}</td>
+                      <td>{row.action}</td>
+                      <td>{row.actor}</td>
+                      <td>{row.detail || "—"}</td>
+                    </tr>
+                  ))}
+                  {!activityLoading && !activityError && activity.length === 0 && (
+                    <tr>
+                      <td colSpan={4} style={{ textAlign: "center" }}>Không có hoạt động gần đây</td>
+                    </tr>
+                  )}
+                  {activityError && (
+                    <tr>
+                      <td colSpan={4} style={{ color: "var(--danger, #dc2626)", textAlign: "center" }}>{activityError}</td>
+                    </tr>
+                  )}
+                  {activityLoading && (
+                    <tr>
+                      <td colSpan={4} style={{ textAlign: "center" }}>Đang tải...</td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+            <div className="modal-foot">
+              <button className="qr-btn" onClick={() => setShowAllActivities(false)}>Đóng</button>
             </div>
           </div>
         </div>
