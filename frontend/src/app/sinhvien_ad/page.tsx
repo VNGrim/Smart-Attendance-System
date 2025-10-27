@@ -21,8 +21,6 @@ type Student = {
 export default function AdminStudentsPage() {
   const router = useRouter();
   const [collapsed, setCollapsed] = useState(false);
-  const [dark, setDark] = useState(false);
-  const [notifCount] = useState(1);
   const [search, setSearch] = useState("");
   const [filterClass, setFilterClass] = useState("Tất cả lớp");
   const [filterCohort, setFilterCohort] = useState("Tất cả khóa");
@@ -45,24 +43,10 @@ export default function AdminStudentsPage() {
       const saved = localStorage.getItem("sas_settings");
       if (saved) {
         const s = JSON.parse(saved);
-        setDark(!!s.themeDark);
         document.documentElement.style.colorScheme = s.themeDark ? "dark" : "light";
       }
     } catch {}
   }, []);
-
-  const toggleDark = () => {
-    const next = !dark;
-    setDark(next);
-    try {
-      const saved = localStorage.getItem("sas_settings");
-      const prev = saved ? JSON.parse(saved) : {};
-      const merged = { ...prev, themeDark: next };
-      localStorage.setItem("sas_settings", JSON.stringify(merged));
-      document.documentElement.style.colorScheme = next ? "dark" : "light";
-      window.dispatchEvent(new CustomEvent("sas_settings_changed" as any, { detail: merged }));
-    } catch {}
-  };
 
   const toggleSort = (key: keyof Student) => {
     if (sortKey === key) setSortAsc(!sortAsc);
@@ -200,16 +184,6 @@ export default function AdminStudentsPage() {
             </select>
           </div>
           <button className="btn-green" onClick={onOpenCreate}>+ Thêm sinh viên</button>
-          
-          <button className="icon-btn" onClick={toggleDark} title="Chuyển giao diện">{dark?"🌙":"🌞"}</button>
-          <button className="icon-btn notif" title="Thông báo">🔔{notifCount>0 && <span className="badge">{notifCount}</span>}</button>
-          <div className="avatar-menu">
-            <div className="avatar">🧑‍💼</div>
-            <div className="dropdown">
-              <a href="#" onClick={(e)=>e.preventDefault()}>Hồ sơ</a>
-              <a href="#" onClick={(e)=>{e.preventDefault(); if(confirm("Đăng xuất?")){ localStorage.removeItem("sas_user"); router.push("/login"); }}}>Đăng xuất</a>
-            </div>
-          </div>
           <button className="qr-btn" onClick={async ()=>{ 
             if (confirm('Bạn có chắc muốn đăng xuất?')) {
               try { await fetch('http://localhost:8080/api/auth/logout', { method: 'POST', credentials: 'include' }); } catch {}
