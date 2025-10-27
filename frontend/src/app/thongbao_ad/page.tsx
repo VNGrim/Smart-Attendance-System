@@ -483,7 +483,6 @@ function mapServerNotice(raw: any): Notice {
 export default function AdminNotifyPage() {
   const router = useRouter();
   const [collapsed, setCollapsed] = useState(false);
-  const [dark, setDark] = useState(false);
   const [notifCount, setNotifCount] = useState(0);
   const [filter, setFilter] = useState<string>("all");
   const [drawer, setDrawer] = useState<Notice | null>(null);
@@ -493,6 +492,13 @@ export default function AdminNotifyPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const letterParagraphs = useMemo(() => {
+    if (!drawer?.content) return [] as string[];
+    return drawer.content
+      .split(/\n{2,}/)
+      .map((block) => block.trim())
+      .filter(Boolean);
+  }, [drawer]);
 
   const filters = [
     { key: "all", label: "Tất cả" },
@@ -508,7 +514,6 @@ export default function AdminNotifyPage() {
       const saved = localStorage.getItem("sas_settings");
       if (saved) {
         const s = JSON.parse(saved);
-        setDark(!!s.themeDark);
         document.documentElement.style.colorScheme = s.themeDark ? "dark" : "light";
       }
     } catch {}
@@ -578,19 +583,6 @@ export default function AdminNotifyPage() {
     } finally {
       setLoading(false);
     }
-  };
-
-  const toggleDark = () => {
-    const next = !dark;
-    setDark(next);
-    try {
-      const saved = localStorage.getItem("sas_settings");
-      const prev = saved ? JSON.parse(saved) : {};
-      const merged = { ...prev, themeDark: next };
-      localStorage.setItem("sas_settings", JSON.stringify(merged));
-      document.documentElement.style.colorScheme = next ? "dark" : "light";
-      window.dispatchEvent(new CustomEvent("sas_settings_changed" as any, { detail: merged }));
-    } catch {}
   };
 
   const dataView = useMemo(() => {
@@ -717,15 +709,6 @@ export default function AdminNotifyPage() {
               <button key={f.key} className={`chip ${filter===f.key?"active":""}`} onClick={() => setFilter(f.key)}>{f.label}</button>
             ))}
           </div>
-          <button className="icon-btn" onClick={toggleDark} title="Chuyển giao diện">{dark ? "🌙" : "🌞"}</button>
-          <button className="icon-btn notif" title="Thông báo">🔔{notifCount>0 && <span className="badge">{notifCount}</span>}</button>
-          <div className="avatar-menu">
-            <div className="avatar">🧑‍💼</div>
-            <div className="dropdown">
-              <a href="#" onClick={(e)=>e.preventDefault()}>Hồ sơ</a>
-              <a href="#" onClick={(e)=>{e.preventDefault(); if(confirm("Đăng xuất?")){ localStorage.removeItem("sas_user"); router.push("/login"); }}}>Đăng xuất</a>
-            </div>
-          </div>
           <button className="qr-btn" onClick={async ()=>{ 
             if (confirm('Bạn có chắc muốn đăng xuất?')) {
               try { await fetch('http://localhost:8080/api/auth/logout', { method: 'POST', credentials: 'include' }); } catch {}
@@ -764,7 +747,7 @@ export default function AdminNotifyPage() {
             {error && !loading && <div className="trow error">{error}</div>}
             {!loading && !error && dataView.length === 0 && <div className="trow">Không có thông báo</div>}
             {!loading && !error && dataView.map((n) => (
-              <div className="trow" key={n.id} onMouseEnter={() => setDrawer(n)} onClick={() => setDrawer(n)}>
+              <div className="trow" key={n.id} onClick={() => setDrawer(n)}>
                 <div className="ttitle" title={n.content}>{n.title}</div>
                 <div>{n.sender}</div>
                 <div>{n.target}</div>
@@ -784,18 +767,48 @@ export default function AdminNotifyPage() {
       </div>
 
       {drawer && (
-        <div className="drawer" onClick={() => setDrawer(null)}>
-          <div className="drawer-panel" onClick={(e)=>e.stopPropagation()}>
-            <div className="drawer-head">
-              <div className="title">{drawer.title}</div>
+        <div className="modal letter-modal" onClick={() => setDrawer(null)}>
+          <div className="modal-content letter-card" onClick={(e)=>e.stopPropagation()}>
+            <div className="letter-card-head">
+              <div className="letter-card-meta">
+                <span className="letter-chip">THÔNG BÁO</span>
+                <h2 className="letter-title">{drawer.title}</h2>
+              </div>
               <button className="icon-btn" onClick={() => setDrawer(null)}>✖</button>
             </div>
-            <div className="drawer-body">
-              <div className="kv"><span className="k">Nội dung</span><span className="v">{drawer.content}</span></div>
-              <div className="kv"><span className="k">Đối tượng</span><span className="v">{drawer.target}</span></div>
-              <div className="kv"><span className="k">Trạng thái</span><span className="v">{drawer.status} {drawer.scheduledAt?`(Lịch: ${drawer.scheduledAt})`:""}</span></div>
-              {drawer.recipients && <div className="kv"><span className="k">Người nhận</span><span className="v">{drawer.recipients.join(", ")}</span></div>}
-              {drawer.history && <div className="kv"><span className="k">Lịch sử</span><span className="v">{drawer.history.join(" • ")}</span></div>}
+            <div className="letter-card-body">
+              <div className="letter-info-grid">
+                <div>
+                  <div className="letter-label">Người gửi</div>
+                  <div className="letter-value">{drawer.sender}</div>
+                </div>
+                <div>
+                  <div className="letter-label">Ngày giờ gửi</div>
+                  <div className="letter-value">{drawer.sendTime || "--"}</div>
+                </div>
+                <div>
+                  <div className="letter-label">Gửi tới</div>
+                  <div className="letter-value">{drawer.target || "Quý người nhận"}</div>
+                </div>
+                {drawer.recipients && drawer.recipients.length > 0 && (
+                  <div>
+                    <div className="letter-label">Danh sách nhận</div>
+                    <div className="letter-value recipients">{drawer.recipients.join(", ")}</div>
+                  </div>
+                )}
+              </div>
+              <div className="letter-divider" />
+              <div className="letter-message">
+                <p className="letter-greeting">Kính gửi {(drawer.target || "Quý người nhận").toLowerCase()},</p>
+                {letterParagraphs.length > 0 ? (
+                  letterParagraphs.map((paragraph, idx) => (
+                    <p key={idx} className="letter-paragraph">{paragraph}</p>
+                  ))
+                ) : (
+                  <p className="letter-paragraph">(Không có nội dung)</p>
+                )}
+                <div className="letter-signature">Trân trọng,<br />{drawer.sender}</div>
+              </div>
             </div>
           </div>
         </div>
