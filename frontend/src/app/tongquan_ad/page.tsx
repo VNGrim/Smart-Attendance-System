@@ -26,6 +26,7 @@ export default function AdminOverviewPage() {
   const [lecturerCount, setLecturerCount] = useState<number | null>(null);
   const [lecturerDelta, setLecturerDelta] = useState<number | null>(null);
   const [classCount, setClassCount] = useState<number | null>(null);
+  const [sessionsTodayCount, setSessionsTodayCount] = useState<number | null>(null);
 
   // Mock summary numbers
   const stats = {
@@ -102,6 +103,20 @@ export default function AdminOverviewPage() {
         if (res.ok) {
           const data = await res.json();
           if (typeof data?.count === "number") setClassCount(data.count);
+        }
+      } catch {}
+    })();
+  }, []);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await fetch("http://localhost:8080/api/admin/overview/sessions/today/count", {
+          credentials: "include",
+        });
+        if (res.ok) {
+          const data = await res.json();
+          if (typeof data?.count === "number") setSessionsTodayCount(data.count);
         }
       } catch {}
     })();
@@ -254,7 +269,7 @@ export default function AdminOverviewPage() {
         </div>
         <div className="card stat-card" onClick={() => onCardClick("sessionsToday")}>
           <div className="card-top">📅 Buổi học hôm nay</div>
-          <div className="card-num">{stats.sessionsToday.value.toLocaleString()}</div>
+          <div className="card-num">{(sessionsTodayCount ?? stats.sessionsToday.value).toLocaleString()}</div>
         </div>
       </section>
 

@@ -34,6 +34,20 @@ router.get('/classes/count', async (req, res) => {
   }
 });
 
+// GET /api/admin/overview/sessions/today/count
+// Count number of timetable entries whose day_of_week matches today
+router.get('/sessions/today/count', async (req, res) => {
+  try {
+    const map = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+    const todayEnum = map[new Date().getDay()];
+    const count = await prisma.timetable.count({ where: { day_of_week: todayEnum } });
+    return res.json({ count, day_of_week: todayEnum });
+  } catch (err) {
+    console.error('sessions today count error:', err);
+    return res.status(500).json({ success: false, message: 'Lỗi hệ thống' });
+  }
+});
+
 // GET /api/admin/overview/lecturers/count
 router.get('/lecturers/count', async (req, res) => {
   try {
