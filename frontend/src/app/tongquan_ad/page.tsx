@@ -372,27 +372,22 @@ export default function AdminOverviewPage() {
               placeholder="Tìm sinh viên, giảng viên, lớp…"
             />
           </div>
-          <button className="icon-btn" onClick={toggleDark} title="Chuyển giao diện">
-            {dark ? "🌙" : "🌞"}
+          <button
+            className="qr-btn"
+            onClick={async () => {
+              if (confirm("Bạn có chắc muốn đăng xuất?")) {
+                try {
+                  await fetch("http://localhost:8080/api/auth/logout", { method: "POST", credentials: "include" });
+                } catch {}
+                try {
+                  localStorage.removeItem("sas_user");
+                } catch {}
+                router.push("/login");
+              }
+            }}
+          >
+            🚪 Đăng xuất
           </button>
-          <button className="icon-btn notif" title="Thông báo">
-            🔔
-            {notifCount > 0 && <span className="badge">{notifCount}</span>}
-          </button>
-          <div className="avatar-menu">
-            <div className="avatar">🧑‍💼</div>
-            <div className="dropdown">
-              <a href="#" onClick={(e)=>e.preventDefault()}>Hồ sơ</a>
-              <a href="#" onClick={(e)=>{e.preventDefault(); if(confirm("Đăng xuất?")){ localStorage.removeItem("sas_user"); router.push("/login"); }}}>Đăng xuất</a>
-            </div>
-          </div>
-          <button className="qr-btn" onClick={async ()=>{ 
-            if (confirm('Bạn có chắc muốn đăng xuất?')) {
-              try { await fetch('http://localhost:8080/api/auth/logout', { method: 'POST', credentials: 'include' }); } catch {}
-              try { localStorage.removeItem('sas_user'); } catch {}
-              router.push('/login');
-            }
-          }}>🚪 Đăng xuất</button>
         </div>
       </header>
 
