@@ -10,7 +10,18 @@ type Activity = {
   actor: string;
   id: string;
   detail?: string;
+  rawTime?: string;
 };
+
+function formatDateTime(input: unknown) {
+  if (!input) return "—";
+  const date = input instanceof Date ? input : new Date(input as string);
+  if (Number.isNaN(date.getTime())) return "—";
+  return new Intl.DateTimeFormat("vi-VN", {
+    dateStyle: "short",
+    timeStyle: "short",
+  }).format(date);
+}
 
 export default function AdminOverviewPage() {
   const router = useRouter();
@@ -27,6 +38,9 @@ export default function AdminOverviewPage() {
   const [lecturerDelta, setLecturerDelta] = useState<number | null>(null);
   const [classCount, setClassCount] = useState<number | null>(null);
   const [sessionsTodayCount, setSessionsTodayCount] = useState<number | null>(null);
+  const [activityLoading, setActivityLoading] = useState(true);
+  const [activityError, setActivityError] = useState<string | null>(null);
+  const [showAllActivities, setShowAllActivities] = useState(false);
 
   // Mock summary numbers
   const stats = {
@@ -49,13 +63,6 @@ export default function AdminOverviewPage() {
   ];
 
   useEffect(() => {
-    // Seed activity list
-    setActivity([
-      { id: "1", time: "10:45 25/10/2025", action: "Tạo lớp CNTT_K24_1", actor: "Admin Nguyễn A", detail: "Đã tạo lớp mới cho khóa K24 ngành CNTT, sĩ số dự kiến 45" },
-      { id: "2", time: "09:20 25/10/2025", action: "Cập nhật lịch học lớp JS22", actor: "GV001", detail: "Điều chỉnh ca học từ Slot 2 sang Slot 3" },
-      { id: "3", time: "08:55 25/10/2025", action: "Gửi thông báo \"Nghỉ học 26/10\"", actor: "Admin", detail: "Thông báo toàn trường về lịch nghỉ đột xuất ngày 26/10" },
-      { id: "4", time: "08:30 25/10/2025", action: "Thêm tài khoản sinh viên SV2025123", actor: "Admin", detail: "Cấp tài khoản mới cho tân sinh viên khóa 2025" },
-    ]);
     try {
       const saved = localStorage.getItem("sas_settings");
       if (saved) {
@@ -64,6 +71,42 @@ export default function AdminOverviewPage() {
         document.documentElement.style.colorScheme = s.themeDark ? "dark" : "light";
       }
     } catch {}
+  }, []);
+
+  useEffect(() => {
+    (async () => {
+      setActivityLoading(true);
+      setActivityError(null);
+      try {
+        const res = await fetch("http://localhost:8080/api/admin/overview/activities/recent", {
+          credentials: "include",
+        });
+        if (!res.ok) throw new Error(await res.text());
+        const data = await res.json();
+        if (Array.isArray(data?.items)) {
+          setActivity(
+            data.items.map((item: any) => {
+              const rawTime = typeof item.time === "string" ? item.time : item.time?.toString?.() ?? "";
+              return {
+                id: String(item.id ?? ""),
+                action: String(item.action ?? ""),
+                actor: String(item.actor ?? ""),
+                detail: typeof item.detail === "string" ? item.detail : undefined,
+                time: formatDateTime(rawTime),
+                rawTime,
+              } as Activity;
+            })
+          );
+        } else {
+          setActivity([]);
+        }
+      } catch (err: any) {
+        setActivityError("Không tải được hoạt động gần đây");
+        console.error("activities fetch error", err);
+      } finally {
+        setActivityLoading(false);
+      }
+    })();
   }, []);
 
   useEffect(() => {
@@ -328,17 +371,23 @@ export default function AdminOverviewPage() {
               <div>Người thực hiện</div>
             </div>
             <div className="tbody">
-              {activity.slice(0, 6).map((row) => (
-                <div className="trow" key={row.id} onClick={() => setModal(row)}>
-                  <div>{row.time}</div>
-                  <div>{row.action}</div>
-                  <div>{row.actor}</div>
-                </div>
-              ))}
+              {activityLoading && <div className="trow">Đang tải hoạt động...</div>}
+              {activityError && !activityLoading && <div className="trow error">{activityError}</div>}
+              {!activityLoading && !activityError && activity.length === 0 && <div className="trow">Không có hoạt động gần đây</div>}
+              {!activityLoading && !activityError &&
+                activity.slice(0, 6).map((row) => (
+                  <div className="trow" key={row.id} onClick={() => setModal(row)}>
+                    <div>{row.time}</div>
+                    <div>{row.action}</div>
+                    <div>{row.actor}</div>
+                  </div>
+                ))}
             </div>
           </div>
           <div className="panel-foot">
-            <button className="link-btn" onClick={() => alert("Đi tới trang nhật ký hệ thống")}>Xem tất cả</button>
+            <button className="link-btn" onClick={() => setShowAllActivities(true)} disabled={activityLoading || (!!activityError && activity.length === 0)}>
+              Xem tất cả
+            </button>
           </div>
         </div>
       </section>
@@ -358,6 +407,57 @@ export default function AdminOverviewPage() {
             </div>
             <div className="modal-foot">
               <button className="qr-btn" onClick={() => setModal(null)}>Đóng</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showAllActivities && (
+        <div className="modal" onClick={() => setShowAllActivities(false)}>
+          <div className="modal-content wide" onClick={(e)=>e.stopPropagation()}>
+            <div className="modal-head">
+              <div className="title">Toàn bộ hoạt động gần đây</div>
+              <button className="icon-btn" onClick={() => setShowAllActivities(false)}>✖</button>
+            </div>
+            <div className="modal-body scroll">
+              <table className="full-activity-table">
+                <thead>
+                  <tr>
+                    <th>Thời gian</th>
+                    <th>Hành động</th>
+                    <th>Người thực hiện</th>
+                    <th>Chi tiết</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {activity.map((row) => (
+                    <tr key={row.id}>
+                      <td>{row.time}</td>
+                      <td>{row.action}</td>
+                      <td>{row.actor}</td>
+                      <td>{row.detail || "—"}</td>
+                    </tr>
+                  ))}
+                  {!activityLoading && !activityError && activity.length === 0 && (
+                    <tr>
+                      <td colSpan={4} style={{ textAlign: "center" }}>Không có hoạt động gần đây</td>
+                    </tr>
+                  )}
+                  {activityError && (
+                    <tr>
+                      <td colSpan={4} style={{ color: "var(--danger, #dc2626)", textAlign: "center" }}>{activityError}</td>
+                    </tr>
+                  )}
+                  {activityLoading && (
+                    <tr>
+                      <td colSpan={4} style={{ textAlign: "center" }}>Đang tải...</td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+            <div className="modal-foot">
+              <button className="qr-btn" onClick={() => setShowAllActivities(false)}>Đóng</button>
             </div>
           </div>
         </div>
