@@ -5,6 +5,22 @@ const { requireRole } = require('../middleware/roles');
 
 const router = express.Router();
 
+const DEFAULT_SEMESTER_CODES = [
+  { code: 'K18', name: 'Khoá K18' },
+  { code: 'K19', name: 'Khoá K19' },
+  { code: 'K20', name: 'Khoá K20' },
+  { code: 'K21', name: 'Khoá K21' },
+];
+
+function mapSemester(record) {
+  return {
+    code: record.code,
+    name: record.name,
+    totalStudents: record.total_students,
+    attendanceRatio: record.attendance_ratio,
+  };
+}
+
 // All routes under this router require admin authentication
 router.use(auth, requireRole('admin'));
 
@@ -15,6 +31,59 @@ router.get('/students/count', async (req, res) => {
     return res.json({ count });
   } catch (err) {
     console.error('students count error:', err);
+    return res.status(500).json({ success: false, message: 'Lỗi hệ thống' });
+  }
+});
+
+// GET /api/admin/overview/semesters/attendance
+router.get('/semesters/attendance', async (req, res) => {
+  try {
+    const records = await prisma.semester_attendance_stats.findMany({
+      orderBy: { code: 'asc' },
+    });
+
+    if (!records.length) {
+      return res.json({
+        semesters: DEFAULT_SEMESTER_CODES.map((item) => ({
+          code: item.code,
+          name: item.name,
+          totalStudents: 0,
+          attendanceRatio: 0,
+        })),
+      });
+    }
+
+    return res.json({ semesters: records.map(mapSemester) });
+  } catch (err) {
+    console.error('semesters attendance error:', err);
+    return res.status(500).json({ success: false, message: 'Lỗi hệ thống' });
+  }
+});
+
+// GET /api/admin/overview/semesters/attendance/:code
+router.get('/semesters/attendance/:code', async (req, res) => {
+  try {
+    const { code } = req.params;
+    const record = await prisma.semester_attendance_stats.findUnique({ where: { code } });
+
+    if (!record) {
+      const fallback = DEFAULT_SEMESTER_CODES.find((item) => item.code.toLowerCase() === code.toLowerCase());
+      if (!fallback) {
+        return res.status(404).json({ success: false, message: 'Không tìm thấy học kỳ' });
+      }
+      return res.json({
+        semester: {
+          code: fallback.code,
+          name: fallback.name,
+          totalStudents: 0,
+          attendanceRatio: 0,
+        },
+      });
+    }
+
+    return res.json({ semester: mapSemester(record) });
+  } catch (err) {
+    console.error('semester attendance detail error:', err);
     return res.status(500).json({ success: false, message: 'Lỗi hệ thống' });
   }
 });

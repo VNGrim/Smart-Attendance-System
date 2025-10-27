@@ -1,4 +1,4 @@
-"use client";
+      "use client";
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
@@ -15,6 +15,13 @@ type Activity = {
 
 type CompositionBreakdown = Record<'students' | 'lecturers' | 'admins', number>;
 
+type SemesterStat = {
+  code: string;
+  name: string;
+  totalStudents: number;
+  attendanceRatio: number;
+};
+
 function formatDateTime(input: unknown) {
   if (!input) return "—";
   const date = input instanceof Date ? input : new Date(input as string);
@@ -30,6 +37,13 @@ const DONUT_CONFIG = [
   { key: 'lecturers', label: 'Giảng viên', color: '#10B981' },
   { key: 'admins', label: 'Admin', color: '#8B5CF6' },
 ] as const;
+
+const DEFAULT_SEMESTERS: SemesterStat[] = [
+  { code: 'K18', name: 'Khoá K18', totalStudents: 0, attendanceRatio: 0 },
+  { code: 'K19', name: 'Khoá K19', totalStudents: 0, attendanceRatio: 0 },
+  { code: 'K20', name: 'Khoá K20', totalStudents: 0, attendanceRatio: 0 },
+  { code: 'K21', name: 'Khoá K21', totalStudents: 0, attendanceRatio: 0 },
+];
 
 const DEFAULT_COMPOSITION_PERCENT: CompositionBreakdown = {
   students: 0.9,
@@ -60,6 +74,11 @@ export default function AdminOverviewPage() {
   const [composition, setComposition] = useState<{ total: number; breakdown: CompositionBreakdown } | null>(null);
   const [compositionLoading, setCompositionLoading] = useState(true);
   const [compositionError, setCompositionError] = useState<string | null>(null);
+  const [semesters, setSemesters] = useState<SemesterStat[]>(DEFAULT_SEMESTERS);
+  const [semesterLoading, setSemesterLoading] = useState(true);
+  const [semesterError, setSemesterError] = useState<string | null>(null);
+  const [semesterDetail, setSemesterDetail] = useState<SemesterStat | null>(null);
+  const [semesterDetailLoading, setSemesterDetailLoading] = useState(false);
 
   // Mock summary numbers
   const stats = {
@@ -69,10 +88,8 @@ export default function AdminOverviewPage() {
     sessionsToday: { value: 32 },
   };
 
-  // Mock chart data
-  const semesters = ["HK1", "HK2", "HK3", "HK4"] as const;
-  const barData = [520, 610, 480, 710];
-  const maxBar = Math.max(...barData) || 1;
+  const semesterBar = useMemo(() => semesters.map((s) => Math.max(0, Math.min(1, s.attendanceRatio))), [semesters]);
+  const maxBar = Math.max(...semesterBar, 0.01);
 
   const totalUsers = composition?.total ?? DEFAULT_TOTAL_USERS;
   const donutParts = useMemo(() => {
@@ -130,6 +147,38 @@ export default function AdminOverviewPage() {
         console.error("composition fetch error", err);
       } finally {
         setCompositionLoading(false);
+      }
+    })();
+  }, []);
+
+  useEffect(() => {
+    (async () => {
+      setSemesterLoading(true);
+      setSemesterError(null);
+      try {
+        const res = await fetch("http://localhost:8080/api/admin/overview/semesters/attendance", {
+          credentials: "include",
+        });
+        if (!res.ok) throw new Error(await res.text());
+        const data = await res.json();
+        if (Array.isArray(data?.semesters)) {
+          setSemesters(
+            data.semesters.map((item: any) => ({
+              code: String(item.code ?? ""),
+              name: String(item.name ?? ""),
+              totalStudents: Number(item.totalStudents ?? item.total_students ?? 0),
+              attendanceRatio: Number(item.attendanceRatio ?? item.attendance_ratio ?? 0),
+            }))
+          );
+        } else {
+          setSemesters(DEFAULT_SEMESTERS);
+        }
+      } catch (err) {
+        setSemesterError("Không tải được tổng quan học kỳ");
+        setSemesters(DEFAULT_SEMESTERS);
+        console.error("semester stats fetch error", err);
+      } finally {
+        setSemesterLoading(false);
       }
     })();
   }, []);
@@ -386,16 +435,60 @@ export default function AdminOverviewPage() {
           <div className="panel-head">Tổng quan học kỳ</div>
           <div className="bar-wrap">
             {semesters.map((s, idx) => {
-              const v = barData[idx];
-              const h = Math.max(6, Math.round((v / maxBar) * 180));
-              const active = selectedSemester === s;
+              const value = semesterBar[idx] ?? 0;
+              const h = Math.max(6, Math.round((value / maxBar) * 180));
+              const active = selectedSemester === s.code;
               return (
-                <div key={s} className={`bar-col ${active ? "active" : ""}`} onClick={() => setSelectedSemester(active ? null : s)} title={`$${s}: ${v} sinh viên`.replace("$", "")}> 
+                <div
+                  key={s.code}
+                  className={`bar-col ${active ? "active" : ""}`}
+                  onClick={async () => {
+                    if (active) {
+                      setSelectedSemester(null);
+                      setSemesterDetail(null);
+                      setSemesterDetailLoading(false);
+                      return;
+                    }
+                    setSelectedSemester(s.code);
+                    setSemesterDetail(null);
+                    setSemesterDetailLoading(true);
+                    try {
+                      const res = await fetch(`http://localhost:8080/api/admin/overview/semesters/attendance/${s.code}`, {
+                        credentials: "include",
+                      });
+                      if (res.ok) {
+                        const data = await res.json();
+                        if (data?.semester) {
+                          setSemesterDetail({
+                            code: String(data.semester.code ?? s.code),
+                            name: String(data.semester.name ?? s.name),
+                            totalStudents: Number(data.semester.totalStudents ?? data.semester.total_students ?? 0),
+                            attendanceRatio: Number(data.semester.attendanceRatio ?? data.semester.attendance_ratio ?? 0),
+                          });
+                        } else {
+                          setSemesterDetail(null);
+                        }
+                      } else {
+                        setSemesterDetail(null);
+                      }
+                    } catch (err) {
+                      console.error("semester detail fetch error", err);
+                      setSemesterDetail(null);
+                    } finally {
+                      setSemesterDetailLoading(false);
+                    }
+                  }}
+                  title={`${s.name}: ${(value * 100).toFixed(1)}%`}
+                >
                   <div className="bar" style={{ height: h }} />
-                  <div className="bar-x">{s}</div>
+                  <div className="bar-x">{s.code}</div>
                 </div>
               );
             })}
+          </div>
+          <div className="chart-note">
+            {semesterLoading && <span>Đang tải dữ liệu học kỳ...</span>}
+            {semesterError && !semesterLoading && <span className="error">{semesterError}</span>}
           </div>
         </div>
         <div className="panel">
@@ -486,6 +579,50 @@ export default function AdminOverviewPage() {
             </div>
             <div className="modal-foot">
               <button className="qr-btn" onClick={() => setModal(null)}>Đóng</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {selectedSemester && (
+        <div className="modal" onClick={() => { setSelectedSemester(null); setSemesterDetail(null); setSemesterDetailLoading(false); }}>
+          <div className="modal-content" onClick={(e)=>e.stopPropagation()}>
+            <div className="modal-head">
+              <div className="title">Tổng quan {semesterDetail?.name || selectedSemester}</div>
+              <button className="icon-btn" onClick={() => { setSelectedSemester(null); setSemesterDetail(null); setSemesterDetailLoading(false); }}>✖</button>
+            </div>
+            <div className="modal-body">
+              <table className="semester-table">
+                <thead>
+                  <tr>
+                    <th>Học kỳ</th>
+                    <th>Tổng sinh viên</th>
+                    <th>Tỉ lệ điểm danh</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {semesterDetailLoading && (
+                    <tr>
+                      <td colSpan={3}>Đang tải dữ liệu...</td>
+                    </tr>
+                  )}
+                  {!semesterDetailLoading && semesterDetail && (
+                    <tr>
+                      <td>{semesterDetail.code}</td>
+                      <td>{semesterDetail.totalStudents.toLocaleString()}</td>
+                      <td>{Math.round(semesterDetail.attendanceRatio * 100)}%</td>
+                    </tr>
+                  )}
+                  {!semesterDetailLoading && !semesterDetail && (
+                    <tr>
+                      <td colSpan={3}>Không có dữ liệu cho học kỳ này</td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+            <div className="modal-foot">
+              <button className="qr-btn" onClick={() => { setSelectedSemester(null); setSemesterDetail(null); setSemesterDetailLoading(false); }}>Đóng</button>
             </div>
           </div>
         </div>

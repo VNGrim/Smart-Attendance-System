@@ -65,6 +65,17 @@ model timetable {
   @@index([slot_id], map: "slot_id")
 }
 
+model semester_attendance_stats {
+  id               Int      @id @default(autoincrement())
+  code             String   @db.VarChar(20)
+  name             String   @db.VarChar(100)
+  total_students   Int
+  attendance_ratio Float
+  updated_at       DateTime @default(now()) @db.Timestamp(0)
+
+  @@unique([code])
+}
+
 enum timetable_day_of_week {
   Mon
   Tue

@@ -96,6 +96,9 @@ body { margin: 0; font-family: 'Inter', sans-serif; background: var(--background
 .composition-panel .legend-item:hover { background: rgba(255,255,255,0.12); }
 .composition-panel .legend-count { font-size: 16px; }
 
+.chart-note { margin-top: 12px; font-size: 12px; color: rgba(255,255,255,0.7); min-height: 16px; }
+.chart-note .error { color: #f87171; font-weight: 700; }
+
 /* Activity */
 .activity .table { display: grid; gap: 8px; }
 .thead, .trow { display: grid; grid-template-columns: 180px 1fr 200px; gap: 12px; align-items: center; }
@@ -116,6 +119,10 @@ body { margin: 0; font-family: 'Inter', sans-serif; background: var(--background
 .k { color: #64748b; font-weight: 700; }
 .v { font-weight: 700; }
 .modal-foot { padding: 12px 14px; border-top: 1px solid var(--card-border); display: flex; justify-content: end; }
+.semester-table { width: 100%; border-collapse: collapse; }
+.semester-table th, .semester-table td { padding: 10px 12px; text-align: left; border-bottom: 1px solid var(--card-border); }
+.semester-table th { background: rgba(59,130,246,0.12); font-weight: 800; }
+.semester-table td:last-child { font-weight: 800; }
 
 @media (max-width: 960px) {
   .donut-wrap { justify-content: center; }
