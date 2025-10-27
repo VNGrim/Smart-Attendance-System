@@ -29,6 +29,9 @@ const userRoutes = require("./src/routes/user.routes");
 app.use("/api/auth", authRoutes);
 app.use("/api", userRoutes);
 
+// Admin overview routes
+const adminOverviewRoutes = require("./src/tongquan_ad/tongquan_ad.routes");
+app.use("/api/admin/overview", adminOverviewRoutes);
 
 // API xem danh sách lớp
 app.get("/api/classes", (req, res) => {

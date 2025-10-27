@@ -30,6 +30,7 @@ model students {
   classes    String?   @db.VarChar(255)
   account_id Int?
   accounts   accounts? @relation(fields: [account_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "students_ibfk_1")
+  created_at DateTime? @default(now()) @db.Timestamp(0)
 
   @@index([account_id], map: "account_id")
 }
