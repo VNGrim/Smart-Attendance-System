@@ -19,6 +19,52 @@ router.get('/students/count', async (req, res) => {
   }
 });
 
+// GET /api/admin/overview/lecturers/count
+router.get('/lecturers/count', async (req, res) => {
+  try {
+    const count = await prisma.teachers.count();
+    return res.json({ count });
+  } catch (err) {
+    console.error('lecturers count error:', err);
+    return res.status(500).json({ success: false, message: 'Lỗi hệ thống' });
+  }
+});
+
+// GET /api/admin/overview/lecturers/monthly-delta
+router.get('/lecturers/monthly-delta', async (req, res) => {
+  try {
+    const now = new Date();
+    const startOfCurrentMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    const startOfNextMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+    const startOfPrevMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+
+    const [currentNew, prevNew, total] = await Promise.all([
+      prisma.teachers.count({
+        where: {
+          created_at: {
+            gte: startOfCurrentMonth,
+            lt: startOfNextMonth,
+          },
+        },
+      }),
+      prisma.teachers.count({
+        where: {
+          created_at: {
+            gte: startOfPrevMonth,
+            lt: startOfCurrentMonth,
+          },
+        },
+      }),
+      prisma.teachers.count(),
+    ]);
+
+    return res.json({ currentNew, prevNew, delta: currentNew - prevNew, total });
+  } catch (err) {
+    console.error('lecturers monthly-delta error:', err);
+    return res.status(500).json({ success: false, message: 'Lỗi hệ thống' });
+  }
+});
+
 // GET /api/admin/overview/students/monthly-delta
 // Returns number of new students in current month vs previous month
 router.get('/students/monthly-delta', async (req, res) => {

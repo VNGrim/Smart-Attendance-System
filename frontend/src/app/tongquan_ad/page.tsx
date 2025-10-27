@@ -23,11 +23,13 @@ export default function AdminOverviewPage() {
   const [modal, setModal] = useState<Activity | null>(null);
   const [studentCount, setStudentCount] = useState<number | null>(null);
   const [studentDelta, setStudentDelta] = useState<number | null>(null);
+  const [lecturerCount, setLecturerCount] = useState<number | null>(null);
+  const [lecturerDelta, setLecturerDelta] = useState<number | null>(null);
 
   // Mock summary numbers
   const stats = {
     students: { value: 2340, delta: "+50 so với tháng trước" },
-    lecturers: { value: 128 },
+    lecturers: { value: 128, delta: "+10 so với tháng trước" },
     classes: { value: 64 },
     sessionsToday: { value: 32 },
   };
@@ -79,12 +81,40 @@ export default function AdminOverviewPage() {
   useEffect(() => {
     (async () => {
       try {
+        const res = await fetch("http://localhost:8080/api/admin/overview/lecturers/count", {
+          credentials: "include",
+        });
+        if (res.ok) {
+          const data = await res.json();
+          if (typeof data?.count === "number") setLecturerCount(data.count);
+        }
+      } catch {}
+    })();
+  }, []);
+
+  useEffect(() => {
+    (async () => {
+      try {
         const res = await fetch("http://localhost:8080/api/admin/overview/students/monthly-delta", {
           credentials: "include",
         });
         if (res.ok) {
           const data = await res.json();
           if (typeof data?.delta === "number") setStudentDelta(data.delta);
+        }
+      } catch {}
+    })();
+  }, []);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await fetch("http://localhost:8080/api/admin/overview/lecturers/monthly-delta", {
+          credentials: "include",
+        });
+        if (res.ok) {
+          const data = await res.json();
+          if (typeof data?.delta === "number") setLecturerDelta(data.delta);
         }
       } catch {}
     })();
@@ -198,9 +228,10 @@ export default function AdminOverviewPage() {
             </svg>
           </div>
         </div>
-        <div className="card stat-card" onClick={() => onCardClick("lecturers")}> 
+        <div className="card stat-card" onClick={() => onCardClick("lecturers")}>
           <div className="card-top">👩‍🏫 Giảng viên</div>
-          <div className="card-num">{stats.lecturers.value.toLocaleString()}</div>
+          <div className="card-num">{(lecturerCount ?? stats.lecturers.value).toLocaleString()}</div>
+          <div className="card-sub">{typeof lecturerDelta === 'number' ? `${lecturerDelta >= 0 ? '+' : ''}${lecturerDelta.toLocaleString()} so với tháng trước` : ''}</div>
         </div>
         <div className="card stat-card" onClick={() => onCardClick("classes")}>
           <div className="card-top">🏫 Lớp học</div>
