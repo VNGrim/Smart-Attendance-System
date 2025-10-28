@@ -37,6 +37,10 @@ app.use("/api/admin/overview", adminOverviewRoutes);
 const adminAnnouncementRoutes = require("./src/thongbao_ad/thongbao_ad.routes");
 app.use("/api/admin/notifications", adminAnnouncementRoutes);
 
+// Admin students routes
+const adminStudentRoutes = require("./src/sinhvien_ad/sinhvien_ad.routes");
+app.use("/api/admin/students", adminStudentRoutes);
+
 // API xem danh sách lớp
 app.get("/api/classes", (req, res) => {
   res.json([

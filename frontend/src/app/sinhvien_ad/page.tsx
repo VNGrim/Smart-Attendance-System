@@ -1,28 +1,14 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-
-type Student = {
-  id: string;
-  mssv: string;
-  name: string;
-  className: string;
-  cohort: string;
-  major: string;
-  advisor: string;
-  status: "Hoạt động" | "Bị khóa";
-  email?: string;
-  phone?: string;
-  avatar?: string;
-};
+import AddStudentModal from "./AddStudentModal";
+import { Student, StudentOptions, mapBackendStudent } from "./studentUtils";
 
 export default function AdminStudentsPage() {
   const router = useRouter();
   const [collapsed, setCollapsed] = useState(false);
-  const [dark, setDark] = useState(false);
-  const [notifCount] = useState(1);
   const [search, setSearch] = useState("");
   const [filterClass, setFilterClass] = useState("Tất cả lớp");
   const [filterCohort, setFilterCohort] = useState("Tất cả khóa");
@@ -34,35 +20,87 @@ export default function AdminStudentsPage() {
   const [drawer, setDrawer] = useState<Student | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
   const [edit, setEdit] = useState<Student | null>(null);
+  const [options, setOptions] = useState<StudentOptions>({
+    classes: [],
+    cohorts: [],
+    majors: [],
+    advisors: [],
+  });
+
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    setList([
-      { id: "1", mssv: "SE12345", name: "Nguyễn Minh Hào", className: "SE1601", cohort: "K19", major: "Kỹ thuật phần mềm", advisor: "Trần Văn A", status: "Hoạt động", email: "hao@example.com", phone: "0901" },
-      { id: "2", mssv: "SE12346", name: "Trần Thị Huyền", className: "SE1601", cohort: "K19", major: "Kỹ thuật phần mềm", advisor: "Trần Văn A", status: "Bị khóa", email: "huyen@example.com", phone: "0902" },
-      { id: "3", mssv: "SE12347", name: "Phạm Anh Tuấn", className: "SE1602", cohort: "K19", major: "Kỹ thuật phần mềm", advisor: "Lê Thị B", status: "Hoạt động", email: "tuan@example.com", phone: "0903" },
-    ]);
+    let isMounted = true;
+    const controller = new AbortController();
+
+    const fetchStudents = async () => {
+      setLoading(true);
+      setError(null);
+      try {
+        const params = new URLSearchParams();
+        if (search.trim()) params.set("search", search.trim());
+        if (filterClass && filterClass !== "Tất cả lớp") params.set("class", filterClass);
+        if (filterCohort && filterCohort !== "Tất cả khóa") params.set("cohort", filterCohort);
+        if (filterStatus && filterStatus !== "Tất cả trạng thái") params.set("status", filterStatus);
+
+        const resp = await fetch(`http://localhost:8080/api/admin/students${params.toString() ? `?${params.toString()}` : ""}`, {
+          credentials: "include",
+          signal: controller.signal,
+        });
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+        const data = await resp.json();
+        if (!isMounted) return;
+        const students = Array.isArray(data?.students)
+          ? (data.students as any[]).map(mapBackendStudent)
+          : [];
+        setList(students);
+      } catch (err: any) {
+        if (err.name === "AbortError") return;
+        console.error("fetch students error", err);
+        if (isMounted) setError("Không thể tải danh sách sinh viên. Vui lòng thử lại.");
+      } finally {
+        if (isMounted) setLoading(false);
+      }
+    };
+
+    fetchStudents();
+
     try {
       const saved = localStorage.getItem("sas_settings");
       if (saved) {
         const s = JSON.parse(saved);
-        setDark(!!s.themeDark);
         document.documentElement.style.colorScheme = s.themeDark ? "dark" : "light";
       }
     } catch {}
-  }, []);
 
-  const toggleDark = () => {
-    const next = !dark;
-    setDark(next);
-    try {
-      const saved = localStorage.getItem("sas_settings");
-      const prev = saved ? JSON.parse(saved) : {};
-      const merged = { ...prev, themeDark: next };
-      localStorage.setItem("sas_settings", JSON.stringify(merged));
-      document.documentElement.style.colorScheme = next ? "dark" : "light";
-      window.dispatchEvent(new CustomEvent("sas_settings_changed" as any, { detail: merged }));
-    } catch {}
-  };
+    return () => {
+      isMounted = false;
+      controller.abort();
+    };
+  }, [search, filterClass, filterCohort, filterStatus]);
+
+  useEffect(() => {
+    const fetchOptions = async () => {
+      try {
+        const resp = await fetch("http://localhost:8080/api/admin/students/options", {
+          credentials: "include",
+        });
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+        const data = await resp.json();
+        const nextOptions = {
+          classes: Array.isArray(data?.data?.classes) ? data.data.classes : [],
+          cohorts: Array.isArray(data?.data?.cohorts) ? data.data.cohorts : [],
+          majors: Array.isArray(data?.data?.majors) ? data.data.majors : [],
+          advisors: Array.isArray(data?.data?.advisors) ? data.data.advisors : [],
+        };
+        setOptions(nextOptions);
+      } catch (err) {
+        console.error("fetch student options error", err);
+      }
+    };
+    fetchOptions();
+  }, []);
 
   const toggleSort = (key: keyof Student) => {
     if (sortKey === key) setSortAsc(!sortAsc);
@@ -70,12 +108,7 @@ export default function AdminStudentsPage() {
   };
 
   const filtered = useMemo(() => {
-    let data = list.filter((s) =>
-      s.name.toLowerCase().includes(search.toLowerCase()) || s.mssv.toLowerCase().includes(search.toLowerCase())
-    );
-    if (filterClass !== "Tất cả lớp") data = data.filter((s) => s.className === filterClass);
-    if (filterCohort !== "Tất cả khóa") data = data.filter((s) => s.cohort === filterCohort);
-    if (filterStatus !== "Tất cả trạng thái") data = data.filter((s) => s.status === filterStatus);
+    const data = [...list];
     data.sort((a: any, b: any) => {
       const va = (a[sortKey] || "").toString().toLowerCase();
       const vb = (b[sortKey] || "").toString().toLowerCase();
@@ -98,58 +131,10 @@ export default function AdminStudentsPage() {
     });
   };
 
-  const bulkLock = (lock: boolean) => {
-    setList((prev) => prev.map((s) => (selected.has(s.id) ? { ...s, status: lock ? "Bị khóa" : "Hoạt động" } : s)));
-    setSelected(new Set());
-  };
   const bulkDelete = () => {
     if (!confirm("Xóa các sinh viên đã chọn?")) return;
     setList((prev) => prev.filter((s) => !selected.has(s.id)));
     setSelected(new Set());
-  };
-
-  const onOpenCreate = () => { setEdit(null); setModalOpen(true); };
-  const onOpenEdit = (s: Student) => { setEdit(s); setModalOpen(true); };
-
-  const [formMSSV, setFormMSSV] = useState("");
-  const [formName, setFormName] = useState("");
-  const [formEmail, setFormEmail] = useState("");
-  const [formClass, setFormClass] = useState("SE1601");
-  const [formCohort, setFormCohort] = useState("K19");
-  const [formMajor, setFormMajor] = useState("Kỹ thuật phần mềm");
-  const [formAdvisor, setFormAdvisor] = useState("Trần Văn A");
-  const [formStatus, setFormStatus] = useState<"Hoạt động" | "Bị khóa">("Hoạt động");
-
-  useEffect(() => {
-    if (edit) {
-      setFormMSSV(edit.mssv);
-      setFormName(edit.name);
-      setFormEmail(edit.email || "");
-      setFormClass(edit.className);
-      setFormCohort(edit.cohort);
-      setFormMajor(edit.major);
-      setFormAdvisor(edit.advisor);
-      setFormStatus(edit.status);
-    } else {
-      setFormMSSV("");
-      setFormName("");
-      setFormEmail("");
-      setFormClass("SE1601");
-      setFormCohort("K19");
-      setFormMajor("Kỹ thuật phần mềm");
-      setFormAdvisor("Trần Văn A");
-      setFormStatus("Hoạt động");
-    }
-  }, [modalOpen, edit]);
-
-  const onSubmit = () => {
-    if (edit) {
-      setList((prev) => prev.map((s) => (s.id === edit.id ? { ...s, mssv: formMSSV, name: formName, className: formClass, cohort: formCohort, major: formMajor, advisor: formAdvisor, status: formStatus, email: formEmail } : s)));
-    } else {
-      const id = Math.random().toString(36).slice(2, 9);
-      setList((prev) => prev.concat({ id, mssv: formMSSV || `SV${Date.now().toString().slice(-6)}`, name: formName, className: formClass, cohort: formCohort, major: formMajor, advisor: formAdvisor, status: formStatus, email: formEmail }));
-    }
-    setModalOpen(false);
   };
 
   const Shell = ({ children }: { children: React.ReactNode }) => (
@@ -199,17 +184,7 @@ export default function AdminStudentsPage() {
               <option>Bị khóa</option>
             </select>
           </div>
-          <button className="btn-green" onClick={onOpenCreate}>+ Thêm sinh viên</button>
-          
-          <button className="icon-btn" onClick={toggleDark} title="Chuyển giao diện">{dark?"🌙":"🌞"}</button>
-          <button className="icon-btn notif" title="Thông báo">🔔{notifCount>0 && <span className="badge">{notifCount}</span>}</button>
-          <div className="avatar-menu">
-            <div className="avatar">🧑‍💼</div>
-            <div className="dropdown">
-              <a href="#" onClick={(e)=>e.preventDefault()}>Hồ sơ</a>
-              <a href="#" onClick={(e)=>{e.preventDefault(); if(confirm("Đăng xuất?")){ localStorage.removeItem("sas_user"); router.push("/login"); }}}>Đăng xuất</a>
-            </div>
-          </div>
+          <button className="btn-green" onClick={onAddStudent}>+ Thêm sinh viên</button>
           <button className="qr-btn" onClick={async ()=>{ 
             if (confirm('Bạn có chắc muốn đăng xuất?')) {
               try { await fetch('http://localhost:8080/api/auth/logout', { method: 'POST', credentials: 'include' }); } catch {}
@@ -227,18 +202,47 @@ export default function AdminStudentsPage() {
   const selectedCount = selected.size;
   const anySelected = selectedCount > 0;
 
+  const closeModal = useCallback(() => {
+    setModalOpen(false);
+    setEdit(null);
+  }, []);
+
+  const onAddStudent = useCallback(() => {
+    setEdit(null);
+    setModalOpen(true);
+  }, []);
+
+  const onOpenEdit = useCallback((student: Student) => {
+    setDrawer(null);
+    setEdit(student);
+    setModalOpen(true);
+  }, []);
+  const handleStudentCreated = useCallback((student: Student) => {
+    setList((prev) => {
+      const withoutDup = prev.filter((s) => s.id !== student.id);
+      return [student, ...withoutDup];
+    });
+    closeModal();
+    setSearch("");
+    setFilterClass("Tất cả lớp");
+    setFilterCohort("Tất cả khóa");
+    setFilterStatus("Tất cả trạng thái");
+  }, [closeModal]);
+
   return (
     <Shell>
       <div className="toolbar-sub">
         <div className="left">
-          <button className="chip" disabled={!anySelected} onClick={()=>bulkLock(false)}>✅ Kích hoạt</button>
-          <button className="chip" disabled={!anySelected} onClick={()=>bulkLock(true)}>🔒 Khóa tài khoản</button>
-          <button className="chip" disabled={!anySelected} onClick={()=>alert("Chuyển lớp: " + selectedCount + " SV")}>🔁 Chuyển lớp</button>
+          <button className="chip" onClick={onAddStudent}>➕ Thêm sinh viên</button>
           <button className="chip" onClick={()=>alert("Nhập CSV/Excel")}>📥 Nhập danh sách</button>
           <button className="chip" onClick={()=>alert("Xuất CSV/Excel")}>📤 Xuất danh sách</button>
           <button className="chip danger" disabled={!anySelected} onClick={bulkDelete}>🗑 Xóa hàng loạt</button>
         </div>
-        <div className="right">{anySelected ? `${selectedCount} đã chọn` : ""}</div>
+        <div className="right">
+          {loading && <span>Đang tải...</span>}
+          {!loading && error && <span className="error-text">{error}</span>}
+          {!loading && !error && anySelected ? `${selectedCount} đã chọn` : ""}
+        </div>
       </div>
 
       <div className="panel">
@@ -326,57 +330,13 @@ export default function AdminStudentsPage() {
         </div>
       )}
 
-      {modalOpen && (
-        <div className="modal" onClick={() => setModalOpen(false)}>
-          <div className="modal-content" onClick={(e)=>e.stopPropagation()}>
-            <div className="modal-head">
-              <div className="title">{edit?"Chỉnh sửa sinh viên":"Thêm sinh viên"}</div>
-              <button className="icon-btn" onClick={() => setModalOpen(false)}>✖</button>
-            </div>
-            <div className="modal-body grid2">
-              <div className="form-col">
-                <label className="label">MSSV</label>
-                <input className="input" value={formMSSV} onChange={(e)=>setFormMSSV(e.target.value)} placeholder="SE12345" />
-                <label className="label">Họ tên</label>
-                <input className="input" value={formName} onChange={(e)=>setFormName(e.target.value)} placeholder="Nguyễn Văn A" />
-                <label className="label">Email</label>
-                <input className="input" value={formEmail} onChange={(e)=>setFormEmail(e.target.value)} placeholder="email@domain.com" />
-              </div>
-              <div className="form-col">
-                <label className="label">Lớp</label>
-                <select className="input" value={formClass} onChange={(e)=>setFormClass(e.target.value)}>
-                  <option>SE1601</option>
-                  <option>SE1602</option>
-                </select>
-                <label className="label">Ngành</label>
-                <select className="input" value={formMajor} onChange={(e)=>setFormMajor(e.target.value)}>
-                  <option>Kỹ thuật phần mềm</option>
-                  <option>Hệ thống thông tin</option>
-                </select>
-                <label className="label">Khóa</label>
-                <select className="input" value={formCohort} onChange={(e)=>setFormCohort(e.target.value)}>
-                  <option>K19</option>
-                  <option>K20</option>
-                </select>
-                <label className="label">Giảng viên phụ trách</label>
-                <select className="input" value={formAdvisor} onChange={(e)=>setFormAdvisor(e.target.value)}>
-                  <option>Trần Văn A</option>
-                  <option>Lê Thị B</option>
-                </select>
-                <label className="label">Trạng thái</label>
-                <select className="input" value={formStatus} onChange={(e)=>setFormStatus(e.target.value as any)}>
-                  <option>Hoạt động</option>
-                  <option>Bị khóa</option>
-                </select>
-              </div>
-            </div>
-            <div className="modal-foot">
-              <button className="qr-btn" onClick={()=>setModalOpen(false)}>Hủy</button>
-              <button className="qr-btn" onClick={onSubmit}>💾 Lưu</button>
-            </div>
-          </div>
-        </div>
-      )}
+      <AddStudentModal
+        open={modalOpen}
+        onClose={closeModal}
+        options={options}
+        student={edit}
+        onSaved={handleStudentCreated}
+      />
     </Shell>
   );
 }

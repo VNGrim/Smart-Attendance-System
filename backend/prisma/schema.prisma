@@ -18,32 +18,39 @@ model accounts {
 
 model announcements {
   id           Int       @id @default(autoincrement())
-  code         String?   @unique @default(uuid()) @db.VarChar(64)
   title        String    @db.VarChar(200)
   content      String    @db.Text
-  sender       String    @default("Admin") @db.VarChar(100)
-  target       String    @default("Toàn trường") @db.VarChar(255)
-  category     String    @default("general") @db.VarChar(50)
-  type         String    @default("Khác") @db.VarChar(50)
-  status       String    @default("Đã gửi") @db.VarChar(30)
-  send_time    DateTime? @db.Timestamp(0)
-  scheduled_at DateTime? @db.Timestamp(0)
-  recipients   Json?
-  history      Json?
   created_at   DateTime  @default(now()) @db.Timestamp(0)
+  category     String    @default("general") @db.VarChar(50)
+  code         String?   @unique @default(uuid()) @db.VarChar(64)
+  history      Json?
+  recipients   Json?
+  scheduled_at DateTime? @db.Timestamp(0)
+  send_time    DateTime? @db.Timestamp(0)
+  sender       String    @default("Admin") @db.VarChar(100)
+  status       String    @default("Đã gửi") @db.VarChar(30)
+  target       String    @default("Toàn trường") @db.VarChar(255)
+  type         String    @default("Khác") @db.VarChar(50)
   updated_at   DateTime  @default(now()) @updatedAt @db.Timestamp(0)
 
   @@index([created_at])
 }
 
 model students {
-  student_id String    @id @db.VarChar(20)
-  full_name  String    @db.VarChar(100)
-  course     String    @db.VarChar(10)
-  classes    String?   @db.VarChar(255)
-  account_id Int?
-  accounts   accounts? @relation(fields: [account_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "students_ibfk_1")
-  created_at DateTime? @default(now()) @db.Timestamp(0)
+  student_id   String         @id @db.VarChar(20)
+  full_name    String         @db.VarChar(100)
+  course       String         @db.VarChar(10)
+  classes      String?        @db.VarChar(255)
+  major        String?        @db.VarChar(100)
+  advisor_name String?        @db.VarChar(100)
+  email        String?        @db.VarChar(100)
+  phone        String?        @db.VarChar(20)
+  avatar_url   String?        @db.VarChar(255)
+  status       student_status @default(active)
+  account_id   Int?
+  created_at   DateTime?      @default(now()) @db.Timestamp(0)
+  updated_at   DateTime       @default(now()) @updatedAt @db.Timestamp(0)
+  accounts     accounts?      @relation(fields: [account_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "students_ibfk_1")
 
   @@index([account_id], map: "account_id")
 }
@@ -54,8 +61,8 @@ model teachers {
   subject    String    @db.VarChar(100)
   classes    String?   @db.VarChar(255)
   account_id Int?
-  accounts   accounts? @relation(fields: [account_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "teachers_ibfk_1")
   created_at DateTime? @default(now()) @db.Timestamp(0)
+  accounts   accounts? @relation(fields: [account_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "teachers_ibfk_1")
 
   @@index([account_id], map: "account_id")
 }
@@ -80,13 +87,11 @@ model timetable {
 
 model semester_attendance_stats {
   id               Int      @id @default(autoincrement())
-  code             String   @db.VarChar(20)
+  code             String   @unique @db.VarChar(20)
   name             String   @db.VarChar(100)
   total_students   Int
   attendance_ratio Float
   updated_at       DateTime @default(now()) @db.Timestamp(0)
-
-  @@unique([code])
 }
 
 enum timetable_day_of_week {
@@ -103,4 +108,9 @@ enum accounts_role {
   student
   teacher
   admin
+}
+
+enum student_status {
+  active
+  locked
 }
