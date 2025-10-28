@@ -1,3 +1,5 @@
+const path = require('path');
+require('dotenv').config({ path: path.resolve(process.cwd(), 'backend', '.env') });
 const { PrismaClient } = require('@prisma/client');
 
 let prisma;
