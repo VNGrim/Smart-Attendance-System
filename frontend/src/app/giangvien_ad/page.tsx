@@ -180,9 +180,26 @@ export default function AdminLecturersPage() {
 
       <div className="toolbar-sub">
         <div className="left">
-          <button className="chip" onClick={()=>alert("Nhập Excel")}>📥 Nhập danh sách</button>
-          <button className="chip" onClick={()=>alert("Xuất CSV/Excel")}>📤 Xuất danh sách</button>
-          <button className="chip danger" disabled={!anySelected} onClick={bulkDelete}>🗑 Xóa hàng loạt</button>
+          <button className="chip solid" onClick={onOpenCreate}>
+            <span className="chip-icon">➕</span>
+            <span className="chip-title">Thêm giảng viên</span>
+            <span className="chip-sub">Tạo hồ sơ mới</span>
+          </button>
+          <button className="chip soft" onClick={()=>alert("Nhập Excel")}>
+            <span className="chip-icon">📥</span>
+            <span className="chip-title">Nhập danh sách</span>
+            <span className="chip-sub">Hỗ trợ Excel, CSV</span>
+          </button>
+          <button className="chip outline" onClick={()=>alert("Xuất CSV/Excel")}>
+            <span className="chip-icon">📤</span>
+            <span className="chip-title">Xuất danh sách</span>
+            <span className="chip-sub">Tải CSV nhanh</span>
+          </button>
+          <button className="chip danger" disabled={!anySelected} onClick={bulkDelete}>
+            <span className="chip-icon">🗑</span>
+            <span className="chip-title">Xóa hàng loạt</span>
+            <span className="chip-sub">{anySelected ? `${selected.size} mục` : "Chọn để xóa"}</span>
+          </button>
         </div>
         <div className="right">{anySelected ? `${selected.size} đã chọn` : ""}</div>
       </div>

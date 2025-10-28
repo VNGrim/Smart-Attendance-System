@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Lecturer, LecturerStatus, LECTURER_STATUSES } from "./lecturerUtils";
+import { Lecturer, LecturerStatus } from "./lecturerUtils";
 
 type AddLecturerModalProps = {
   open: boolean;
@@ -13,26 +13,6 @@ type AddLecturerModalProps = {
 
 const DEFAULT_PASSWORD = "giangvienfpt";
 
-const SUBJECT_OPTIONS = [
-  { code: "PRJ301", name: "Dự án phần mềm", faculty: "CNTT" },
-  { code: "DBI201", name: "Cơ sở dữ liệu", faculty: "CNTT" },
-  { code: "IOT102", name: "Internet of Things", faculty: "Điện - Điện tử" },
-  { code: "MOB101", name: "Lập trình di động", faculty: "CNTT" },
-  { code: "MAS202", name: "Khai phá dữ liệu", faculty: "CNTT" },
-];
-
-const BASE_CLASS_OPTIONS = [
-  "SE1601",
-  "SE1602",
-  "SE1603",
-  "JS22",
-  "DBI201",
-  "PRJ301",
-  "IOT201",
-  "IOT202",
-  "CE301",
-];
-
 const AddLecturerModal = ({ open, onClose, lecturer, existingClasses, onSaved }: AddLecturerModalProps) => {
   const [name, setName] = useState("");
   const [code, setCode] = useState("");
@@ -41,22 +21,8 @@ const AddLecturerModal = ({ open, onClose, lecturer, existingClasses, onSaved }:
   const [password, setPassword] = useState(DEFAULT_PASSWORD);
   const [passwordEditable, setPasswordEditable] = useState(false);
   const [status, setStatus] = useState<LecturerStatus>("Đang dạy");
-  const [subjectCode, setSubjectCode] = useState(SUBJECT_OPTIONS[0]?.code || "");
-  const [faculty, setFaculty] = useState(SUBJECT_OPTIONS[0]?.faculty || "CNTT");
-  const [selectedClasses, setSelectedClasses] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  const subjectMap = useMemo(() => {
-    const map = new Map<string, { name: string; faculty: string }>();
-    SUBJECT_OPTIONS.forEach((opt) => map.set(opt.code, { name: opt.name, faculty: opt.faculty }));
-    return map;
-  }, []);
-
-  const classOptions = useMemo(() => {
-    const merged = new Set<string>([...BASE_CLASS_OPTIONS, ...(existingClasses || [])]);
-    return Array.from(merged);
-  }, [existingClasses]);
 
   const resetForm = useCallback(() => {
     setError(null);
@@ -70,52 +36,38 @@ const AddLecturerModal = ({ open, onClose, lecturer, existingClasses, onSaved }:
       setEmail(lecturer.email || "");
       setPhone(lecturer.phone || "");
       setStatus(lecturer.status);
-      const initialSubject = lecturer.dept || SUBJECT_OPTIONS[0]?.code || "";
-      setSubjectCode(initialSubject);
-      setFaculty(lecturer.faculty || subjectMap.get(initialSubject)?.faculty || "CNTT");
-      setSelectedClasses(existingClasses || []);
     } else {
       setName("");
       setCode("");
       setEmail("");
       setPhone("");
       setStatus("Đang dạy");
-      setSubjectCode(SUBJECT_OPTIONS[0]?.code || "");
-      setFaculty(SUBJECT_OPTIONS[0]?.faculty || "CNTT");
-      setSelectedClasses(existingClasses || []);
     }
-  }, [existingClasses, lecturer, subjectMap]);
+  }, [lecturer]);
 
   useEffect(() => {
     if (!open) return;
     resetForm();
   }, [open, resetForm]);
 
-  useEffect(() => {
-    if (!open) return;
-    const subject = subjectMap.get(subjectCode);
-    if (subject) {
-      setFaculty(subject.faculty);
-    }
-  }, [open, subjectCode, subjectMap]);
-
-  const handleToggleClass = (cls: string) => {
-    setSelectedClasses((prev) => {
-      const next = prev.includes(cls) ? prev.filter((item) => item !== cls) : [...prev, cls];
-      return next;
-    });
-  };
-
-  const subjectName = subjectMap.get(subjectCode)?.name || subjectCode;
-
   const summary = useMemo(() => {
     return {
-      subjectName,
+      code: code || "Chưa nhập",
+      name: name || "Chưa nhập",
+      email: email || "Chưa nhập",
       status,
-      classes: selectedClasses,
-      faculty,
     };
-  }, [selectedClasses, status, subjectName, faculty]);
+  }, [code, email, name, status]);
+
+  const summaryItems = useMemo(
+    () => [
+      { icon: "🆔", label: "Mã GV", value: summary.code },
+      { icon: "📛", label: "Họ tên", value: summary.name },
+      { icon: "✉️", label: "Email", value: summary.email },
+      { icon: "✅", label: "Trạng thái", value: summary.status },
+    ],
+    [summary]
+  );
 
   const handleSave = () => {
     if (saving) return;
@@ -133,15 +85,15 @@ const AddLecturerModal = ({ open, onClose, lecturer, existingClasses, onSaved }:
       code: generatedCode,
       email: email.trim() || undefined,
       phone: phone.trim() || undefined,
-      dept: subjectCode,
-      faculty,
+      dept: lecturer?.dept || "",
+      faculty: lecturer?.faculty || "",
       status,
-      classes: selectedClasses.length,
+      classes: lecturer?.classes ?? existingClasses.length,
     };
 
     setSaving(true);
     try {
-      onSaved({ lecturer: nextLecturer, classes: selectedClasses });
+      onSaved({ lecturer: nextLecturer, classes: existingClasses });
     } finally {
       setSaving(false);
     }
@@ -216,77 +168,35 @@ const AddLecturerModal = ({ open, onClose, lecturer, existingClasses, onSaved }:
           </div>
 
           <div className="form-col secondary">
-            <div className="form-section">
-              <div className="section-head">
-                <div className="section-title">Phân công giảng dạy</div>
-                <div className="section-subtitle">Sắp xếp giảng viên vào môn và lớp</div>
-              </div>
-              <div className="field-stack">
-                <div className="grid-2">
-                  <div>
-                    <label className="label">Mã môn</label>
-                    <select className="input" value={subjectCode} onChange={(e) => setSubjectCode(e.target.value)}>
-                      {SUBJECT_OPTIONS.map((subject) => (
-                        <option key={subject.code} value={subject.code}>{subject.code} - {subject.name}</option>
-                      ))}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="label">Khoa</label>
-                    <input className="input" value={faculty} onChange={(e) => setFaculty(e.target.value)} placeholder="CNTT" />
-                  </div>
-                </div>
-                <label className="label">Trạng thái</label>
-                <select className="input" value={status} onChange={(e) => setStatus(e.target.value as LecturerStatus)}>
-                  {LECTURER_STATUSES.map((stt) => (
-                    <option key={stt} value={stt}>{stt}</option>
-                  ))}
-                </select>
-                <label className="label">Chọn lớp</label>
-                <div className="class-picker">
-                  {classOptions.map((cls) => {
-                    const active = selectedClasses.includes(cls);
-                    return (
-                      <button
-                        key={cls}
-                        type="button"
-                        className={`class-chip${active ? " active" : ""}`}
-                        onClick={() => handleToggleClass(cls)}
-                        title={active ? "Bỏ lớp" : "Chọn lớp"}
-                      >
-                        <span>{cls}</span>
-                      </button>
-                    );
-                  })}
-                </div>
-                <label className="label">Lớp phụ trách</label>
-                <div className="chips">
-                  {selectedClasses.length > 0 ? selectedClasses.map((cls) => (
-                    <span className="pill" key={cls}>{cls}</span>
-                  )) : <span className="pill muted">Chưa chọn lớp</span>}
-                </div>
-              </div>
-            </div>
             <div className="form-section soft">
               <div className="section-head">
                 <div className="section-title">Tóm tắt nhanh</div>
                 <div className="section-subtitle">Kiểm tra lại thông tin trước khi lưu</div>
               </div>
               <div className="summary-grid">
-                <div className="summary-pill">🆔 Mã GV: {code || "Chưa nhập"}</div>
-                <div className="summary-pill">📛 Họ tên: {name || "Chưa nhập"}</div>
-                <div className="summary-pill">📚 Môn: {summary.subjectName}</div>
-                <div className="summary-pill">🏫 Khoa: {summary.faculty || "Chưa nhập"}</div>
-                <div className="summary-pill">✅ Trạng thái: {summary.status}</div>
-                <div className="summary-pill">👥 Lớp phụ trách: {summary.classes.length}</div>
+                {summaryItems.map((item) => (
+                  <div className="summary-pill" key={item.label}>
+                    <span className="summary-icon" aria-hidden>{item.icon}</span>
+                    <div className="summary-text">
+                      <span className="summary-label">{item.label}</span>
+                      <span className="summary-value">{item.value}</span>
+                    </div>
+                  </div>
+                ))}
               </div>
             </div>
           </div>
         </div>
         <div className="modal-foot">
-          <button className="qr-btn" onClick={onClose}>Hủy</button>
-          <button className="qr-btn" onClick={handleSave} disabled={saving}>💾 {saving ? "Đang lưu..." : "Lưu"}</button>
-          {error && <span className="error-text" style={{ marginLeft: "1rem" }}>{error}</span>}
+          <div className="foot-left">
+            {error && <span className="error-text">{error}</span>}
+          </div>
+          <div className="foot-right">
+            <button className="qr-btn ghost" onClick={onClose}>Hủy</button>
+            <button className="qr-btn" onClick={handleSave} disabled={saving}>
+              {saving ? "⏳ Đang lưu..." : "💾 Lưu"}
+            </button>
+          </div>
         </div>
       </div>
     </div>
