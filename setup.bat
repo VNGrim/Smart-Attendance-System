@@ -48,7 +48,7 @@ if errorlevel 1 (
 
 call :logStep "Reset database (prisma migrate reset)"
 echo [step] Resetting database via Prisma (DROP & recreate)...
-call npx prisma migrate reset --force --skip-generate
+call npx prisma migrate reset --force
 if errorlevel 1 (
   echo [fatal] Prisma migrate reset failed. Verify MySQL service and DATABASE_URL.
   goto :backend_fail
