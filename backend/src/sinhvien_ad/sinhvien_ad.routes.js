@@ -12,6 +12,38 @@ const STATUS_LABELS = {
   locked: 'Bị khóa',
 };
 
+function extractCohortDigits(cohort) {
+  if (!cohort) return null;
+  const normalized = String(cohort).trim().toUpperCase();
+  const match = normalized.match(/(\d{2,})$/);
+  return match ? match[1] : null;
+}
+
+async function generateStudentId(course) {
+  const digits = extractCohortDigits(course);
+  if (!digits) {
+    const err = new Error('INVALID_COHORT');
+    err.code = 'INVALID_COHORT';
+    throw err;
+  }
+
+  const prefix = `SE${digits}`;
+  const likePattern = `${prefix}%`;
+
+  const rows = await prisma.$queryRaw`
+    SELECT student_id
+    FROM students
+    WHERE student_id LIKE ${likePattern}
+    ORDER BY student_id DESC
+    LIMIT 1
+  `;
+
+  const lastId = rows?.[0]?.student_id || null;
+  const nextNumber = lastId ? parseInt(lastId.slice(prefix.length), 10) + 1 : 1;
+  const padded = Number.isFinite(nextNumber) ? nextNumber.toString().padStart(4, '0') : '0001';
+  return `${prefix}${padded}`;
+}
+
 function mapStudent(record) {
   const classList = (record.classes || '')
     .split(',')
@@ -44,6 +76,84 @@ function normalizeStatusFilter(value) {
   if (normalized.includes('khóa')) return 'locked';
   return undefined;
 }
+
+router.get('/options', async (req, res) => {
+  try {
+    const [classRows, cohortRows, majorRows, advisorRows] = await Promise.all([
+      prisma.$queryRaw`
+        SELECT class_id, class_name
+        FROM classes
+        ORDER BY class_name ASC
+      `,
+      prisma.$queryRaw`
+        SELECT DISTINCT course
+        FROM students
+        WHERE course IS NOT NULL AND course <> ''
+        ORDER BY course ASC
+      `,
+      prisma.$queryRaw`
+        SELECT DISTINCT major
+        FROM students
+        WHERE major IS NOT NULL AND major <> ''
+        ORDER BY major ASC
+      `,
+      prisma.teachers.findMany({
+        select: { teacher_id: true, full_name: true, subject: true },
+        orderBy: { full_name: 'asc' },
+      }),
+    ]);
+
+    const classes = (classRows || []).map((cls) => ({
+      id: cls.class_id,
+      name: cls.class_name || cls.class_id,
+    }));
+
+    const cohorts = (cohortRows || [])
+      .map((row) => row.course)
+      .filter(Boolean);
+
+    const majors = (majorRows || [])
+      .map((row) => row.major)
+      .filter(Boolean);
+
+    const advisors = (advisorRows || []).map((row) => ({
+      id: row.teacher_id,
+      name: row.full_name,
+      subject: row.subject ?? null,
+    }));
+
+    return res.json({
+      success: true,
+      data: {
+        classes,
+        cohorts,
+        majors,
+        advisors,
+      },
+    });
+  } catch (error) {
+    console.error('admin students options error:', error);
+    return res.status(500).json({ success: false, message: 'Lỗi hệ thống' });
+  }
+});
+
+router.get('/next-id', async (req, res) => {
+  try {
+    const { cohort } = req.query;
+    if (!cohort || typeof cohort !== 'string' || !cohort.trim()) {
+      return res.status(400).json({ success: false, message: 'Thiếu thông tin khóa (cohort)' });
+    }
+
+    const nextId = await generateStudentId(cohort.trim());
+    return res.json({ success: true, data: { nextId } });
+  } catch (error) {
+    if (error.code === 'INVALID_COHORT') {
+      return res.status(400).json({ success: false, message: 'Định dạng khóa không hợp lệ. Ví dụ hợp lệ: K18, K2023.' });
+    }
+    console.error('admin students next-id error:', error);
+    return res.status(500).json({ success: false, message: 'Lỗi hệ thống' });
+  }
+});
 
 router.get('/', async (req, res) => {
   try {
@@ -86,6 +196,115 @@ router.get('/', async (req, res) => {
     });
   } catch (error) {
     console.error('admin students list error:', error);
+    return res.status(500).json({ success: false, message: 'Lỗi hệ thống' });
+  }
+});
+
+router.get('/lookup/:studentId', async (req, res) => {
+  try {
+    const { studentId } = req.params;
+    if (!studentId) {
+      return res.status(400).json({ success: false, message: 'Thiếu MSSV' });
+    }
+
+    const record = await prisma.students.findUnique({
+      where: { student_id: studentId },
+    });
+
+    if (!record) {
+      return res.status(404).json({ success: false, message: 'Không tìm thấy sinh viên' });
+    }
+
+    return res.json({ success: true, student: mapStudent(record) });
+  } catch (error) {
+    console.error('admin students lookup error:', error);
+    return res.status(500).json({ success: false, message: 'Lỗi hệ thống' });
+  }
+});
+
+router.post('/', async (req, res) => {
+  try {
+    const {
+      mssv,
+      fullName,
+      email,
+      cohort,
+      className,
+      classes,
+      major,
+      advisor,
+      status,
+      password,
+      phone,
+    } = req.body || {};
+
+    if (!fullName || typeof fullName !== 'string' || !fullName.trim()) {
+      return res.status(400).json({ success: false, message: 'Họ tên là bắt buộc' });
+    }
+
+    const trimmedCohort = typeof cohort === 'string' ? cohort.trim() : '';
+    if (!trimmedCohort) {
+      return res.status(400).json({ success: false, message: 'Khóa là bắt buộc' });
+    }
+
+    let studentId = (typeof mssv === 'string' && mssv.trim()) ? mssv.trim().toUpperCase() : null;
+    if (!studentId) {
+      studentId = await generateStudentId(trimmedCohort);
+    }
+
+    const existingStudent = await prisma.students.findUnique({ where: { student_id: studentId } });
+    if (existingStudent) {
+      return res.status(409).json({ success: false, message: 'MSSV đã tồn tại' });
+    }
+
+    const existingAccount = await prisma.accounts.findUnique({ where: { user_code: studentId } });
+    if (existingAccount) {
+      return res.status(409).json({ success: false, message: 'Tài khoản với MSSV này đã tồn tại' });
+    }
+
+    const passwordToUse = typeof password === 'string' && password.trim() ? password.trim() : 'sinhvienfpt';
+    const classesValue = Array.isArray(classes)
+      ? classes.filter(Boolean).join(', ')
+      : (className && typeof className === 'string') ? className.trim() : '';
+
+    const statusCode = normalizeStatusFilter(status) || 'active';
+
+    const createdStudent = await prisma.$transaction(async (tx) => {
+      const account = await tx.accounts.create({
+        data: {
+          user_code: studentId,
+          password: passwordToUse,
+          role: 'student',
+        },
+      });
+
+      const studentRecord = await tx.students.create({
+        data: {
+          student_id: studentId,
+          full_name: fullName.trim(),
+          email: email && typeof email === 'string' ? email.trim() : null,
+          course: trimmedCohort,
+          classes: classesValue || null,
+          major: major && typeof major === 'string' ? major.trim() : null,
+          advisor_name: advisor && typeof advisor === 'string' ? advisor.trim() : null,
+          status: statusCode,
+          phone: phone && typeof phone === 'string' ? phone.trim() : null,
+          account_id: account.id,
+        },
+      });
+
+      return studentRecord;
+    });
+
+    return res.status(201).json({
+      success: true,
+      student: mapStudent(createdStudent),
+    });
+  } catch (error) {
+    if (error.code === 'INVALID_COHORT') {
+      return res.status(400).json({ success: false, message: 'Định dạng khóa không hợp lệ. Ví dụ hợp lệ: K18, K2023.' });
+    }
+    console.error('admin students create error:', error);
     return res.status(500).json({ success: false, message: 'Lỗi hệ thống' });
   }
 });
