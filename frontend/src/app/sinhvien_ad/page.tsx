@@ -82,10 +82,6 @@ export default function AdminStudentsPage() {
     });
   };
 
-  const bulkLock = (lock: boolean) => {
-    setList((prev) => prev.map((s) => (selected.has(s.id) ? { ...s, status: lock ? "Bị khóa" : "Hoạt động" } : s)));
-    setSelected(new Set());
-  };
   const bulkDelete = () => {
     if (!confirm("Xóa các sinh viên đã chọn?")) return;
     setList((prev) => prev.filter((s) => !selected.has(s.id)));
@@ -98,11 +94,12 @@ export default function AdminStudentsPage() {
   const [formMSSV, setFormMSSV] = useState("");
   const [formName, setFormName] = useState("");
   const [formEmail, setFormEmail] = useState("");
+  const [formPassword, setFormPassword] = useState("sinhvienfpt");
+  const [passwordEditable, setPasswordEditable] = useState(false);
   const [formClass, setFormClass] = useState("SE1601");
   const [formCohort, setFormCohort] = useState("K19");
   const [formMajor, setFormMajor] = useState("Kỹ thuật phần mềm");
   const [formAdvisor, setFormAdvisor] = useState("Trần Văn A");
-  const [formStatus, setFormStatus] = useState<"Hoạt động" | "Bị khóa">("Hoạt động");
 
   useEffect(() => {
     if (edit) {
@@ -113,25 +110,27 @@ export default function AdminStudentsPage() {
       setFormCohort(edit.cohort);
       setFormMajor(edit.major);
       setFormAdvisor(edit.advisor);
-      setFormStatus(edit.status);
+      setFormPassword("********");
+      setPasswordEditable(false);
     } else {
       setFormMSSV("");
       setFormName("");
       setFormEmail("");
+      setFormPassword("sinhvienfpt");
+      setPasswordEditable(false);
       setFormClass("SE1601");
       setFormCohort("K19");
       setFormMajor("Kỹ thuật phần mềm");
       setFormAdvisor("Trần Văn A");
-      setFormStatus("Hoạt động");
     }
   }, [modalOpen, edit]);
 
   const onSubmit = () => {
     if (edit) {
-      setList((prev) => prev.map((s) => (s.id === edit.id ? { ...s, mssv: formMSSV, name: formName, className: formClass, cohort: formCohort, major: formMajor, advisor: formAdvisor, status: formStatus, email: formEmail } : s)));
+      setList((prev) => prev.map((s) => (s.id === edit.id ? { ...s, mssv: formMSSV, name: formName, className: formClass, cohort: formCohort, major: formMajor, advisor: formAdvisor, status: edit.status, email: formEmail } : s)));
     } else {
       const id = Math.random().toString(36).slice(2, 9);
-      setList((prev) => prev.concat({ id, mssv: formMSSV || `SV${Date.now().toString().slice(-6)}`, name: formName, className: formClass, cohort: formCohort, major: formMajor, advisor: formAdvisor, status: formStatus, email: formEmail }));
+      setList((prev) => prev.concat({ id, mssv: formMSSV || `SV${Date.now().toString().slice(-6)}`, name: formName, className: formClass, cohort: formCohort, major: formMajor, advisor: formAdvisor, status: "Hoạt động", email: formEmail }));
     }
     setModalOpen(false);
   };
@@ -205,9 +204,6 @@ export default function AdminStudentsPage() {
     <Shell>
       <div className="toolbar-sub">
         <div className="left">
-          <button className="chip" disabled={!anySelected} onClick={()=>bulkLock(false)}>✅ Kích hoạt</button>
-          <button className="chip" disabled={!anySelected} onClick={()=>bulkLock(true)}>🔒 Khóa tài khoản</button>
-          <button className="chip" disabled={!anySelected} onClick={()=>alert("Chuyển lớp: " + selectedCount + " SV")}>🔁 Chuyển lớp</button>
           <button className="chip" onClick={()=>alert("Nhập CSV/Excel")}>📥 Nhập danh sách</button>
           <button className="chip" onClick={()=>alert("Xuất CSV/Excel")}>📤 Xuất danh sách</button>
           <button className="chip danger" disabled={!anySelected} onClick={bulkDelete}>🗑 Xóa hàng loạt</button>
@@ -308,40 +304,91 @@ export default function AdminStudentsPage() {
               <button className="icon-btn" onClick={() => setModalOpen(false)}>✖</button>
             </div>
             <div className="modal-body grid2">
-              <div className="form-col">
-                <label className="label">MSSV</label>
-                <input className="input" value={formMSSV} onChange={(e)=>setFormMSSV(e.target.value)} placeholder="SE12345" />
-                <label className="label">Họ tên</label>
-                <input className="input" value={formName} onChange={(e)=>setFormName(e.target.value)} placeholder="Nguyễn Văn A" />
-                <label className="label">Email</label>
-                <input className="input" value={formEmail} onChange={(e)=>setFormEmail(e.target.value)} placeholder="email@domain.com" />
+              <div className="form-col primary">
+                <div className="form-section">
+                  <div className="section-head">
+                    <div className="section-title">Thông tin cơ bản</div>
+                    <div className="section-subtitle">Các trường bắt buộc để tạo hồ sơ sinh viên</div>
+                  </div>
+                  <div className="field-stack">
+                    <label className="label">MSSV</label>
+                    <input className="input" value={formMSSV} onChange={(e)=>setFormMSSV(e.target.value)} placeholder="SE12345" />
+                    <label className="label">Họ tên</label>
+                    <input className="input" value={formName} onChange={(e)=>setFormName(e.target.value)} placeholder="Nguyễn Văn A" />
+                    <label className="label">Email</label>
+                    <input className="input" value={formEmail} onChange={(e)=>setFormEmail(e.target.value)} placeholder="email@domain.com" />
+                    <div className="field-label-row">
+                      <label className="label">Mật khẩu</label>
+                      <span className="field-hint">Mặc định: "sinhvienfpt"</span>
+                    </div>
+                    <div className="password-row">
+                      <input
+                        className="input"
+                        type={passwordEditable ? "text" : "password"}
+                        value={formPassword}
+                        onChange={(e)=>setFormPassword(e.target.value)}
+                        disabled={!passwordEditable}
+                        placeholder="sinhvienfpt"
+                      />
+                      <button
+                        type="button"
+                        className="mini-btn"
+                        onClick={()=>setPasswordEditable((prev)=>!prev)}
+                        title={passwordEditable ? "Khóa chỉnh sửa" : "Chỉnh sửa mật khẩu"}
+                      >
+                        {passwordEditable ? "Lưu" : "Chỉnh sửa"}
+                      </button>
+                    </div>
+                    <p className="hint-text">Bạn có thể thay đổi mật khẩu sau khi tạo tài khoản sinh viên.</p>
+                  </div>
+                </div>
               </div>
-              <div className="form-col">
-                <label className="label">Lớp</label>
-                <select className="input" value={formClass} onChange={(e)=>setFormClass(e.target.value)}>
-                  <option>SE1601</option>
-                  <option>SE1602</option>
-                </select>
-                <label className="label">Ngành</label>
-                <select className="input" value={formMajor} onChange={(e)=>setFormMajor(e.target.value)}>
-                  <option>Kỹ thuật phần mềm</option>
-                  <option>Hệ thống thông tin</option>
-                </select>
-                <label className="label">Khóa</label>
-                <select className="input" value={formCohort} onChange={(e)=>setFormCohort(e.target.value)}>
-                  <option>K19</option>
-                  <option>K20</option>
-                </select>
-                <label className="label">Giảng viên phụ trách</label>
-                <select className="input" value={formAdvisor} onChange={(e)=>setFormAdvisor(e.target.value)}>
-                  <option>Trần Văn A</option>
-                  <option>Lê Thị B</option>
-                </select>
-                <label className="label">Trạng thái</label>
-                <select className="input" value={formStatus} onChange={(e)=>setFormStatus(e.target.value as any)}>
-                  <option>Hoạt động</option>
-                  <option>Bị khóa</option>
-                </select>
+              <div className="form-col secondary">
+                <div className="form-section">
+                  <div className="section-head">
+                    <div className="section-title">Thông tin học tập</div>
+                    <div className="section-subtitle">Sắp xếp sinh viên vào lớp và cố vấn</div>
+                  </div>
+                  <div className="field-stack">
+                    <div className="grid-2">
+                      <div>
+                        <label className="label">Lớp</label>
+                        <select className="input" value={formClass} onChange={(e)=>setFormClass(e.target.value)}>
+                          <option>SE1601</option>
+                          <option>SE1602</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="label">Khóa</label>
+                        <select className="input" value={formCohort} onChange={(e)=>setFormCohort(e.target.value)}>
+                          <option>K19</option>
+                          <option>K20</option>
+                        </select>
+                      </div>
+                    </div>
+                    <label className="label">Ngành</label>
+                    <select className="input" value={formMajor} onChange={(e)=>setFormMajor(e.target.value)}>
+                      <option>Kỹ thuật phần mềm</option>
+                      <option>Hệ thống thông tin</option>
+                    </select>
+                    <label className="label">Giảng viên phụ trách</label>
+                    <select className="input" value={formAdvisor} onChange={(e)=>setFormAdvisor(e.target.value)}>
+                      <option>Trần Văn A</option>
+                      <option>Lê Thị B</option>
+                    </select>
+                  </div>
+                </div>
+                <div className="form-section soft">
+                  <div className="section-head">
+                    <div className="section-title">Tóm tắt nhanh</div>
+                    <div className="section-subtitle">Kiểm tra lại các thiết lập trước khi lưu</div>
+                  </div>
+                  <div className="summary-grid">
+                    <div className="summary-pill">✅ Trạng thái mặc định: Hoạt động</div>
+                    <div className="summary-pill">👨‍🏫 Giảng viên: {formAdvisor}</div>
+                    <div className="summary-pill">🎓 Khóa: {formCohort}</div>
+                  </div>
+                </div>
               </div>
             </div>
             <div className="modal-foot">
