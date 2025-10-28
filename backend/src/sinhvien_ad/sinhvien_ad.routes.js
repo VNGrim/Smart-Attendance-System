@@ -195,6 +195,8 @@ router.get('/', async (req, res) => {
     const normalizedStatus = normalizeStatusFilter(status);
     if (normalizedStatus) {
       where.status = normalizedStatus;
+    } else {
+      where.status = 'active';
     }
 
     const students = await prisma.students.findMany({

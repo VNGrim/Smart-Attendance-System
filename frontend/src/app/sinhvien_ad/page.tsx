@@ -10,9 +10,6 @@ export default function AdminStudentsPage() {
   const router = useRouter();
   const [collapsed, setCollapsed] = useState(false);
   const [search, setSearch] = useState("");
-  const [filterClass, setFilterClass] = useState("Tất cả lớp");
-  const [filterCohort, setFilterCohort] = useState("Tất cả khóa");
-  const [filterStatus, setFilterStatus] = useState("Tất cả trạng thái");
   const [list, setList] = useState<Student[]>([]);
   const [sortKey, setSortKey] = useState<keyof Student>("name");
   const [sortAsc, setSortAsc] = useState(true);
@@ -47,9 +44,6 @@ export default function AdminStudentsPage() {
       try {
         const params = new URLSearchParams();
         if (search.trim()) params.set("search", search.trim());
-        if (filterClass && filterClass !== "Tất cả lớp") params.set("class", filterClass);
-        if (filterCohort && filterCohort !== "Tất cả khóa") params.set("cohort", filterCohort);
-        if (filterStatus && filterStatus !== "Tất cả trạng thái") params.set("status", filterStatus);
 
         const resp = await fetch(`http://localhost:8080/api/admin/students${params.toString() ? `?${params.toString()}` : ""}`, {
           credentials: "include",
@@ -85,7 +79,7 @@ export default function AdminStudentsPage() {
       isMounted = false;
       controller.abort();
     };
-  }, [search, filterClass, filterCohort, filterStatus]);
+  }, [search]);
 
   useEffect(() => {
     const fetchOptions = async () => {
@@ -124,11 +118,14 @@ export default function AdminStudentsPage() {
     data.sort((a: any, b: any) => {
       const va = (a[sortKey] || "").toString().toLowerCase();
       const vb = (b[sortKey] || "").toString().toLowerCase();
-      return sortAsc ? va.localeCompare(vb) : vb.localeCompare(va);
+      if (va < vb) return sortAsc ? -1 : 1;
+      if (va > vb) return sortAsc ? 1 : -1;
+      return 0;
     });
     return data;
-  }, [list, search, filterClass, filterCohort, filterStatus, sortKey, sortAsc]);
+  }, [list, sortKey, sortAsc]);
 
+  const selectedCount = selected.size;
   const allSelected = selected.size > 0 && filtered.every((s) => selected.has(s.id));
   const toggleSelectAll = () => {
     if (allSelected) setSelected(new Set());
@@ -179,25 +176,7 @@ export default function AdminStudentsPage() {
             <i className="fas fa-search" />
             <input value={search} onChange={(e)=>setSearch(e.target.value)} placeholder="Tìm tên, MSSV" />
           </div>
-          <div className="filter-line">
-            <select className="input" value={filterClass} onChange={(e)=>setFilterClass(e.target.value)}>
-              <option>Tất cả lớp</option>
-              <option>SE1601</option>
-              <option>SE1602</option>
-            </select>
-            <select className="input" value={filterCohort} onChange={(e)=>setFilterCohort(e.target.value)}>
-              <option>Tất cả khóa</option>
-              <option>K19</option>
-              <option>K20</option>
-            </select>
-            <select className="input" value={filterStatus} onChange={(e)=>setFilterStatus(e.target.value)}>
-              <option>Tất cả trạng thái</option>
-              <option>Hoạt động</option>
-              <option>Bị khóa</option>
-            </select>
-          </div>
-          <button className="btn-green" onClick={onAddStudent}>+ Thêm sinh viên</button>
-          <button className="qr-btn" onClick={async ()=>{ 
+          <button className="qr-btn" onClick={async ()=>{
             if (confirm('Bạn có chắc muốn đăng xuất?')) {
               try { await fetch('http://localhost:8080/api/auth/logout', { method: 'POST', credentials: 'include' }); } catch {}
               try { localStorage.removeItem('sas_user'); } catch {}
@@ -207,12 +186,37 @@ export default function AdminStudentsPage() {
         </div>
       </header>
 
-      <main className="main">{children}</main>
+      <main className="main">
+        <div className="toolbar-sub">
+          <div className="left">
+            <button className="chip solid" onClick={onAddStudent}>
+              <span className="chip-icon">➕</span>
+              <span className="chip-title">Thêm sinh viên</span>
+              <span className="chip-sub">Tạo hồ sơ mới</span>
+            </button>
+            <button className="chip soft" onClick={()=>alert("Nhập CSV/Excel")}>
+              <span className="chip-icon">📥</span>
+              <span className="chip-title">Nhập danh sách</span>
+              <span className="chip-sub">Gồm file CSV, Excel</span>
+            </button>
+            <button className="chip outline" onClick={()=>alert("Xuất CSV/Excel")}>
+              <span className="chip-icon">📤</span>
+              <span className="chip-title">Xuất danh sách</span>
+              <span className="chip-sub">Tải về dạng CSV</span>
+            </button>
+          </div>
+          <div className="right">
+            {loading && <span>Đang tải...</span>}
+            {!loading && error && <span className="error-text">{error}</span>}
+          </div>
+        </div>
+
+        <div className="content-area">
+          {children}
+        </div>
+      </main>
     </div>
   );
-
-  const selectedCount = selected.size;
-  const anySelected = selectedCount > 0;
 
   const closeModal = useCallback(() => {
     setModalOpen(false);
@@ -225,10 +229,10 @@ export default function AdminStudentsPage() {
   }, []);
 
   const onOpenEdit = useCallback((student: Student) => {
-    setDrawer(null);
     setEdit(student);
     setModalOpen(true);
   }, []);
+
   const handleStudentCreated = useCallback((student: Student) => {
     setList((prev) => {
       const withoutDup = prev.filter((s) => s.id !== student.id);
@@ -236,37 +240,18 @@ export default function AdminStudentsPage() {
     });
     closeModal();
     setSearch("");
-    setFilterClass("Tất cả lớp");
-    setFilterCohort("Tất cả khóa");
-    setFilterStatus("Tất cả trạng thái");
   }, [closeModal]);
 
   return (
     <Shell>
-      <div className="toolbar-sub">
-        <div className="left">
-          <button className="chip" onClick={onAddStudent}>➕ Thêm sinh viên</button>
-          <button className="chip" onClick={()=>alert("Nhập CSV/Excel")}>📥 Nhập danh sách</button>
-          <button className="chip" onClick={()=>alert("Xuất CSV/Excel")}>📤 Xuất danh sách</button>
-          <button className="chip danger" disabled={!anySelected} onClick={bulkDelete}>🗑 Xóa hàng loạt</button>
-        </div>
-        <div className="right">
-          {loading && <span>Đang tải...</span>}
-          {!loading && error && <span className="error-text">{error}</span>}
-          {!loading && !error && anySelected ? `${selectedCount} đã chọn` : ""}
-        </div>
-      </div>
-
       <div className="panel">
         <div className="table students-table">
           <div className="thead">
             <div><input type="checkbox" checked={allSelected} onChange={toggleSelectAll} /></div>
             <div className="th" onClick={()=>toggleSort("mssv")}>MSSV</div>
             <div className="th" onClick={()=>toggleSort("name")}>Họ tên</div>
-            <div className="th" onClick={()=>toggleSort("className")}>Lớp</div>
             <div className="th" onClick={()=>toggleSort("cohort")}>Khóa</div>
             <div className="th" onClick={()=>toggleSort("major")}>Ngành</div>
-            <div className="th" onClick={()=>toggleSort("advisor")}>Giảng viên phụ trách</div>
             <div className="th" onClick={()=>toggleSort("status")}>Trạng thái</div>
             <div>Thao tác</div>
           </div>
@@ -276,13 +261,10 @@ export default function AdminStudentsPage() {
                 <div><input type="checkbox" checked={selected.has(s.id)} onChange={(e)=>{e.stopPropagation(); toggleSelect(s.id);}} /></div>
                 <div>{s.mssv}</div>
                 <div>{s.name}</div>
-                <div>{s.className}</div>
                 <div>{s.cohort}</div>
                 <div>{s.major}</div>
-                <div>{s.advisor}</div>
                 <div><span className={`status ${s.status}`.replace(/\s/g,"-")}>{s.status}</span></div>
                 <div className="actions">
-                  <button className="icon-btn" title="Xem" onClick={(e)=>{e.stopPropagation(); setDrawer(s);}}>👁</button>
                   <button className="icon-btn" title="Sửa" onClick={(e)=>{e.stopPropagation(); onOpenEdit(s);}}>✏️</button>
                   <button className="icon-btn" title="Xóa" onClick={(e)=>{e.stopPropagation(); if(confirm("Xóa sinh viên?")) setList(prev=>prev.filter(x=>x.id!==s.id));}}>🗑</button>
                 </div>
