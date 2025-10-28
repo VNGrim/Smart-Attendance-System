@@ -27,6 +27,13 @@ export default function AdminStudentsPage() {
     advisors: [],
   });
 
+  const FALLBACK_OPTIONS: StudentOptions = useMemo(() => ({
+    classes: [],
+    cohorts: ["K18", "K19", "K20", "K21"],
+    majors: [],
+    advisors: [],
+  }), []);
+
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -94,13 +101,18 @@ export default function AdminStudentsPage() {
           majors: Array.isArray(data?.data?.majors) ? data.data.majors : [],
           advisors: Array.isArray(data?.data?.advisors) ? data.data.advisors : [],
         };
-        setOptions(nextOptions);
+        if (!nextOptions.cohorts.length) {
+          setOptions(FALLBACK_OPTIONS);
+        } else {
+          setOptions(nextOptions as StudentOptions);
+        }
       } catch (err) {
         console.error("fetch student options error", err);
+        setOptions(FALLBACK_OPTIONS);
       }
     };
     fetchOptions();
-  }, []);
+  }, [FALLBACK_OPTIONS]);
 
   const toggleSort = (key: keyof Student) => {
     if (sortKey === key) setSortAsc(!sortAsc);

@@ -105,25 +105,27 @@ router.get('/options', async (req, res) => {
       name: cls.class_name || cls.class_id,
     }));
 
-    const cohorts = (cohortRows || [])
-      .map((row) => row.code)
-      .filter(Boolean);
+    const cohortSet = new Set((cohortRows || []).map((row) => row.code).filter(Boolean));
+    const sortedCohortRows = [...(cohortRows || [])].sort((a, b) => (a.year || 0) - (b.year || 0));
+    let latestYear = sortedCohortRows.length ? sortedCohortRows[sortedCohortRows.length - 1].year : null;
+    const currentYear = new Date().getFullYear();
 
-    if (cohorts.length) {
-      const latest = cohortRows[cohortRows.length - 1];
-      if (latest?.year) {
-        const nextYear = latest.year + 1;
-        const nextCode = `K${String(nextYear).slice(-2)}`;
-        if (!cohorts.includes(nextCode)) {
-          await prisma.cohorts.upsert({
-            where: { code: nextCode },
-            update: { year: nextYear },
-            create: { code: nextCode, year: nextYear },
-          });
-          cohorts.push(nextCode);
-        }
-      }
+    if (!latestYear) {
+      latestYear = currentYear;
     }
+
+    while (latestYear < currentYear) {
+      latestYear += 1;
+      const nextCode = `K${String(latestYear).slice(-2)}`;
+      await prisma.cohorts.upsert({
+        where: { code: nextCode },
+        update: { year: latestYear },
+        create: { code: nextCode, year: latestYear },
+      });
+      cohortSet.add(nextCode);
+    }
+
+    const cohorts = Array.from(cohortSet).sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
 
     const majors = (majorRows || [])
       .map((row) => row.major)

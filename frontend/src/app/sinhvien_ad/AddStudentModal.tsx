@@ -72,6 +72,26 @@ const AddStudentModal = ({ open, onClose, options, student, onSaved }: AddStuden
 
   useEffect(() => {
     if (!open || student) return;
+    if (options.cohorts.length) {
+      setCohort((current) => {
+        if (!current || !options.cohorts.includes(current)) {
+          return findCohort(options);
+        }
+        return current;
+      });
+    }
+    if (options.majors.length) {
+      setMajor((current) => {
+        if (!current || !options.majors.includes(current)) {
+          return findMajor(options);
+        }
+        return current;
+      });
+    }
+  }, [open, student, options]);
+
+  useEffect(() => {
+    if (!open || student) return;
     if (!cohort) return;
     if (mssvTouchedRef.current && mssv.trim()) return;
 
@@ -261,8 +281,9 @@ const AddStudentModal = ({ open, onClose, options, student, onSaved }: AddStuden
               <div className="field-stack">
                 <label className="label">Khóa</label>
                 <select className="input" value={cohort} onChange={(e) => {
-                  mssvTouchedRef.current = true;
+                  mssvTouchedRef.current = false;
                   setCohort(e.target.value);
+                  setMssv("");
                 }}>
                   {cohortOptions.map((co) => (
                     <option key={co} value={co}>{co}</option>
