@@ -5,21 +5,23 @@ rem =============================================================
 rem  Smart Attendance System - one click setup for Windows
 rem  - Installs backend & frontend dependencies
 rem  - Copies environment template if missing
-rem  - Runs Prisma migrations to sync MySQL schema
+rem  - Drops any existing DB, reapplies migrations, seeds sample data
 rem  Usage examples:
-rem    setup.bat               -> install + migrate deploy
-rem    setup.bat seed          -> install + migrate deploy + seed sample data
-rem    setup.bat reset         -> drop & recreate DB (prisma migrate reset)
-rem    setup.bat reset seed    -> reset DB then seed sample data
+rem    setup.bat                -> reset DB + seed + install deps (DEFAULT)
+rem    setup.bat noreset        -> keep existing DB (skip reset)
+rem    setup.bat noseed         -> skip seeding sample data
+rem    setup.bat noreset noseed -> behave like pure install
 rem =============================================================
 
-set RESET_DB=0
-set RUN_SEED=0
+set RESET_DB=1
+set RUN_SEED=1
 set MIGRATIONS_DONE=0
 
 for %%A in (%*) do (
   if /I "%%~A"=="reset" set RESET_DB=1
   if /I "%%~A"=="seed" set RUN_SEED=1
+  if /I "%%~A"=="noreset" set RESET_DB=0
+  if /I "%%~A"=="noseed" set RUN_SEED=0
 )
 
 echo.
@@ -88,7 +90,7 @@ if "%RUN_SEED%"=="1" (
     echo [info] Seed completed.
   )
 ) else (
-  echo [info] Skip seeding (pass argument `seed` to run it automatically).
+  echo [info] Skipped seeding (pass without `noseed` to seed automatically).
 )
 
 :backend_done
