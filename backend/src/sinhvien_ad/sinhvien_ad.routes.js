@@ -85,12 +85,9 @@ router.get('/options', async (req, res) => {
         FROM classes
         ORDER BY class_name ASC
       `,
-      prisma.$queryRaw`
-        SELECT DISTINCT course
-        FROM students
-        WHERE course IS NOT NULL AND course <> ''
-        ORDER BY course ASC
-      `,
+      prisma.cohorts.findMany({
+        orderBy: [{ year: 'asc' }],
+      }),
       prisma.$queryRaw`
         SELECT DISTINCT major
         FROM students
@@ -109,8 +106,24 @@ router.get('/options', async (req, res) => {
     }));
 
     const cohorts = (cohortRows || [])
-      .map((row) => row.course)
+      .map((row) => row.code)
       .filter(Boolean);
+
+    if (cohorts.length) {
+      const latest = cohortRows[cohortRows.length - 1];
+      if (latest?.year) {
+        const nextYear = latest.year + 1;
+        const nextCode = `K${String(nextYear).slice(-2)}`;
+        if (!cohorts.includes(nextCode)) {
+          await prisma.cohorts.upsert({
+            where: { code: nextCode },
+            update: { year: nextYear },
+            create: { code: nextCode, year: nextYear },
+          });
+          cohorts.push(nextCode);
+        }
+      }
+    }
 
     const majors = (majorRows || [])
       .map((row) => row.major)

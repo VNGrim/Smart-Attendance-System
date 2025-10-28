@@ -36,6 +36,7 @@ cd Smart-Attendance-System
 - Mở cmd
 - cd tới thư mục code
 - Chạy lệnh: npx concurrently "node backend/index.js" "npm --prefix frontend run dev"
+- Ctrl + C để dừng localhost, nếu có hỏi Y/N thì chọn Y
 
 6. GHI CHÚ
 ----------

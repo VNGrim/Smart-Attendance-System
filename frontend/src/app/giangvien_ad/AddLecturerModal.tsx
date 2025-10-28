@@ -113,8 +113,9 @@ const AddLecturerModal = ({ open, onClose, lecturer, existingClasses, onSaved }:
       subjectName,
       status,
       classes: selectedClasses,
+      faculty,
     };
-  }, [selectedClasses, status, subjectName]);
+  }, [selectedClasses, status, subjectName, faculty]);
 
   const handleSave = () => {
     if (saving) return;
@@ -218,15 +219,23 @@ const AddLecturerModal = ({ open, onClose, lecturer, existingClasses, onSaved }:
             <div className="form-section">
               <div className="section-head">
                 <div className="section-title">Phân công giảng dạy</div>
-                <div className="section-subtitle">Chọn mã môn và các lớp giảng viên phụ trách</div>
+                <div className="section-subtitle">Sắp xếp giảng viên vào môn và lớp</div>
               </div>
               <div className="field-stack">
-                <label className="label">Mã môn</label>
-                <select className="input" value={subjectCode} onChange={(e) => setSubjectCode(e.target.value)}>
-                  {SUBJECT_OPTIONS.map((subject) => (
-                    <option key={subject.code} value={subject.code}>{subject.code} - {subject.name}</option>
-                  ))}
-                </select>
+                <div className="grid-2">
+                  <div>
+                    <label className="label">Mã môn</label>
+                    <select className="input" value={subjectCode} onChange={(e) => setSubjectCode(e.target.value)}>
+                      {SUBJECT_OPTIONS.map((subject) => (
+                        <option key={subject.code} value={subject.code}>{subject.code} - {subject.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="label">Khoa</label>
+                    <input className="input" value={faculty} onChange={(e) => setFaculty(e.target.value)} placeholder="CNTT" />
+                  </div>
+                </div>
                 <label className="label">Trạng thái</label>
                 <select className="input" value={status} onChange={(e) => setStatus(e.target.value as LecturerStatus)}>
                   {LECTURER_STATUSES.map((stt) => (
@@ -264,11 +273,12 @@ const AddLecturerModal = ({ open, onClose, lecturer, existingClasses, onSaved }:
                 <div className="section-subtitle">Kiểm tra lại thông tin trước khi lưu</div>
               </div>
               <div className="summary-grid">
-                <div className="summary-pill">📛 {name || "Chưa nhập tên"}</div>
-                <div className="summary-pill">🆔 {code || "Chưa nhập mã"}</div>
-                <div className="summary-pill">📚 Mã môn: {subjectName}</div>
-                <div className="summary-pill">📌 Trạng thái: {summary.status}</div>
-                <div className="summary-pill">🏫 {summary.classes.length} lớp phụ trách</div>
+                <div className="summary-pill">🆔 Mã GV: {code || "Chưa nhập"}</div>
+                <div className="summary-pill">📛 Họ tên: {name || "Chưa nhập"}</div>
+                <div className="summary-pill">📚 Môn: {summary.subjectName}</div>
+                <div className="summary-pill">🏫 Khoa: {summary.faculty || "Chưa nhập"}</div>
+                <div className="summary-pill">✅ Trạng thái: {summary.status}</div>
+                <div className="summary-pill">👥 Lớp phụ trách: {summary.classes.length}</div>
               </div>
             </div>
           </div>
