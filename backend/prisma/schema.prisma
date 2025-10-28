@@ -60,8 +60,13 @@ model teachers {
   full_name  String    @db.VarChar(100)
   subject    String    @db.VarChar(100)
   classes    String?   @db.VarChar(255)
+  email      String?   @db.VarChar(100)
+  phone      String?   @db.VarChar(20)
+  faculty    String?   @db.VarChar(100)
+  status     String    @default("Đang dạy") @db.VarChar(50)
   account_id Int?
   created_at DateTime? @default(now()) @db.Timestamp(0)
+  updated_at DateTime  @default(now()) @updatedAt @db.Timestamp(0)
   accounts   accounts? @relation(fields: [account_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "teachers_ibfk_1")
 
   @@index([account_id], map: "account_id")

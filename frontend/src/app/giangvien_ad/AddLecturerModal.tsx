@@ -1,19 +1,18 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { Lecturer, LecturerStatus } from "./lecturerUtils";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Lecturer, LecturerStatus, mapBackendLecturer } from "./lecturerUtils";
 
 type AddLecturerModalProps = {
   open: boolean;
   onClose: () => void;
   lecturer: Lecturer | null;
-  existingClasses: string[];
-  onSaved: (payload: { lecturer: Lecturer; classes: string[] }) => void;
+  onSaved: (lecturer: Lecturer) => void;
 };
 
 const DEFAULT_PASSWORD = "giangvienfpt";
 
-const AddLecturerModal = ({ open, onClose, lecturer, existingClasses, onSaved }: AddLecturerModalProps) => {
+const AddLecturerModal = ({ open, onClose, lecturer, onSaved }: AddLecturerModalProps) => {
   const [name, setName] = useState("");
   const [code, setCode] = useState("");
   const [email, setEmail] = useState("");
@@ -23,12 +22,14 @@ const AddLecturerModal = ({ open, onClose, lecturer, existingClasses, onSaved }:
   const [status, setStatus] = useState<LecturerStatus>("Đang dạy");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const codeTouchedRef = useRef(false);
 
   const resetForm = useCallback(() => {
     setError(null);
     setSaving(false);
     setPasswordEditable(false);
     setPassword(DEFAULT_PASSWORD);
+    codeTouchedRef.current = false;
 
     if (lecturer) {
       setName(lecturer.name);
@@ -50,6 +51,37 @@ const AddLecturerModal = ({ open, onClose, lecturer, existingClasses, onSaved }:
     resetForm();
   }, [open, resetForm]);
 
+  useEffect(() => {
+    if (!open || lecturer || codeTouchedRef.current) return;
+
+    let cancelled = false;
+    const controller = new AbortController();
+
+    const fetchNextId = async () => {
+      try {
+        const resp = await fetch("http://localhost:8080/api/admin/lecturers/next-id", {
+          credentials: "include",
+          signal: controller.signal,
+        });
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+        const data = await resp.json();
+        const nextId = data?.data?.nextId;
+        if (!cancelled && typeof nextId === "string" && nextId.trim()) {
+          setCode((current) => (current.trim() ? current : nextId));
+        }
+      } catch (err: any) {
+        if (err?.name === "AbortError") return;
+        console.error("fetch next lecturer id error", err);
+      }
+    };
+
+    fetchNextId();
+    return () => {
+      cancelled = true;
+      controller.abort();
+    };
+  }, [open, lecturer]);
+
   const summary = useMemo(() => {
     return {
       code: code || "Chưa nhập",
@@ -69,31 +101,46 @@ const AddLecturerModal = ({ open, onClose, lecturer, existingClasses, onSaved }:
     [summary]
   );
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (saving) return;
     if (!name.trim()) {
       setError("Họ tên là bắt buộc");
       return;
     }
     const trimmedCode = code.trim();
-    const generatedCode = trimmedCode || lecturer?.code || `GV${Date.now().toString().slice(-5)}`;
-    const id = lecturer?.id || (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function" ? crypto.randomUUID() : `gv_${Date.now()}`);
-
-    const nextLecturer: Lecturer = {
-      id,
-      name: name.trim(),
-      code: generatedCode,
-      email: email.trim() || undefined,
-      phone: phone.trim() || undefined,
-      dept: lecturer?.dept || "",
-      faculty: lecturer?.faculty || "",
-      status,
-      classes: lecturer?.classes ?? existingClasses.length,
-    };
 
     setSaving(true);
     try {
-      onSaved({ lecturer: nextLecturer, classes: existingClasses });
+      const payload = {
+        code: trimmedCode || undefined,
+        fullName: name.trim(),
+        email: email.trim() || undefined,
+        phone: phone.trim() || undefined,
+        status,
+        password: passwordEditable ? password.trim() || undefined : undefined,
+      };
+
+      const resp = await fetch("http://localhost:8080/api/admin/lecturers", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify(payload),
+      });
+
+      if (!resp.ok) {
+        const data = await resp.json().catch(() => null);
+        const message = data?.message || `HTTP ${resp.status}`;
+        throw new Error(message);
+      }
+
+      const data = await resp.json();
+      if (!data?.lecturer) throw new Error("Phản hồi không hợp lệ từ máy chủ");
+      const mapped = mapBackendLecturer(data.lecturer);
+      onSaved(mapped);
+      onClose();
+    } catch (err: any) {
+      console.error("create lecturer error", err);
+      setError(err?.message || "Không thể lưu giảng viên");
     } finally {
       setSaving(false);
     }
@@ -127,7 +174,15 @@ const AddLecturerModal = ({ open, onClose, lecturer, existingClasses, onSaved }:
                 <label className="label">Họ tên</label>
                 <input className="input" value={name} onChange={(e) => setName(e.target.value)} placeholder="Nguyễn Văn A" />
                 <label className="label">Mã giảng viên</label>
-                <input className="input" value={code} onChange={(e) => setCode(e.target.value)} placeholder="GV001" />
+                <input
+                  className="input"
+                  value={code}
+                  onChange={(e) => {
+                    codeTouchedRef.current = true;
+                    setCode(e.target.value);
+                  }}
+                  placeholder="GV001"
+                />
                 <label className="label">Email</label>
                 <input className="input" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="email@domain.com" />
                 <label className="label">Số điện thoại</label>

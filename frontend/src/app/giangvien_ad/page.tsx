@@ -4,14 +4,12 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import AddLecturerModal from "./AddLecturerModal";
-import { Lecturer } from "./lecturerUtils";
+import { Lecturer, mapBackendLecturer } from "./lecturerUtils";
 
 export default function AdminLecturersPage() {
   const router = useRouter();
   const [collapsed, setCollapsed] = useState(false);
   const [search, setSearch] = useState("");
-  const [filterDept, setFilterDept] = useState("Tất cả bộ môn");
-  const [filterStatus, setFilterStatus] = useState("Tất cả trạng thái");
   const [list, setList] = useState<Lecturer[]>([]);
   const [sortKey, setSortKey] = useState<keyof Lecturer>("name");
   const [sortAsc, setSortAsc] = useState(true);
@@ -22,24 +20,46 @@ export default function AdminLecturersPage() {
   const [classesByLecturer, setClassesByLecturer] = useState<Record<string, string[]>>({});
 
   useEffect(() => {
-    const initial: Lecturer[] = [
-      { id: "1", code: "GV001", name: "Nguyễn Văn A", dept: "PRJ301", faculty: "CNTT", classes: 4, status: "Đang dạy", email: "a@uni.edu", phone: "0901" },
-      { id: "2", code: "GV002", name: "Trần Thị B", dept: "DBI201", faculty: "CNTT", classes: 2, status: "Tạm nghỉ", email: "b@uni.edu", phone: "0902" },
-      { id: "3", code: "GV003", name: "Phạm Minh C", dept: "IOT102", faculty: "Điện - Điện tử", classes: 3, status: "Đang dạy", email: "c@uni.edu", phone: "0903" },
-    ];
-    setList(initial);
-    setClassesByLecturer({
-      "1": ["SE1601", "SE1602", "JS22", "PRJ301"],
-      "2": ["SE1603", "DBI201"],
-      "3": ["IOT201", "IOT202", "CE301"],
-    });
-    try {
-      const saved = localStorage.getItem("sas_settings");
-      if (saved) {
-        const s = JSON.parse(saved);
-        document.documentElement.style.colorScheme = s.themeDark ? "dark" : "light";
+    let cancelled = false;
+    const controller = new AbortController();
+
+    const load = async () => {
+      try {
+        const saved = localStorage.getItem("sas_settings");
+        if (saved) {
+          const s = JSON.parse(saved);
+          document.documentElement.style.colorScheme = s.themeDark ? "dark" : "light";
+        }
+      } catch {}
+
+      try {
+        const resp = await fetch("http://localhost:8080/api/admin/lecturers", {
+          credentials: "include",
+          signal: controller.signal,
+        });
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+        const data = await resp.json();
+        if (cancelled) return;
+        const lecturers: Lecturer[] = Array.isArray(data?.lecturers)
+          ? data.lecturers.map((lec: any) => mapBackendLecturer(lec))
+          : [];
+        setList(lecturers);
+        const classMap: Record<string, string[]> = {};
+        lecturers.forEach((lec) => {
+          if (lec.classList?.length) classMap[lec.id] = lec.classList;
+        });
+        setClassesByLecturer(classMap);
+      } catch (err) {
+        if ((err as any)?.name === "AbortError") return;
+        console.error("fetch lecturers error", err);
       }
-    } catch {}
+    };
+
+    load();
+    return () => {
+      cancelled = true;
+      controller.abort();
+    };
   }, []);
 
   const toggleSort = (key: keyof Lecturer) => {
@@ -49,17 +69,16 @@ export default function AdminLecturersPage() {
 
   const filtered = useMemo(() => {
     let data = list.filter((s) =>
-      s.name.toLowerCase().includes(search.toLowerCase()) || s.code.toLowerCase().includes(search.toLowerCase()) || (s.email||"").toLowerCase().includes(search.toLowerCase()) || s.dept.toLowerCase().includes(search.toLowerCase())
+      (s.status === "Đang dạy" || s.status === "Tạm nghỉ") &&
+      (s.name.toLowerCase().includes(search.toLowerCase()) || s.code.toLowerCase().includes(search.toLowerCase()) || (s.email||"").toLowerCase().includes(search.toLowerCase()))
     );
-    if (filterDept !== "Tất cả bộ môn") data = data.filter((s) => s.dept === filterDept);
-    if (filterStatus !== "Tất cả trạng thái") data = data.filter((s) => s.status === filterStatus);
     data.sort((a: any, b: any) => {
       const va = (a[sortKey] || "").toString().toLowerCase();
       const vb = (b[sortKey] || "").toString().toLowerCase();
       return sortAsc ? va.localeCompare(vb) : vb.localeCompare(va);
     });
     return data;
-  }, [list, search, filterDept, filterStatus, sortKey, sortAsc]);
+  }, [list, search, sortKey, sortAsc]);
 
   const allSelected = selected.size > 0 && filtered.every((s) => selected.has(s.id));
   const toggleSelectAll = () => {
@@ -87,17 +106,17 @@ export default function AdminLecturersPage() {
 
   const onOpenCreate = () => { setEdit(null); setModalOpen(true); };
   const onOpenEdit = (s: Lecturer) => { setEdit(s); setModalOpen(true); };
-  const handleSaved = useCallback((payload: { lecturer: Lecturer; classes: string[] }) => {
-    const { lecturer, classes } = payload;
+  const handleSaved = useCallback((lecturer: Lecturer) => {
     setList((prev) => {
       const exists = prev.some((s) => s.id === lecturer.id);
       if (exists) {
-        return prev.map((s) => (s.id === lecturer.id ? { ...lecturer, classes: classes.length } : s));
+        return prev.map((s) => (s.id === lecturer.id ? lecturer : s));
       }
-      return [{ ...lecturer, classes: classes.length }, ...prev];
+      return [lecturer, ...prev];
     });
-    setClassesByLecturer((prev) => ({ ...prev, [lecturer.id]: classes }));
-    setModalOpen(false);
+    if (lecturer.classList) {
+      setClassesByLecturer((prev) => ({ ...prev, [lecturer.id]: lecturer.classList ?? [] }));
+    }
   }, []);
 
   const stats = useMemo(() => {
@@ -136,23 +155,8 @@ export default function AdminLecturersPage() {
         <div className="controls">
           <div className="search">
             <i className="fas fa-search" />
-            <input value={search} onChange={(e)=>setSearch(e.target.value)} placeholder="Tìm tên, mã GV, email, bộ môn" />
+            <input value={search} onChange={(e)=>setSearch(e.target.value)} placeholder="Tìm tên, MSGV" />
           </div>
-          <div className="filter-line">
-            <select className="input" value={filterDept} onChange={(e)=>setFilterDept(e.target.value)}>
-              <option>Tất cả bộ môn</option>
-              <option>Lập trình</option>
-              <option>Cơ sở dữ liệu</option>
-              <option>Hệ thống nhúng</option>
-            </select>
-            <select className="input" value={filterStatus} onChange={(e)=>setFilterStatus(e.target.value)}>
-              <option>Tất cả trạng thái</option>
-              <option>Đang dạy</option>
-              <option>Tạm nghỉ</option>
-              <option>Thôi việc</option>
-            </select>
-          </div>
-          <button className="btn-primary" onClick={onOpenCreate}>+ Thêm giảng viên</button>
           <button className="qr-btn" onClick={async ()=>{ 
             if (confirm('Bạn có chắc muốn đăng xuất?')) {
               try { await fetch('http://localhost:8080/api/auth/logout', { method: 'POST', credentials: 'include' }); } catch {}
@@ -195,11 +199,6 @@ export default function AdminLecturersPage() {
             <span className="chip-title">Xuất danh sách</span>
             <span className="chip-sub">Tải CSV nhanh</span>
           </button>
-          <button className="chip danger" disabled={!anySelected} onClick={bulkDelete}>
-            <span className="chip-icon">🗑</span>
-            <span className="chip-title">Xóa hàng loạt</span>
-            <span className="chip-sub">{anySelected ? `${selected.size} mục` : "Chọn để xóa"}</span>
-          </button>
         </div>
         <div className="right">{anySelected ? `${selected.size} đã chọn` : ""}</div>
       </div>
@@ -210,7 +209,7 @@ export default function AdminLecturersPage() {
             <div><input type="checkbox" checked={anySelected && filtered.every(s=>selected.has(s.id))} onChange={() => { if (anySelected && filtered.every(s=>selected.has(s.id))) setSelected(new Set()); else setSelected(new Set(filtered.map(s=>s.id))); }} /></div>
             <div className="th" onClick={()=>toggleSort("code")}>Mã GV</div>
             <div className="th" onClick={()=>toggleSort("name")}>Họ tên</div>
-            <div className="th" onClick={()=>toggleSort("dept")}>Bộ môn</div>
+            <div className="th" onClick={()=>toggleSort("email")}>Email</div>
             <div className="th" onClick={()=>toggleSort("classes")}>Số lớp</div>
             <div className="th" onClick={()=>toggleSort("status")}>Trạng thái</div>
             <div>Thao tác</div>
@@ -223,7 +222,7 @@ export default function AdminLecturersPage() {
                   <div><input type="checkbox" checked={selected.has(s.id)} onChange={(e)=>{e.stopPropagation(); toggleSelect(s.id);}} /></div>
                   <div>{s.code}</div>
                   <div>{s.name}</div>
-                  <div>{s.dept}</div>
+                  <div>{s.email || "--"}</div>
                   <div>{classCount}</div>
                   <div><span className={`status ${s.status}`.replace(/\s/g,"-")}>{s.status}</span></div>
                   <div className="actions">
@@ -286,7 +285,6 @@ export default function AdminLecturersPage() {
         onClose={() => setModalOpen(false)}
         lecturer={edit}
         onSaved={handleSaved}
-        existingClasses={edit ? classesByLecturer[edit.id] ?? [] : []}
       />
     </Shell>
   );
