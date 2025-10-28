@@ -6,18 +6,12 @@ rem  Smart Attendance System - Setup Script (Windows)
 rem  - Installs backend & frontend dependencies
 rem  - Copies environment file if missing
 rem  - Drops existing DB, reapplies Prisma migrations, seeds sample data
+rem  - No flags: always reset + seed to ensure clean environment
 rem =============================================================
 
-set RESET_DB=1
-set RUN_SEED=1
 set EXIT_CODE=0
 set STEP=1
 set CURRENT_TASK=Initializing setup
-
-for %%A in (%*) do (
-  if /I "%%~A"=="noreset" set RESET_DB=0
-  if /I "%%~A"=="noseed" set RUN_SEED=0
-)
 
 echo.
 echo ===> Smart Attendance System setup starting...
@@ -52,18 +46,14 @@ if errorlevel 1 (
   goto :backend_fail
 )
 
-if "%RESET_DB%"=="1" (
-  call :logStep "Reset database (prisma migrate reset)"
-  echo [step] Resetting database via Prisma (DROP & recreate)...
-  call npx prisma migrate reset --force --skip-generate
-  if errorlevel 1 (
-    echo [fatal] Prisma migrate reset failed. Verify MySQL service and DATABASE_URL.
-    goto :backend_fail
-  ) else (
-    echo [info] Database reset completed.
-  )
+call :logStep "Reset database (prisma migrate reset)"
+echo [step] Resetting database via Prisma (DROP & recreate)...
+call npx prisma migrate reset --force --skip-generate
+if errorlevel 1 (
+  echo [fatal] Prisma migrate reset failed. Verify MySQL service and DATABASE_URL.
+  goto :backend_fail
 ) else (
-  echo [info] Skipping DB reset (flag noreset detected).
+  echo [info] Database reset completed.
 )
 
 call :logStep "Apply Prisma migrations"
@@ -82,17 +72,13 @@ if errorlevel 1 (
   echo [info] Prisma migrate deploy succeeded.
 )
 
-if "%RUN_SEED%"=="1" (
-  call :logStep "Seed sample data"
-  echo [step] Seeding sample data (seedSemesterAttendance.js)...
-  call node scripts\seedSemesterAttendance.js
-  if errorlevel 1 (
-    echo [warn] Seed script failed. Review logs above.
-  ) else (
-    echo [info] Seed completed.
-  )
+call :logStep "Seed sample data"
+echo [step] Seeding sample data (seedSemesterAttendance.js)...
+call node scripts\seedSemesterAttendance.js
+if errorlevel 1 (
+  echo [warn] Seed script failed. Review logs above.
 ) else (
-  echo [info] Skipped seeding (flag noseed detected).
+  echo [info] Seed completed.
 )
 
 :backend_done
@@ -125,14 +111,8 @@ echo ===> Setup finished.
 echo     Run backend:   cd backend ^&^& node index.js
 echo     Run frontend:  cd frontend ^&^& npm run dev
 echo.
-if "%RUN_SEED%"=="1" (
-  echo     (Seed script already executed.)
-) else (
-  echo     (To seed later: cd backend ^&^& node scripts\seedSemesterAttendance.js)
-)
-if "%RESET_DB%"=="1" (
-  echo     (Database was reset via prisma migrate reset.)
-)
+echo     (Seed script already executed.)
+echo     (Database was reset via prisma migrate reset.)
 set CURRENT_TASK=Completed
 goto :END
 
