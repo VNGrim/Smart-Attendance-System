@@ -1,7 +1,7 @@
 SMART ATTENDANCE SYSTEM - SETUP GUIDE
 ====================================
 
-This document liệt kê các bước tối thiểu để chạy dự án trên máy mới và đồng bộ cơ sở dữ liệu MySQL.
+This document liệt kê các bước tối thiểu để chạy dự án trên máy mới, đồng bộ cơ sở dữ liệu MySQL và cách chạy localhost.
 
 1. YÊU CẦU HỆ THỐNG
 -------------------
@@ -11,83 +11,34 @@ This document liệt kê các bước tối thiểu để chạy dự án trên 
 - (Tùy chọn) Docker >= 24.x
 - Trình quản lý phiên bản Node như nvm/fnm giúp đổi phiên bản nhanh hơn
 
-2. CLONE DỰ ÁN
+2. CLONE DỰ ÁN (Thực hiện 1 lần)
 --------------
 ```
 git clone https://github.com/VNGrim/Smart-Attendance-System.git
 cd Smart-Attendance-System
 ```
 
-3. THIẾT LẬP BACKEND (THƯ MỤC /backend)
+3. THIẾT LẬP FRONTEND & BACKEND & PRISMA (Thực hiện 1 lần)
 ---------------------------------------
-3.1 Tạo file môi trường
-```
-cd backend
-cp .env.example .env   # Windows: copy .env.example .env
-```
-Chỉnh biến `DATABASE_URL` theo mẫu:
-```
-DATABASE_URL="mysql://USER:PASSWORD@HOST:PORT/DBNAME"
-```
-Đảm bảo database và tài khoản MySQL tồn tại.
+- Kiểm tra trong thư mục /backend có file .env không, nếu không có thì sao chép file .env.example thành .env
+- .env: DATABASE_URL="mysql://root:xxxxxx@localhost:3306/qlsv" Trong đó xxxxxx là mật khẩu mysql trên máy của mình
+- Chạy setup.bat
 
-3.2 Cài dependency Node
-```
-npm install
-```
-
-3.3 Đồng bộ schema Prisma
-- Áp dụng migrations đã commit:
-```
-npx prisma migrate deploy
-```
-- Hoặc tạo bảng theo schema hiện tại (dành cho môi trường trống):
-```
-npx prisma db push
-```
-
-3.4 Seed dữ liệu mẫu (tuỳ chọn)
-```
-node scripts/seedSemesterAttendance.js
-```
-
-3.5 Chạy backend
-```
-node index.js
-```
-Backend mặc định dùng `http://localhost:8080`.
-
-4. THIẾT LẬP FRONTEND (THƯ MỤC /frontend)
+4. Đồng bộ DATABASE (Cập nhật thường xuyên)
 -----------------------------------------
-4.1 Cài dependency
-```
-cd ../frontend
-npm install
-```
+- Mở MySQL Workbench
+- Chọn Data Import/Restore
+- Chọn file dump.sql trong thư mục /backend/scripts/dump
+- Nhấn Start Import
 
-4.2 Chạy ứng dụng Next.js
-```
-npm run dev
-```
-Frontend mặc định ở `http://localhost:3000`.
-
-5. ĐỒNG BỘ CƠ SỞ DỮ LIỆU CHO MÁY MỚI
+5. Cách chạy và dừng localhost 
 ------------------------------------
-Dùng Prisma migrations 
-  a. Đảm bảo `backend/.env` trỏ tới DB trống.
-  b. Chạy `npx prisma migrate deploy`.
-  c. Nếu cần dữ liệu mẫu, chạy `node scripts/seedSemesterAttendance.js`.
+- Mở cmd
+- cd tới thư mục code
+- Chạy lệnh: npx concurrently "node backend/index.js" "npm --prefix frontend run dev"
 
-
-7. TROUBLESHOOTING NHANH
-------------------------
-- Prisma Error P1001: MySQL không truy cập được → kiểm tra dịch vụ, user, firewall, port.
-- `EADDRINUSE: 8080`: cổng 8080 đã được dùng → đổi port hoặc tắt tiến trình đang lắng nghe.
-- Frontend gọi API lỗi: kiểm tra backend đang chạy và cho phép CORS (`index.js` đã bật credentials=true).
-
-8. GHI CHÚ
+6. GHI CHÚ
 ----------
-- Repo chưa có Docker Compose. Nếu muốn setup nhanh hơn, hãy bổ sung file Compose để dựng MySQL + backend + frontend tự động.
-- Khi chia sẻ file dump SQL cần lưu ý dữ liệu nhạy cảm.
+- Chỉ chia sẻ file dump SQL khi có cái gì mới.
 
 Chúc bạn cài đặt thuận lợi! 🚀
