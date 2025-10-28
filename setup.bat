@@ -16,6 +16,9 @@ rem =============================================================
 set RESET_DB=1
 set RUN_SEED=1
 set MIGRATIONS_DONE=0
+set EXIT_CODE=0
+set STEP=1
+set CURRENT_TASK=Initializing setup
 
 for %%A in (%*) do (
   if /I "%%~A"=="reset" set RESET_DB=1
@@ -26,16 +29,21 @@ for %%A in (%*) do (
 
 echo.
 echo ===> Smart Attendance System setup starting...
+set CURRENT_TASK=Locate backend directory
+call :logStep "Backend - locating project folder"
 
 set ROOT=%~dp0
 pushd "%ROOT%backend" >NUL 2>&1
 if errorlevel 1 (
   echo [error] Cannot locate backend folder. Make sure you run this script from repo root.
-  goto :EOF
+  set EXIT_CODE=1
+  goto :END
 )
 
 echo.
 echo --- Backend setup ---
+set CURRENT_TASK=Ensure backend environment file
+call :logStep "Backend - ensure environment file"
 if not exist .env (
   if exist .env.example (
     copy /Y .env.example .env >NUL
@@ -45,6 +53,8 @@ if not exist .env (
   )
 )
 
+set CURRENT_TASK=Install backend npm packages
+call :logStep "Backend - install npm packages"
 echo [step] Installing backend npm packages...
 call npm install
 if errorlevel 1 (
@@ -53,6 +63,8 @@ if errorlevel 1 (
 )
 
 if "%RESET_DB%"=="1" (
+  set CURRENT_TASK=Reset database schema
+  call :logStep "Backend - resetting database (prisma migrate reset)"
   echo [step] Resetting database via Prisma (DROP & recreate)...
   call npx prisma migrate reset --force --skip-generate
   if errorlevel 1 (
@@ -65,6 +77,8 @@ if "%RESET_DB%"=="1" (
 )
 
 if "%MIGRATIONS_DONE%"=="0" (
+  set CURRENT_TASK=Apply database migrations
+  call :logStep "Backend - applying migrations"
   echo [step] Running Prisma migrate deploy...
   call npx prisma migrate deploy
   if errorlevel 1 (
@@ -82,6 +96,8 @@ if "%MIGRATIONS_DONE%"=="0" (
 )
 
 if "%RUN_SEED%"=="1" (
+  set CURRENT_TASK=Seed sample data
+  call :logStep "Backend - seeding sample data"
   echo [step] Seeding sample data (seedSemesterAttendance.js)...
   call node scripts\seedSemesterAttendance.js
   if errorlevel 1 (
@@ -90,7 +106,7 @@ if "%RUN_SEED%"=="1" (
     echo [info] Seed completed.
   )
 ) else (
-  echo [info] Skipped seeding (pass without `noseed` to seed automatically).
+  echo [info] Skipped seeding (omit the `noseed` flag to seed automatically).
 )
 
 :backend_done
@@ -98,10 +114,13 @@ popd >NUL
 
 echo.
 echo --- Frontend setup ---
+set CURRENT_TASK=Install frontend npm packages
+call :logStep "Frontend - install npm packages"
 pushd "%ROOT%frontend" >NUL 2>&1
 if errorlevel 1 (
   echo [error] Cannot locate frontend folder. Make sure repo structure is intact.
-  goto :EOF
+  set EXIT_CODE=1
+  goto :END
 )
 
 echo [step] Installing frontend npm packages...
@@ -130,13 +149,36 @@ if "%RESET_DB%"=="1" (
   echo     (Database was reset via prisma migrate reset.)
 )
 
-goto :EOF
+set CURRENT_TASK=Completed
+goto :END
 
 :backend_fail
+set EXIT_CODE=1
+echo [fatal] Backend setup failed during step: !CURRENT_TASK!
 popd >NUL
-popd >NUL
-exit /b 1
+goto :END
 
 :frontend_fail
 popd >NUL
-exit /b 1
+set EXIT_CODE=1
+set CURRENT_TASK=Install frontend npm packages
+echo [fatal] Frontend setup failed during step: !CURRENT_TASK!
+goto :END
+
+:END
+echo.
+if "!EXIT_CODE!"=="0" (
+  echo ✅ Setup completed successfully.
+) else (
+  echo ❌ Setup finished with errors. (exit code !EXIT_CODE!)
+  echo Last attempted step: !CURRENT_TASK!
+)
+echo.
+echo Press any key to close this window...
+pause >NUL
+exit /b !EXIT_CODE!
+
+:logStep
+echo [STEP !STEP!] %~1
+set /a STEP+=1
+goto :EOF
