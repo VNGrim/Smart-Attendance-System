@@ -15,7 +15,39 @@ type Student = {
   status: "Hoạt động" | "Bị khóa";
   email?: string;
   phone?: string;
-  avatar?: string;
+  avatar?: string | null;
+  classList?: string[];
+  statusCode?: string;
+  createdAt?: string | null;
+  updatedAt?: string | null;
+};
+
+const mapBackendStudent = (item: any): Student => {
+  const classList = Array.isArray(item?.classList)
+    ? item.classList
+    : typeof item?.classes === "string"
+      ? item.classes.split(",").map((cls: string) => cls.trim()).filter(Boolean)
+      : undefined;
+
+  const status = item?.status === "Bị khóa" || item?.status === "locked" ? "Bị khóa" : "Hoạt động" as const;
+
+  return {
+    id: item?.id || item?.student_id || item?.mssv || crypto.randomUUID(),
+    mssv: item?.mssv || item?.student_id || "",
+    name: item?.name || item?.full_name || "",
+    className: item?.className || item?.class_name || (classList ? classList[0] || "" : ""),
+    cohort: item?.cohort || item?.course || "",
+    major: item?.major || "",
+    advisor: item?.advisor || item?.advisor_name || "",
+    status,
+    email: item?.email || "",
+    phone: item?.phone || "",
+    avatar: item?.avatar || item?.avatar_url || null,
+    classList,
+    statusCode: item?.statusCode || item?.status || undefined,
+    createdAt: item?.createdAt || null,
+    updatedAt: item?.updatedAt || null,
+  };
 };
 
 export default function AdminStudentsPage() {
@@ -33,12 +65,45 @@ export default function AdminStudentsPage() {
   const [modalOpen, setModalOpen] = useState(false);
   const [edit, setEdit] = useState<Student | null>(null);
 
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
   useEffect(() => {
-    setList([
-      { id: "1", mssv: "SE12345", name: "Nguyễn Minh Hào", className: "SE1601", cohort: "K19", major: "Kỹ thuật phần mềm", advisor: "Trần Văn A", status: "Hoạt động", email: "hao@example.com", phone: "0901" },
-      { id: "2", mssv: "SE12346", name: "Trần Thị Huyền", className: "SE1601", cohort: "K19", major: "Kỹ thuật phần mềm", advisor: "Trần Văn A", status: "Bị khóa", email: "huyen@example.com", phone: "0902" },
-      { id: "3", mssv: "SE12347", name: "Phạm Anh Tuấn", className: "SE1602", cohort: "K19", major: "Kỹ thuật phần mềm", advisor: "Lê Thị B", status: "Hoạt động", email: "tuan@example.com", phone: "0903" },
-    ]);
+    let isMounted = true;
+    const controller = new AbortController();
+
+    const fetchStudents = async () => {
+      setLoading(true);
+      setError(null);
+      try {
+        const params = new URLSearchParams();
+        if (search.trim()) params.set("search", search.trim());
+        if (filterClass && filterClass !== "Tất cả lớp") params.set("class", filterClass);
+        if (filterCohort && filterCohort !== "Tất cả khóa") params.set("cohort", filterCohort);
+        if (filterStatus && filterStatus !== "Tất cả trạng thái") params.set("status", filterStatus);
+
+        const resp = await fetch(`http://localhost:8080/api/admin/students${params.toString() ? `?${params.toString()}` : ""}`, {
+          credentials: "include",
+          signal: controller.signal,
+        });
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+        const data = await resp.json();
+        if (!isMounted) return;
+        const students = Array.isArray(data?.students)
+          ? (data.students as any[]).map(mapBackendStudent)
+          : [];
+        setList(students);
+      } catch (err: any) {
+        if (err.name === "AbortError") return;
+        console.error("fetch students error", err);
+        if (isMounted) setError("Không thể tải danh sách sinh viên. Vui lòng thử lại.");
+      } finally {
+        if (isMounted) setLoading(false);
+      }
+    };
+
+    fetchStudents();
+
     try {
       const saved = localStorage.getItem("sas_settings");
       if (saved) {
@@ -46,7 +111,12 @@ export default function AdminStudentsPage() {
         document.documentElement.style.colorScheme = s.themeDark ? "dark" : "light";
       }
     } catch {}
-  }, []);
+
+    return () => {
+      isMounted = false;
+      controller.abort();
+    };
+  }, [search, filterClass, filterCohort, filterStatus]);
 
   const toggleSort = (key: keyof Student) => {
     if (sortKey === key) setSortAsc(!sortAsc);
@@ -54,12 +124,7 @@ export default function AdminStudentsPage() {
   };
 
   const filtered = useMemo(() => {
-    let data = list.filter((s) =>
-      s.name.toLowerCase().includes(search.toLowerCase()) || s.mssv.toLowerCase().includes(search.toLowerCase())
-    );
-    if (filterClass !== "Tất cả lớp") data = data.filter((s) => s.className === filterClass);
-    if (filterCohort !== "Tất cả khóa") data = data.filter((s) => s.cohort === filterCohort);
-    if (filterStatus !== "Tất cả trạng thái") data = data.filter((s) => s.status === filterStatus);
+    const data = [...list];
     data.sort((a: any, b: any) => {
       const va = (a[sortKey] || "").toString().toLowerCase();
       const vb = (b[sortKey] || "").toString().toLowerCase();
@@ -208,7 +273,11 @@ export default function AdminStudentsPage() {
           <button className="chip" onClick={()=>alert("Xuất CSV/Excel")}>📤 Xuất danh sách</button>
           <button className="chip danger" disabled={!anySelected} onClick={bulkDelete}>🗑 Xóa hàng loạt</button>
         </div>
-        <div className="right">{anySelected ? `${selectedCount} đã chọn` : ""}</div>
+        <div className="right">
+          {loading && <span>Đang tải...</span>}
+          {!loading && error && <span className="error-text">{error}</span>}
+          {!loading && !error && anySelected ? `${selectedCount} đã chọn` : ""}
+        </div>
       </div>
 
       <div className="panel">
