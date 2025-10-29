@@ -131,6 +131,8 @@ const FALLBACK_CLASSES: ClassItem[] = [
 
 const API_BASE = "http://localhost:8080/api/admin/classes";
 
+const ACTIVE_LABEL: ClassItem["status"] = "Đang hoạt động";
+
 const mapBackendClass = (input: any): ClassItem => {
   const rawCode = input?.code ?? input?.class_id ?? input?.id ?? "";
   const code = String(rawCode || "");
@@ -489,7 +491,6 @@ export default function AdminClassesPage() {
   const [dark, setDark] = useState(false);
   const [notifCount] = useState(1);
   const [search, setSearch] = useState("");
-  const [filterMajor, setFilterMajor] = useState("Tất cả ngành");
   const [filterCohort, setFilterCohort] = useState("Tất cả khóa");
   const [filterTeacher, setFilterTeacher] = useState("Tất cả giảng viên");
   const [filterStatus, setFilterStatus] = useState("Tất cả trạng thái");
@@ -498,7 +499,7 @@ export default function AdminClassesPage() {
     cohorts: [],
     subjects: SUBJECT_NAME_MAP,
   }));
-  const [list, setList] = useState<ClassItem[]>(FALLBACK_CLASSES);
+  const [list, setList] = useState<ClassItem[]>(() => FALLBACK_CLASSES.filter((item) => item.status === ACTIVE_LABEL));
   const [loadingClasses, setLoadingClasses] = useState(false);
   const [sortKey, setSortKey] = useState<keyof ClassItem>("name");
   const [sortAsc, setSortAsc] = useState(true);
@@ -509,6 +510,8 @@ export default function AdminClassesPage() {
   const [edit, setEdit] = useState<ClassItem | null>(null);
   const [statusMenuOpen, setStatusMenuOpen] = useState(false);
   const [bulkProcessing, setBulkProcessing] = useState(false);
+  const [emptyMessage, setEmptyMessage] = useState<string | null>(null);
+  const [fallbackMode, setFallbackMode] = useState(false);
   const statusMenuRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -566,17 +569,36 @@ export default function AdminClassesPage() {
 
   const fetchClassList = useCallback(async () => {
     setLoadingClasses(true);
+    setEmptyMessage(null);
+    setFallbackMode(false);
     try {
       const resp = await fetch(API_BASE, { credentials: "include" });
       if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
       const data = await resp.json();
       if (Array.isArray(data?.data)) {
-        const mapped = data.data.map(mapBackendClass);
-        setList(mapped.length ? mapped : FALLBACK_CLASSES);
+        const mapped = data.data
+          .map((raw: any) => mapBackendClass(raw))
+          .filter((item: ClassItem) => item.status === ACTIVE_LABEL);
+        if (mapped.length) {
+          setList(mapped);
+          setEmptyMessage(null);
+          setFallbackMode(false);
+        } else {
+          setList([]);
+          setEmptyMessage(data?.message || "Đang không có lớp học hoạt động");
+          setFallbackMode(false);
+        }
+      } else {
+        setList([]);
+        setEmptyMessage(data?.message || "Đang không có lớp học hoạt động");
+        setFallbackMode(false);
       }
     } catch (error) {
       console.error("fetch classes error", error);
-      setList(FALLBACK_CLASSES);
+      const fallback = FALLBACK_CLASSES.filter((item: ClassItem) => item.status === ACTIVE_LABEL);
+      setList(fallback);
+      setEmptyMessage(fallback.length ? "" : "Đang không có lớp học hoạt động");
+      setFallbackMode(true);
     } finally {
       setLoadingClasses(false);
     }
@@ -619,7 +641,6 @@ export default function AdminClassesPage() {
       (c.teacher || "").toLowerCase().includes(keyword) ||
       c.cohort.toLowerCase().includes(keyword)
     );
-    if (filterMajor !== "Tất cả ngành") data = data.filter((c) => (c.major || "") === filterMajor);
     if (filterCohort !== "Tất cả khóa") data = data.filter((c) => c.cohort === filterCohort);
     if (filterTeacher !== "Tất cả giảng viên") data = data.filter((c) => (c.teacher || findTeacherName(c.teacherId)) === filterTeacher);
     if (filterStatus !== "Tất cả trạng thái") data = data.filter((c) => c.status === filterStatus);
@@ -630,7 +651,7 @@ export default function AdminClassesPage() {
       return sortAsc ? va.localeCompare(vb) : vb.localeCompare(va);
     });
     return data;
-  }, [list, search, filterMajor, filterCohort, filterTeacher, filterStatus, sortKey, sortAsc, findTeacherName]);
+  }, [list, search, filterCohort, filterTeacher, filterStatus, sortKey, sortAsc, findTeacherName]);
 
   const allSelected = selected.size > 0 && filtered.every((c) => selected.has(c.id));
   const toggleSelectAll = () => {
@@ -656,7 +677,7 @@ export default function AdminClassesPage() {
         const data = await resp.json().catch(() => null);
         throw new Error(data?.message || `HTTP ${resp.status}`);
       }
-      setList((prev) => prev.filter((c) => !selected.has(c.id)));
+      setList((prev) => prev.filter((c) => !selected.has(c.id) && c.status === ACTIVE_LABEL));
       await fetchClassList();
     } catch (error) {
       console.error("bulk delete classes error", error);
@@ -698,11 +719,14 @@ export default function AdminClassesPage() {
 
       if (updatedRecords.length) {
         const updatedMap = new Map(updatedRecords.map((item) => [item.code, item]));
-        setList((prev) =>
-          prev.map((item) => (updatedMap.has(item.code) ? { ...item, ...updatedMap.get(item.code)! } : item))
-        );
+        setList((prev) => {
+          const next = prev.map((item) => (updatedMap.has(item.code) ? { ...item, ...updatedMap.get(item.code)! } : item));
+          return next.filter((item) => item.status === ACTIVE_LABEL);
+        });
       } else {
-        setList((prev) => prev.map((c) => (selected.has(c.id) ? { ...c, status } : c)));
+        setList((prev) => prev
+          .map((c) => (selected.has(c.id) ? { ...c, status } : c))
+          .filter((c) => c.status === ACTIVE_LABEL));
       }
 
       await fetchClassList();
@@ -925,6 +949,9 @@ export default function AdminClassesPage() {
       </div>
 
       <div className="panel">
+        {fallbackMode && (
+          <div className="fallback-banner">⚠️ Không thể kết nối tới máy chủ lớp học. Đang hiển thị dữ liệu dự phòng.</div>
+        )}
         <div className="table classes-table">
           {loadingClasses && (
             <div className="loading-row">Đang tải dữ liệu lớp học...</div>
@@ -934,7 +961,6 @@ export default function AdminClassesPage() {
             <div className="th" onClick={()=>toggleSort("code")}>Mã lớp</div>
             <div className="th" onClick={()=>toggleSort("name")}>Tên lớp</div>
             <div className="th" onClick={()=>toggleSort("cohort")}>Khóa</div>
-            <div className="th" onClick={()=>toggleSort("major")}>Ngành</div>
             <div className="th" onClick={()=>toggleSort("teacher")}>Giảng viên phụ trách</div>
             <div className="th" onClick={()=>toggleSort("students")}>Số sinh viên</div>
             <div className="th" onClick={()=>toggleSort("status")}>Trạng thái</div>
@@ -950,7 +976,6 @@ export default function AdminClassesPage() {
                 <div>{c.code}</div>
                 <div>{c.name}</div>
                 <div>{c.cohort}</div>
-                <div>{c.major}</div>
                 <div>{c.teacher}</div>
                 <div>{c.students}</div>
                 <div><span className={`status ${c.status}`.replace(/\s/g,"-")}>{c.status}</span></div>
@@ -961,6 +986,9 @@ export default function AdminClassesPage() {
                 </div>
               </div>
             ))}
+            {!loadingClasses && !filtered.length && (
+              <div className="empty-state">{emptyMessage || "Đang không có lớp học hoạt động"}</div>
+            )}
           </div>
         </div>
       </div>
