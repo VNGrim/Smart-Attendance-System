@@ -1,22 +1,487 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 
 type ClassItem = {
   id: string;
   code: string;
   name: string;
+  subjectCode: string;
+  subjectName: string;
   cohort: string;
-  major: string;
+  major?: string | null;
+  teacherId?: string | null;
   teacher: string;
   teacherEmail?: string;
   students: number;
   status: "Đang hoạt động" | "Tạm nghỉ" | "Kết thúc";
 };
 
+const extractCohortDigits = (cohort: string) => {
+  if (!cohort) return null;
+  const match = cohort.toUpperCase().match(/(\d{2,})$/);
+  return match ? match[1] : null;
+};
+
+const computeFallbackClassCode = (cohort: string, existing: ClassItem[]): string | null => {
+  const digits = extractCohortDigits(cohort);
+  if (!digits) return null;
+  const prefix = `SE${digits}B`;
+  const maxNumber = existing
+    .filter((c) => typeof c.code === "string" && c.code.startsWith(prefix))
+    .map((c) => {
+      const suffix = c.code.slice(prefix.length);
+      const parsed = parseInt(suffix, 10);
+      return Number.isFinite(parsed) ? parsed : null;
+    })
+    .filter((value): value is number => value !== null)
+    .reduce((max, current) => Math.max(max, current), 0);
+
+  const nextNumber = maxNumber + 1;
+  return `${prefix}${nextNumber}`;
+};
+
+const mergeExistingClasses = (classes: ClassItem[] | undefined | null, edit: ClassItem | null): ClassItem[] => {
+  const base = Array.isArray(classes) ? classes : [];
+  if (!edit) return base;
+  return [...base.filter((item) => item.code !== edit.code), edit];
+};
+
 type StudentRow = { mssv: string; name: string; status: string; email: string };
+
+type ClassFormValues = {
+  name: string;
+  code: string;
+  subjectCode: string;
+  subjectName: string;
+  cohort: string;
+  teacherId: string;
+  major?: string | null;
+  status: ClassItem["status"];
+};
+
+type ClassOptions = {
+  teachers: { id: string; name: string; email?: string | null }[];
+  cohorts: string[];
+  subjects: Record<string, string>;
+};
+
+const SUBJECT_NAME_MAP: Record<string, string> = {
+  PRF192: "Programming Fundamentals",
+  CEA201: "Computer Organization and Architecture",
+  MAE101: "Mathematics for Engineering",
+  SSL101c: "Academic Skills for University Success",
+  CSI106: "Introduction to Computer Science",
+  SWP391: "Software development project",
+  SWT301: "SWT301",
+};
+
+const DEFAULT_CLASS_OPTIONS: ClassOptions = {
+  teachers: [],
+  cohorts: [],
+  subjects: SUBJECT_NAME_MAP,
+};
+
+const FALLBACK_CLASSES: ClassItem[] = [
+  {
+    id: "SE19B1",
+    code: "SE19B1",
+    name: SUBJECT_NAME_MAP.PRF192,
+    subjectCode: "PRF192",
+    subjectName: SUBJECT_NAME_MAP.PRF192,
+    cohort: "K19",
+    major: "CNTT",
+    teacherId: null,
+    teacher: "Nguyễn Văn A",
+    teacherEmail: "a@uni.edu",
+    students: 32,
+    status: "Đang hoạt động",
+  },
+  {
+    id: "SE19B2",
+    code: "SE19B2",
+    name: SUBJECT_NAME_MAP.CEA201,
+    subjectCode: "CEA201",
+    subjectName: SUBJECT_NAME_MAP.CEA201,
+    cohort: "K19",
+    major: "CNTT",
+    teacherId: null,
+    teacher: "Trần Thị B",
+    teacherEmail: "b@uni.edu",
+    students: 29,
+    status: "Đang hoạt động",
+  },
+  {
+    id: "SE20B1",
+    code: "SE20B1",
+    name: SUBJECT_NAME_MAP.CSI106,
+    subjectCode: "CSI106",
+    subjectName: SUBJECT_NAME_MAP.CSI106,
+    cohort: "K20",
+    major: "CNTT",
+    teacherId: null,
+    teacher: "Nguyễn Văn A",
+    teacherEmail: "a@uni.edu",
+    students: 25,
+    status: "Kết thúc",
+  },
+];
+
+const API_BASE = "http://localhost:8080/api/admin/classes";
+
+const mapBackendClass = (input: any): ClassItem => {
+  const rawCode = input?.code ?? input?.class_id ?? input?.id ?? "";
+  const code = String(rawCode || "");
+  const subjectCode = input?.subjectCode ?? input?.subject_code ?? "";
+  const subjectName = input?.subjectName ?? input?.subject_name ?? "";
+  const teacherName = input?.teacherName ?? input?.teacher_name ?? input?.teacher ?? "";
+  const teacherEmail = input?.teacherEmail ?? input?.teacher_email ?? null;
+  const teacherId = input?.teacherId ?? input?.teacher_id ?? null;
+
+  return {
+    id: code || String(input?.id ?? Math.random().toString(36).slice(2, 9)),
+    code,
+    name: input?.name ?? input?.class_name ?? subjectName ?? "",
+    subjectCode: String(subjectCode),
+    subjectName: subjectName ?? "",
+    cohort: input?.cohort ?? "",
+    major: input?.major ?? null,
+    teacherId: teacherId ? String(teacherId) : null,
+    teacher: teacherName ?? "",
+    teacherEmail: teacherEmail ?? undefined,
+    students: typeof input?.students === "number" ? input.students : input?.studentCount ?? 0,
+    status: (input?.status as ClassItem["status"]) || "Đang hoạt động",
+  };
+};
+
+const createEmptyClassForm = (options: ClassOptions): ClassFormValues => {
+  const subjectKeys = options ? Object.keys(options.subjects || {}) : [];
+  const defaultSubjectCode = subjectKeys[0] ?? "";
+  const defaultSubjectName = defaultSubjectCode ? options?.subjects?.[defaultSubjectCode] ?? "" : "";
+  const defaultTeacherId = options?.teachers?.[0]?.id ?? "";
+  const defaultCohort = options?.cohorts?.[0] ?? "";
+
+  return {
+    name: defaultSubjectName,
+    code: "",
+    subjectCode: defaultSubjectCode,
+    subjectName: defaultSubjectName,
+    cohort: defaultCohort,
+    teacherId: defaultTeacherId,
+    major: undefined,
+    status: "Đang hoạt động",
+  };
+};
+
+type ClassModalProps = {
+  open: boolean;
+  edit: ClassItem | null;
+  options: ClassOptions;
+  existingClasses: ClassItem[];
+  onClose: () => void;
+  onSubmit: (values: ClassFormValues) => Promise<void> | void;
+  onRequestCode?: (cohort: string) => Promise<string | null>;
+};
+
+const ClassModal = ({
+  open,
+  edit,
+  options,
+  existingClasses,
+  onClose,
+  onSubmit,
+  onRequestCode,
+}: ClassModalProps) => {
+  const [values, setValues] = useState<ClassFormValues>(() => createEmptyClassForm(options));
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const lastAutoCohortRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    setError(null);
+    setSaving(false);
+
+    if (edit) {
+      setValues({
+        name: edit.subjectName,
+        code: edit.code,
+        subjectCode: edit.subjectCode,
+        subjectName: edit.subjectName,
+        cohort: edit.cohort,
+        teacherId: edit.teacherId || "",
+        major: edit.major ?? undefined,
+        status: edit.status,
+      });
+      return;
+    }
+
+    const initial = createEmptyClassForm(options);
+    setValues(initial);
+
+    if (initial.cohort) {
+      const combinedExisting = mergeExistingClasses(existingClasses, edit);
+      const fallback = computeFallbackClassCode(initial.cohort, combinedExisting);
+      if (fallback) {
+        setValues((prev) => ({ ...prev, code: fallback }));
+        lastAutoCohortRef.current = initial.cohort;
+      }
+    }
+
+    if (onRequestCode && initial.cohort) {
+      let cancelled = false;
+      onRequestCode(initial.cohort)
+        .then((code) => {
+          if (!cancelled && code) {
+            setValues((prev) => ({ ...prev, code }));
+            lastAutoCohortRef.current = initial.cohort;
+          }
+        })
+        .catch((err) => console.error("prefetch class code error", err));
+      return () => {
+        cancelled = true;
+      };
+    }
+  }, [open, edit, options, onRequestCode]);
+
+  useEffect(() => {
+    setValues((prev) => {
+      const subjectName = options.subjects[prev.subjectCode] || prev.subjectName || "";
+      return { ...prev, subjectName, name: subjectName };
+    });
+  }, [options.subjects]);
+
+  useEffect(() => {
+    if (!open || edit) return;
+
+    setValues((prev) => {
+      let changed = false;
+      const next = { ...prev };
+
+      if (options.cohorts.length) {
+        const preferredCohort = prev.cohort && options.cohorts.includes(prev.cohort)
+          ? prev.cohort
+          : options.cohorts[0];
+        if (preferredCohort !== prev.cohort) {
+          next.cohort = preferredCohort;
+          changed = true;
+        }
+      }
+
+      if (options.teachers.length) {
+        const preferredTeacher = prev.teacherId && options.teachers.some((t) => t.id === prev.teacherId)
+          ? prev.teacherId
+          : options.teachers[0].id;
+        if (preferredTeacher !== prev.teacherId) {
+          next.teacherId = preferredTeacher;
+          changed = true;
+        }
+      }
+
+      return changed ? next : prev;
+    });
+  }, [options.cohorts, options.teachers, open, edit]);
+
+  useEffect(() => {
+    if (!open || edit || !onRequestCode) return;
+    const cohort = values.cohort?.trim();
+    if (!cohort) return;
+
+    if (lastAutoCohortRef.current === cohort && values.code) return;
+
+    let cancelled = false;
+    onRequestCode(cohort)
+      .then((code) => {
+        if (!cancelled && code) {
+          setValues((prev) => {
+            if (prev.cohort !== cohort) return prev;
+            return { ...prev, code };
+          });
+          lastAutoCohortRef.current = cohort;
+        }
+      })
+      .catch((err) => console.error("generate class code error", err));
+
+    return () => {
+      cancelled = true;
+    };
+  }, [values.cohort, open, edit, onRequestCode]);
+
+  const teacherName = useMemo(() => {
+    if (values.teacherId) {
+      const teacher = options.teachers.find((t) => t.id === values.teacherId);
+      if (teacher) return teacher.name;
+    }
+    if (edit?.teacher) return edit.teacher;
+    return "Chưa chọn";
+  }, [options.teachers, values.teacherId, edit?.teacher]);
+
+  const summary = useMemo(() => {
+    return [
+      { icon: "📚", label: "Mã môn", value: values.subjectCode || "Chưa nhập" },
+      { icon: "📖", label: "Tên môn", value: values.subjectName || "Chưa có" },
+      { icon: "🆔", label: "Mã lớp", value: values.code || "Chưa sinh" },
+      { icon: "🎓", label: "Khóa", value: values.cohort || "Chưa chọn" },
+      { icon: "👩‍🏫", label: "Giảng viên", value: teacherName },
+      { icon: "✅", label: "Trạng thái", value: values.status },
+    ];
+  }, [values, teacherName]);
+
+  const handleSubjectChange = (code: string) => {
+    const normalized = code.trim().toUpperCase();
+    const subjectName = options.subjects[normalized] || "";
+    setValues((prev) => ({
+      ...prev,
+      subjectCode: normalized,
+      subjectName,
+      name: subjectName,
+    }));
+  };
+
+  const handleTeacherChange = (id: string) => {
+    setValues((prev) => ({ ...prev, teacherId: id }));
+  };
+
+  const handleCohortChange = async (cohort: string) => {
+    setValues((prev) => ({ ...prev, cohort }));
+    lastAutoCohortRef.current = null;
+    if (!cohort || edit || !onRequestCode) return;
+    try {
+      const nextCode = await onRequestCode(cohort);
+      if (nextCode) {
+        setValues((prev) => ({ ...prev, code: nextCode }));
+        lastAutoCohortRef.current = cohort;
+        return;
+      }
+    } catch (err) {
+      console.error("generate class code error", err);
+    }
+    const combinedExisting = mergeExistingClasses(existingClasses, edit);
+    const fallback = computeFallbackClassCode(cohort, combinedExisting);
+    if (fallback) {
+      setValues((prev) => ({ ...prev, code: fallback }));
+      lastAutoCohortRef.current = cohort;
+    }
+  };
+
+  const subjectOptions = useMemo(() => Object.keys(options.subjects), [options.subjects]);
+  const cohortOptions = useMemo(() => options.cohorts, [options.cohorts]);
+
+  const handleSubmit = async () => {
+    if (!values.subjectCode.trim()) {
+      setError("Mã môn là bắt buộc");
+      return;
+    }
+    if (!values.cohort) {
+      setError("Vui lòng chọn khóa");
+      return;
+    }
+    if (!values.code.trim()) {
+      setError("Mã lớp chưa được sinh");
+      return;
+    }
+
+    setSaving(true);
+    setError(null);
+    try {
+      await onSubmit(values);
+    } catch (err: any) {
+      console.error("submit class error", err);
+      setError(err?.message || "Không thể lưu lớp học");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div
+      className="modal"
+      role="dialog"
+      aria-modal={open}
+      aria-hidden={!open}
+      style={{ display: open ? "flex" : "none" }}
+      onClick={onClose}
+    >
+      <div className="modal-content form-modal" onClick={(e)=>e.stopPropagation()}>
+        <div className="modal-head">
+          <div className="title">{edit?"Chỉnh sửa lớp":"Tạo lớp mới"}</div>
+          <button className="icon-btn" onClick={onClose}>✖</button>
+        </div>
+        <div className="modal-body form-grid">
+          <div className="form-col primary">
+            <div className="form-section">
+              <div className="section-head">
+                <div className="section-title">Thông tin lớp</div>
+              </div>
+              <div className="field-stack">
+                <label className="label">Mã lớp *</label>
+                <input
+                  className="input"
+                  value={values.code}
+                  onChange={(e)=>setValues((prev)=>({ ...prev, code: e.target.value.toUpperCase() }))}
+                  placeholder="SE19B1"
+                />
+                <label className="label">Mã môn *</label>
+                <select className="input" value={values.subjectCode} onChange={(e)=>handleSubjectChange(e.target.value)}>
+                  <option value="">-- Chọn mã môn --</option>
+                  {subjectOptions.map((code) => (
+                    <option key={code} value={code}>{code}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+            <div className="form-section">
+              <div className="section-head">
+                <div className="section-title">Tổ chức lớp học</div>
+              </div>
+              <div className="field-stack">
+                <label className="label">Giảng viên phụ trách *</label>
+                <select className="input" value={values.teacherId} onChange={(e)=>handleTeacherChange(e.target.value)}>
+                  <option value="">-- Chọn giảng viên --</option>
+                  {options.teachers.map((t) => (
+                    <option key={t.id} value={t.id}>{t.name}</option>
+                  ))}
+                </select>
+                <label className="label">Khóa học *</label>
+                <select className="input" value={values.cohort} onChange={(e)=>handleCohortChange(e.target.value)}>
+                  <option value="">-- Chọn khóa --</option>
+                  {cohortOptions.map((co) => (
+                    <option key={co} value={co}>{co}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+          </div>
+          <div className="form-col secondary">
+            <div className="form-section soft">
+              <div className="section-head">
+                <div className="section-title">Tóm tắt nhanh</div>
+              </div>
+              <div className="summary-grid">
+                {summary.map((item) => (
+                  <div className="summary-pill" key={item.label}>
+                    <span className="summary-icon" aria-hidden>{item.icon}</span>
+                    <span className="summary-text">{`${item.label}: ${item.value}`}</span>
+                  </div>
+                ))}
+              </div>
+              {error && <div className="error-text" style={{ color: "#ef4444", fontSize: "0.85rem" }}>{error}</div>}
+            </div>
+          </div>
+        </div>
+        <div className="modal-foot">
+          <div className="foot-left">* Thông tin bắt buộc</div>
+          <div className="foot-right">
+            <button className="qr-btn ghost" onClick={onClose} disabled={saving}>Hủy</button>
+            <button className="qr-btn" onClick={handleSubmit} disabled={saving}>💾 {saving ? "Đang lưu..." : "Lưu"}</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
 
 export default function AdminClassesPage() {
   const router = useRouter();
@@ -24,12 +489,17 @@ export default function AdminClassesPage() {
   const [dark, setDark] = useState(false);
   const [notifCount] = useState(1);
   const [search, setSearch] = useState("");
-  const [filterFaculty, setFilterFaculty] = useState("Tất cả khoa");
   const [filterMajor, setFilterMajor] = useState("Tất cả ngành");
   const [filterCohort, setFilterCohort] = useState("Tất cả khóa");
   const [filterTeacher, setFilterTeacher] = useState("Tất cả giảng viên");
   const [filterStatus, setFilterStatus] = useState("Tất cả trạng thái");
-  const [list, setList] = useState<ClassItem[]>([]);
+  const [options, setOptions] = useState<ClassOptions>(() => ({
+    teachers: [],
+    cohorts: [],
+    subjects: SUBJECT_NAME_MAP,
+  }));
+  const [list, setList] = useState<ClassItem[]>(FALLBACK_CLASSES);
+  const [loadingClasses, setLoadingClasses] = useState(false);
   const [sortKey, setSortKey] = useState<keyof ClassItem>("name");
   const [sortAsc, setSortAsc] = useState(true);
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -39,11 +509,6 @@ export default function AdminClassesPage() {
   const [edit, setEdit] = useState<ClassItem | null>(null);
 
   useEffect(() => {
-    setList([
-      { id: "1", code: "SE1601", name: ".NET nâng cao", cohort: "K19", major: "CNTT", teacher: "Nguyễn Văn A", teacherEmail: "a@uni.edu", students: 32, status: "Đang hoạt động" },
-      { id: "2", code: "SE1602", name: "Cơ sở dữ liệu", cohort: "K19", major: "CNTT", teacher: "Trần Thị B", teacherEmail: "b@uni.edu", students: 29, status: "Đang hoạt động" },
-      { id: "3", code: "SE1603", name: "Cấu trúc dữ liệu", cohort: "K20", major: "CNTT", teacher: "Nguyễn Văn A", teacherEmail: "a@uni.edu", students: 25, status: "Kết thúc" },
-    ]);
     try {
       const saved = localStorage.getItem("sas_settings");
       if (saved) {
@@ -53,6 +518,71 @@ export default function AdminClassesPage() {
       }
     } catch {}
   }, []);
+
+  const fetchOptions = useCallback(async () => {
+    try {
+      const resp = await fetch(`${API_BASE}/options`, { credentials: "include" });
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+      const data = await resp.json();
+      if (data?.data) {
+        const teachers = Array.isArray(data.data.teachers)
+          ? data.data.teachers.map((t: any) => ({
+              id: String(t.id ?? t.teacher_id ?? ""),
+              name: t.name ?? t.full_name ?? "",
+              email: t.email ?? null,
+            })).filter((t: any) => t.id && t.name)
+          : [];
+
+        const rawCohorts: string[] = Array.isArray(data.data.cohorts)
+          ? data.data.cohorts
+              .map((c: any) => {
+                if (typeof c === "string") return c.trim();
+                if (c && typeof c.code === "string") return c.code.trim();
+                return "";
+              })
+              .filter((c: string): c is string => Boolean(c))
+          : [];
+
+        const cohorts = Array.from(new Set(rawCohorts)).sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+
+        const subjects = data.data.subjects && Object.keys(data.data.subjects).length
+          ? { ...SUBJECT_NAME_MAP, ...data.data.subjects }
+          : SUBJECT_NAME_MAP;
+
+        setOptions({
+          teachers,
+          cohorts,
+          subjects,
+        });
+      }
+    } catch (error) {
+      console.error("fetch class options error", error);
+      setOptions({ teachers: [], cohorts: [], subjects: SUBJECT_NAME_MAP });
+    }
+  }, []);
+
+  const fetchClassList = useCallback(async () => {
+    setLoadingClasses(true);
+    try {
+      const resp = await fetch(API_BASE, { credentials: "include" });
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+      const data = await resp.json();
+      if (Array.isArray(data?.data)) {
+        const mapped = data.data.map(mapBackendClass);
+        setList(mapped.length ? mapped : FALLBACK_CLASSES);
+      }
+    } catch (error) {
+      console.error("fetch classes error", error);
+      setList(FALLBACK_CLASSES);
+    } finally {
+      setLoadingClasses(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchOptions();
+    fetchClassList();
+  }, [fetchOptions, fetchClassList]);
 
   const toggleDark = () => {
     const next = !dark;
@@ -71,13 +601,24 @@ export default function AdminClassesPage() {
     if (sortKey === key) setSortAsc(!sortAsc); else { setSortKey(key); setSortAsc(true); }
   };
 
+  const findTeacherName = useCallback((teacherId?: string | null) => {
+    if (!teacherId) return "";
+    const teacher = options.teachers.find((t) => t.id === teacherId);
+    return teacher ? teacher.name : "";
+  }, [options.teachers]);
+
   const filtered = useMemo(() => {
+    const keyword = search.toLowerCase();
     let data = list.filter((c) =>
-      c.code.toLowerCase().includes(search.toLowerCase()) || c.name.toLowerCase().includes(search.toLowerCase()) || c.teacher.toLowerCase().includes(search.toLowerCase()) || c.cohort.toLowerCase().includes(search.toLowerCase())
+      c.code.toLowerCase().includes(keyword) ||
+      c.name.toLowerCase().includes(keyword) ||
+      (c.subjectName || "").toLowerCase().includes(keyword) ||
+      (c.teacher || "").toLowerCase().includes(keyword) ||
+      c.cohort.toLowerCase().includes(keyword)
     );
-    if (filterMajor !== "Tất cả ngành") data = data.filter((c) => c.major === filterMajor);
+    if (filterMajor !== "Tất cả ngành") data = data.filter((c) => (c.major || "") === filterMajor);
     if (filterCohort !== "Tất cả khóa") data = data.filter((c) => c.cohort === filterCohort);
-    if (filterTeacher !== "Tất cả giảng viên") data = data.filter((c) => c.teacher === filterTeacher);
+    if (filterTeacher !== "Tất cả giảng viên") data = data.filter((c) => (c.teacher || findTeacherName(c.teacherId)) === filterTeacher);
     if (filterStatus !== "Tất cả trạng thái") data = data.filter((c) => c.status === filterStatus);
     data.sort((a: any, b: any) => {
       const va = (a[sortKey] ?? (sortKey === "students" ? 0 : "")).toString().toLowerCase();
@@ -86,7 +627,7 @@ export default function AdminClassesPage() {
       return sortAsc ? va.localeCompare(vb) : vb.localeCompare(va);
     });
     return data;
-  }, [list, search, filterFaculty, filterMajor, filterCohort, filterTeacher, filterStatus, sortKey, sortAsc]);
+  }, [list, search, filterMajor, filterCohort, filterTeacher, filterStatus, sortKey, sortAsc, findTeacherName]);
 
   const allSelected = selected.size > 0 && filtered.every((c) => selected.has(c.id));
   const toggleSelectAll = () => {
@@ -109,41 +650,83 @@ export default function AdminClassesPage() {
   const onOpenCreate = () => { setEdit(null); setModalOpen(true); };
   const onOpenEdit = (c: ClassItem) => { setEdit(c); setModalOpen(true); };
 
-  const [formName, setFormName] = useState("");
-  const [formCode, setFormCode] = useState("");
-  const [formCohort, setFormCohort] = useState("K19");
-  const [formMajor, setFormMajor] = useState("CNTT");
-  const [formTeacher, setFormTeacher] = useState("Nguyễn Văn A");
-  const [formStatus, setFormStatus] = useState<ClassItem["status"]>("Đang hoạt động");
-  const [formStudents, setFormStudents] = useState<string>("");
-  const [formDay, setFormDay] = useState("Thứ 3");
-  const [formSlot, setFormSlot] = useState("Tiết 3-5");
-  const [formRoom, setFormRoom] = useState("B206");
-
-  useEffect(() => {
-    if (edit) {
-      setFormName(edit.name); setFormCode(edit.code); setFormCohort(edit.cohort); setFormMajor(edit.major); setFormTeacher(edit.teacher); setFormStatus(edit.status);
-      setFormStudents(""); setFormDay("Thứ 3"); setFormSlot("Tiết 3-5"); setFormRoom("B206");
-    } else {
-      setFormName(""); setFormCode(""); setFormCohort("K19"); setFormMajor("CNTT"); setFormTeacher("Nguyễn Văn A"); setFormStatus("Đang hoạt động");
-      setFormStudents(""); setFormDay("Thứ 3"); setFormSlot("Tiết 3-5"); setFormRoom("B206");
+  const requestNextCode = useCallback(async (cohort: string) => {
+    if (!cohort) return null;
+    try {
+      const resp = await fetch(`${API_BASE}/next-code?cohort=${encodeURIComponent(cohort)}`, {
+        credentials: "include",
+      });
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+      const data = await resp.json();
+      return data?.data?.code || null;
+    } catch (error) {
+      console.error("request class code error", error);
+      return null;
     }
-  }, [modalOpen, edit]);
+  }, []);
 
-  const onSubmit = () => {
-    if (edit) {
-      setList((prev) => prev.map((c) => (c.id === edit.id ? { ...c, name: formName, code: formCode, cohort: formCohort, major: formMajor, teacher: formTeacher, status: formStatus } : c)));
-    } else {
-      const id = Math.random().toString(36).slice(2, 9);
-      setList((prev) => prev.concat({ id, name: formName, code: formCode || `CL${Date.now().toString().slice(-5)}`, cohort: formCohort, major: formMajor, teacher: formTeacher, students: 0, status: formStatus }));
+  const handleModalSubmit = useCallback(async (values: ClassFormValues) => {
+    const payload: any = {
+      name: values.subjectName,
+      subjectCode: values.subjectCode,
+      cohort: values.cohort,
+      teacherId: values.teacherId || undefined,
+      major: values.major || undefined,
+      code: values.code || undefined,
+      status: values.status,
+    };
+
+    try {
+      let response;
+      if (edit) {
+        response = await fetch(`${API_BASE}/${encodeURIComponent(edit.code)}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify(payload),
+        });
+      } else {
+        response = await fetch(API_BASE, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify(payload),
+        });
+      }
+
+      if (!response.ok) {
+        const data = await response.json().catch(() => null);
+        throw new Error(data?.message || `HTTP ${response.status}`);
+      }
+
+      const data = await response.json();
+      const record = mapBackendClass(data?.data || data);
+      const teacherName = record.teacher || findTeacherName(record.teacherId);
+      const merged: ClassItem = {
+        ...record,
+        teacher: teacherName,
+        subjectName: record.subjectName || options.subjects[record.subjectCode] || record.subjectName,
+      };
+
+      setList((prev) => {
+        const next = edit ? prev.map((c) => (c.code === edit.code ? merged : c)) : [merged, ...prev.filter((c) => c.code !== merged.code)];
+        return next;
+      });
+
+      fetchClassList();
+
+      setModalOpen(false);
+      setEdit(null);
+    } catch (error) {
+      console.error("handle class modal submit error", error);
+      throw error;
     }
-    setModalOpen(false);
-  };
+  }, [edit, findTeacherName, options.subjects, fetchClassList]);
 
   const stats = useMemo(() => {
     const total = list.length;
     const active = list.filter(x=>x.status === "Đang hoạt động").length;
-    const teachers = new Set(list.map(x=>x.teacher)).size;
+    const teachers = new Set(list.map(x=>x.teacher || x.teacherId || "")).size;
     const totalStudents = list.reduce((a,b)=>a + (b.students||0), 0);
     return { total, active, teachers, totalStudents };
   }, [list]);
@@ -186,13 +769,15 @@ export default function AdminClassesPage() {
             </select>
             <select className="input" value={filterCohort} onChange={(e)=>setFilterCohort(e.target.value)}>
               <option>Tất cả khóa</option>
-              <option>K19</option>
-              <option>K20</option>
+              {options.cohorts.map((cohort) => (
+                <option key={cohort} value={cohort}>{cohort}</option>
+              ))}
             </select>
             <select className="input" value={filterTeacher} onChange={(e)=>setFilterTeacher(e.target.value)}>
               <option>Tất cả giảng viên</option>
-              <option>Nguyễn Văn A</option>
-              <option>Trần Thị B</option>
+              {options.teachers.map((teacher) => (
+                <option key={teacher.id} value={teacher.name}>{teacher.name}</option>
+              ))}
             </select>
             <select className="input" value={filterStatus} onChange={(e)=>setFilterStatus(e.target.value)}>
               <option>Tất cả trạng thái</option>
@@ -202,16 +787,6 @@ export default function AdminClassesPage() {
             </select>
           </div>
           <button className="btn-primary" onClick={onOpenCreate}>+ Tạo lớp mới</button>
-          
-          <button className="icon-btn" onClick={toggleDark} title="Chuyển giao diện">{dark?"🌙":"🌞"}</button>
-          <button className="icon-btn notif" title="Thông báo">🔔{notifCount>0 && <span className="badge">{notifCount}</span>}</button>
-          <div className="avatar-menu">
-            <div className="avatar">🧑‍💼</div>
-            <div className="dropdown">
-              <a href="#" onClick={(e)=>e.preventDefault()}>Hồ sơ</a>
-              <a href="#" onClick={(e)=>{e.preventDefault(); if(confirm("Đăng xuất?")){ localStorage.removeItem("sas_user"); router.push("/login"); }}}>Đăng xuất</a>
-            </div>
-          </div>
           <button className="qr-btn" onClick={async ()=>{ 
             if (confirm('Bạn có chắc muốn đăng xuất?')) {
               try { await fetch('http://localhost:8080/api/auth/logout', { method: 'POST', credentials: 'include' }); } catch {}
@@ -251,6 +826,9 @@ export default function AdminClassesPage() {
 
       <div className="panel">
         <div className="table classes-table">
+          {loadingClasses && (
+            <div className="loading-row">Đang tải dữ liệu lớp học...</div>
+          )}
           <div className="thead">
             <div><input type="checkbox" checked={anySelected && filtered.every(c=>selected.has(c.id))} onChange={() => { if (anySelected && filtered.every(c=>selected.has(c.id))) setSelected(new Set()); else setSelected(new Set(filtered.map(c=>c.id))); }} /></div>
             <div className="th" onClick={()=>toggleSort("code")}>Mã lớp</div>
@@ -300,10 +878,9 @@ export default function AdminClassesPage() {
                 <div className="kv"><span className="k">Ngành</span><span className="v">{drawer.major}</span></div>
                 <div className="kv"><span className="k">Giảng viên</span><span className="v">{drawer.teacher} <span className="muted">({drawer.teacherEmail||"--"})</span></span></div>
                 <div className="kv"><span className="k">Trạng thái</span><span className="v"><span className={`status ${drawer.status}`.replace(/\s/g,"-")}>{drawer.status}</span></span></div>
-                <div className="section-title">Môn học & Lịch học</div>
+                <div className="section-title">Môn học</div>
                 <div className="list small">
-                  <div>Môn: Lập trình C# nâng cao</div>
-                  <div>Thời khóa biểu: {formDay} – {formSlot} | Phòng {formRoom}</div>
+                  <div>Mã môn: {drawer.subjectCode || "Chưa cập nhật"}</div>
                 </div>
                 <div className="actions-row">
                   <button className="qr-btn" onClick={()=>{ setDrawer(null); onOpenEdit(drawer); }}>✏️ Chỉnh sửa</button>
@@ -338,63 +915,15 @@ export default function AdminClassesPage() {
         </div>
       )}
 
-      {modalOpen && (
-        <div className="modal" onClick={() => setModalOpen(false)}>
-          <div className="modal-content" onClick={(e)=>e.stopPropagation()}>
-            <div className="modal-head">
-              <div className="title">{edit?"Chỉnh sửa lớp":"Tạo lớp mới"}</div>
-              <button className="icon-btn" onClick={() => setModalOpen(false)}>✖</button>
-            </div>
-            <div className="modal-body grid2">
-              <div className="form-col">
-                <label className="label">Tên lớp</label>
-                <input className="input" value={formName} onChange={(e)=>setFormName(e.target.value)} placeholder="Lập trình .NET" />
-                <label className="label">Mã lớp</label>
-                <input className="input" value={formCode} onChange={(e)=>setFormCode(e.target.value)} placeholder="SE1601" />
-                <label className="label">Khóa học</label>
-                <select className="input" value={formCohort} onChange={(e)=>setFormCohort(e.target.value)}>
-                  <option>K19</option>
-                  <option>K20</option>
-                </select>
-                <label className="label">Ngành học</label>
-                <select className="input" value={formMajor} onChange={(e)=>setFormMajor(e.target.value)}>
-                  <option>CNTT</option>
-                  <option>Điện - Điện tử</option>
-                </select>
-                <label className="label">Giảng viên phụ trách</label>
-                <select className="input" value={formTeacher} onChange={(e)=>setFormTeacher(e.target.value)}>
-                  <option>Nguyễn Văn A</option>
-                  <option>Trần Thị B</option>
-                </select>
-                <label className="label">Trạng thái</label>
-                <select className="input" value={formStatus} onChange={(e)=>setFormStatus(e.target.value as any)}>
-                  <option>Đang hoạt động</option>
-                  <option>Tạm nghỉ</option>
-                  <option>Kết thúc</option>
-                </select>
-              </div>
-              <div className="form-col">
-                <label className="label">Danh sách sinh viên (MSSV, cách nhau bởi dấu phẩy)</label>
-                <textarea className="input" rows={5} value={formStudents} onChange={(e)=>setFormStudents(e.target.value)} placeholder="SE12345, SE12346"></textarea>
-                <div className="section-title">Lịch học</div>
-                <div className="grid-3">
-                  <select className="input" value={formDay} onChange={(e)=>setFormDay(e.target.value)}>
-                    <option>Thứ 2</option><option>Thứ 3</option><option>Thứ 4</option><option>Thứ 5</option><option>Thứ 6</option>
-                  </select>
-                  <select className="input" value={formSlot} onChange={(e)=>setFormSlot(e.target.value)}>
-                    <option>Tiết 1-3</option><option>Tiết 3-5</option><option>Tiết 5-7</option>
-                  </select>
-                  <input className="input" placeholder="Phòng" value={formRoom} onChange={(e)=>setFormRoom(e.target.value)} />
-                </div>
-              </div>
-            </div>
-            <div className="modal-foot">
-              <button className="qr-btn" onClick={()=>setModalOpen(false)}>Hủy</button>
-              <button className="qr-btn" onClick={onSubmit}>💾 Lưu</button>
-            </div>
-          </div>
-        </div>
-      )}
+      <ClassModal
+        open={modalOpen}
+        edit={edit}
+        options={options}
+        existingClasses={list}
+        onClose={() => setModalOpen(false)}
+        onSubmit={handleModalSubmit}
+        onRequestCode={requestNextCode}
+      />
     </Shell>
   );
 }
