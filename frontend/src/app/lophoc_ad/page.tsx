@@ -508,6 +508,7 @@ export default function AdminClassesPage() {
   const [modalOpen, setModalOpen] = useState(false);
   const [edit, setEdit] = useState<ClassItem | null>(null);
   const [statusMenuOpen, setStatusMenuOpen] = useState(false);
+  const [bulkProcessing, setBulkProcessing] = useState(false);
   const statusMenuRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -639,15 +640,80 @@ export default function AdminClassesPage() {
     setSelected((prev) => { const next = new Set(prev); if (next.has(id)) next.delete(id); else next.add(id); return next; });
   };
 
-  const bulkDelete = () => {
+  const bulkDelete = useCallback(async () => {
+    if (!selected.size) return;
     if (!confirm("Xóa các lớp đã chọn?")) return;
-    setList((prev) => prev.filter((c) => !selected.has(c.id)));
-    setSelected(new Set());
-  };
-  const bulkStatus = (status: ClassItem["status"]) => {
-    setList((prev) => prev.map((c) => (selected.has(c.id) ? { ...c, status } : c)));
-    setSelected(new Set());
-  };
+    setBulkProcessing(true);
+    try {
+      const classIds = Array.from(selected);
+      const resp = await fetch(`${API_BASE}/bulk`, {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ classIds }),
+      });
+      if (!resp.ok) {
+        const data = await resp.json().catch(() => null);
+        throw new Error(data?.message || `HTTP ${resp.status}`);
+      }
+      setList((prev) => prev.filter((c) => !selected.has(c.id)));
+      await fetchClassList();
+    } catch (error) {
+      console.error("bulk delete classes error", error);
+      alert("Không thể xóa lớp. Vui lòng thử lại.");
+    } finally {
+      setSelected(new Set());
+      setBulkProcessing(false);
+    }
+  }, [selected, fetchClassList]);
+
+  const bulkStatus = useCallback(async (status: ClassItem["status"]) => {
+    if (!selected.size) {
+      setStatusMenuOpen(false);
+      return;
+    }
+    setBulkProcessing(true);
+    setStatusMenuOpen(false);
+    try {
+      const classIds = Array.from(selected);
+      const resp = await fetch(`${API_BASE}/bulk/status`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ classIds, status }),
+      });
+      let updatedRecords: ClassItem[] = [];
+      if (resp.ok) {
+        const data = await resp.json().catch(() => null);
+        if (Array.isArray(data?.data)) {
+          updatedRecords = data.data.map(mapBackendClass).map((record: ClassItem) => ({
+            ...record,
+            teacher: record.teacher || findTeacherName(record.teacherId),
+          }));
+        }
+      } else {
+        const data = await resp.json().catch(() => null);
+        throw new Error(data?.message || `HTTP ${resp.status}`);
+      }
+
+      if (updatedRecords.length) {
+        const updatedMap = new Map(updatedRecords.map((item) => [item.code, item]));
+        setList((prev) =>
+          prev.map((item) => (updatedMap.has(item.code) ? { ...item, ...updatedMap.get(item.code)! } : item))
+        );
+      } else {
+        setList((prev) => prev.map((c) => (selected.has(c.id) ? { ...c, status } : c)));
+      }
+
+      await fetchClassList();
+    } catch (error) {
+      console.error("bulk status classes error", error);
+      alert("Không thể cập nhật trạng thái. Vui lòng thử lại.");
+    } finally {
+      setSelected(new Set());
+      setBulkProcessing(false);
+    }
+  }, [selected, findTeacherName, fetchClassList]);
 
   const onOpenCreate = () => { setEdit(null); setModalOpen(true); };
   const onOpenEdit = (c: ClassItem) => { setEdit(c); setModalOpen(true); };
@@ -804,54 +870,34 @@ export default function AdminClassesPage() {
         <div className="card"><div className="card-title">🎓 Tổng sinh viên</div><div className="card-num">{stats.totalStudents}</div></div>
       </section>
 
-      <div className="toolbar-sub">
+      <div className="toolbar-sub classes-toolbar">
         <div className="left">
-          <button className="chip primary" onClick={onOpenCreate}>➕ Tạo lớp mới</button>
-          <div
-            className="status-menu"
-            ref={statusMenuRef}
-            style={{ position: "relative" }}
-          >
+          <button className="chip solid" onClick={onOpenCreate}>
+            <span className="chip-icon">➕</span>
+            <span className="chip-title">Tạo lớp mới</span>
+            <span className="chip-sub">Thiết lập thông tin lớp</span>
+          </button>
+          <div className="status-menu" ref={statusMenuRef}>
             <button
-              className="chip primary"
-              disabled={!anySelected}
+              className="chip outline"
+              disabled={!anySelected || bulkProcessing}
               onClick={() => setStatusMenuOpen((prev) => !prev)}
             >
-              ⚙️ Cập nhật trạng thái
+              <span className="chip-icon">⚙️</span>
+              <span className="chip-title">Cập nhật trạng thái</span>
+              <span className="chip-sub">Áp dụng cho lớp đã chọn</span>
             </button>
             {statusMenuOpen && (
               <div
                 className="status-dropdown"
-                style={{
-                  position: "absolute",
-                  top: "calc(100% + 8px)",
-                  left: 0,
-                  background: "#ffffff",
-                  borderRadius: "10px",
-                  boxShadow: "0 12px 24px rgba(15,23,42,0.18)",
-                  padding: "6px",
-                  display: "flex",
-                  flexDirection: "column",
-                  minWidth: "180px",
-                  zIndex: 20,
-                }}
               >
                 {(["Đang hoạt động", "Tạm nghỉ", "Kết thúc"] as ClassItem["status"][]).map((status) => (
                   <button
                     key={status}
                     type="button"
-                    onClick={() => { bulkStatus(status); setStatusMenuOpen(false); }}
-                    style={{
-                      border: "none",
-                      background: "transparent",
-                      textAlign: "left",
-                      padding: "8px 10px",
-                      borderRadius: "8px",
-                      fontWeight: 500,
-                      cursor: "pointer",
-                    }}
-                    onMouseEnter={(e) => (e.currentTarget.style.background = "#f3f4f6")}
-                    onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
+                    onClick={() => { bulkStatus(status); }}
+                    className="status-dropdown-item"
+                    disabled={bulkProcessing}
                   >
                     {status}
                   </button>
@@ -859,9 +905,21 @@ export default function AdminClassesPage() {
               </div>
             )}
           </div>
-          <button className="chip ghost" onClick={()=>alert("Nhập Excel/CSV")}>📥 Nhập</button>
-          <button className="chip ghost" onClick={()=>alert("Xuất CSV/Excel")}>📤 Xuất</button>
-          <button className="chip danger" disabled={!anySelected} onClick={bulkDelete}>🗑 Xóa</button>
+          <button className="chip soft" onClick={()=>alert("Nhập Excel/CSV")}>
+            <span className="chip-icon">📥</span>
+            <span className="chip-title">Nhập danh sách</span>
+            <span className="chip-sub">Hỗ trợ CSV, Excel</span>
+          </button>
+          <button className="chip outline" onClick={()=>alert("Xuất CSV/Excel")}>
+            <span className="chip-icon">📤</span>
+            <span className="chip-title">Xuất danh sách</span>
+            <span className="chip-sub">Tải về dạng CSV</span>
+          </button>
+          <button className="chip danger" disabled={!anySelected || bulkProcessing} onClick={bulkDelete}>
+            <span className="chip-icon">🗑</span>
+            <span className="chip-title">Xóa</span>
+            <span className="chip-sub">Xóa lớp đã chọn</span>
+          </button>
         </div>
         <div className="right">{anySelected ? `${selected.size} lớp đã chọn` : ""}</div>
       </div>

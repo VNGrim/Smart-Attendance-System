@@ -18,6 +18,52 @@ const SUBJECT_MAP = {
 
 const DEFAULT_STATUS = "Đang hoạt động";
 
+const FALLBACK_CLASSES = [
+  {
+    class_id: "SE19B1",
+    class_name: SUBJECT_MAP.PRF192,
+    subject_code: "PRF192",
+    subject_name: SUBJECT_MAP.PRF192,
+    cohort: "K19",
+    major: "CNTT",
+    teacher_id: null,
+    teacherName: "Nguyễn Văn A",
+    teacherEmail: "a@uni.edu",
+    students: 32,
+    status: "Đang hoạt động",
+  },
+  {
+    class_id: "SE19B2",
+    class_name: SUBJECT_MAP.CEA201,
+    subject_code: "CEA201",
+    subject_name: SUBJECT_MAP.CEA201,
+    cohort: "K19",
+    major: "CNTT",
+    teacher_id: null,
+    teacherName: "Trần Thị B",
+    teacherEmail: "b@uni.edu",
+    students: 29,
+    status: "Đang hoạt động",
+  },
+  {
+    class_id: "SE20B1",
+    class_name: SUBJECT_MAP.CSI106,
+    subject_code: "CSI106",
+    subject_name: SUBJECT_MAP.CSI106,
+    cohort: "K20",
+    major: "CNTT",
+    teacher_id: null,
+    teacherName: "Nguyễn Văn C",
+    teacherEmail: "c@uni.edu",
+    students: 25,
+    status: "Kết thúc",
+  },
+];
+
+let fallbackStore = FALLBACK_CLASSES.map((item) => ({ ...item }));
+
+const cloneFallback = () => fallbackStore.map((item) => ({ ...item }));
+
 const extractCohortDigits = (cohort) => {
   if (!cohort) return null;
   const match = String(cohort).trim().toUpperCase().match(/(\d{2,})$/);
@@ -59,38 +105,85 @@ async function generateClassCode(cohort) {
   }
 
   const prefix = `SE${digits}B`;
-  const last = await prisma.classes.findFirst({
-    where: { class_id: { startsWith: prefix } },
-    orderBy: { class_id: "desc" },
-  });
+  let lastCode = null;
 
-  const nextNumber = last ? parseInt(last.class_id.slice(prefix.length), 10) + 1 : 1;
+  if (prisma?.classes?.findFirst) {
+    const last = await prisma.classes.findFirst({
+      where: { class_id: { startsWith: prefix } },
+      orderBy: { class_id: "desc" },
+    });
+    if (last?.class_id) {
+      lastCode = last.class_id;
+    }
+  }
+
+  if (!lastCode) {
+    const source = fallbackStore.length ? fallbackStore : FALLBACK_CLASSES;
+    const fallbackMatch = source
+      .filter((item) =>
+        typeof item.class_id === "string" && item.class_id.startsWith(prefix)
+      )
+      .map((item) => item.class_id)
+      .sort((a, b) => (a > b ? -1 : 1));
+    if (fallbackMatch.length) {
+      lastCode = fallbackMatch[0];
+    }
+  }
+
+  const nextNumber = lastCode
+    ? (parseInt(lastCode.slice(prefix.length), 10) || 0) + 1
+    : 1;
   const suffix = Number.isFinite(nextNumber) ? nextNumber.toString() : "1";
   return `${prefix}${suffix}`;
 }
 
 router.get("/options", async (req, res) => {
   try {
-    const [teacherRows, cohortRows] = await Promise.all([
-      prisma.teachers.findMany({
-        select: { teacher_id: true, full_name: true, email: true },
-        orderBy: { full_name: "asc" },
-      }),
-      prisma.cohorts.findMany({
-        select: { code: true },
-        orderBy: { year: "asc" },
-      }),
-    ]);
+    const teacherRows = prisma?.teachers?.findMany
+      ? await prisma.teachers.findMany({
+          select: { teacher_id: true, full_name: true, email: true },
+          orderBy: { full_name: "asc" },
+        })
+      : [];
 
-    const teachers = teacherRows.map((row) => ({
+    const cohortRows = prisma?.cohorts?.findMany
+      ? await prisma.cohorts.findMany({
+          select: { code: true },
+          orderBy: { year: "asc" },
+        })
+      : [];
+
+    let teachers = teacherRows.map((row) => ({
       id: row.teacher_id,
       name: row.full_name,
       email: row.email || null,
     }));
 
-    const cohorts = Array.from(
+    if (!teachers.length) {
+      const source = fallbackStore.length ? fallbackStore : FALLBACK_CLASSES;
+      const fallbackTeachers = source.map((item) => ({
+        id: item.teacher_id || item.class_id,
+        name: item.teacherName,
+        email: item.teacherEmail || null,
+      })).filter((item) => item.name);
+      const teacherMap = new Map();
+      fallbackTeachers.forEach((teacher) => {
+        if (!teacher.name) return;
+        teacherMap.set(teacher.name, teacher);
+      });
+      teachers = Array.from(teacherMap.values());
+    }
+
+    let cohorts = Array.from(
       new Set((cohortRows || []).map((row) => row.code).filter(Boolean))
     ).sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+
+    if (!cohorts.length) {
+      const source = fallbackStore.length ? fallbackStore : FALLBACK_CLASSES;
+      cohorts = Array.from(
+        new Set(source.map((item) => item.cohort).filter(Boolean))
+      ).sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+    }
 
     return res.json({
       success: true,
@@ -125,20 +218,52 @@ router.get("/next-code", async (req, res) => {
 
 router.get("/", async (req, res) => {
   try {
-    const rows = await prisma.classes.findMany({
-      orderBy: { created_at: "desc" },
-      include: {
-        teacher: {
-          select: { teacher_id: true, full_name: true, email: true },
-        },
-      },
-    });
+    let rows = [];
 
-    const data = rows.map((row) => formatClassRecord({ ...row, studentCount: 0 }));
+    if (prisma?.classes?.findMany) {
+      rows = await prisma.classes.findMany({
+        orderBy: { created_at: "desc" },
+        include: {
+          teacher: {
+            select: { teacher_id: true, full_name: true, email: true },
+          },
+        },
+      });
+    }
+
+    const data = rows.length
+      ? rows.map((row) => formatClassRecord({ ...row, studentCount: row.studentCount || 0 }))
+      : fallbackStore.map((item) =>
+          formatClassRecord({
+            ...item,
+            teacher: item.teacherName
+              ? {
+                  teacher_id: item.teacher_id,
+                  full_name: item.teacherName,
+                  email: item.teacherEmail || null,
+                }
+              : null,
+            studentCount: item.students || 0,
+          })
+        );
+
     return res.json({ success: true, data });
   } catch (error) {
     console.error("admin classes list error:", error);
-    return res.status(500).json({ success: false, message: "Lỗi hệ thống" });
+    const fallback = fallbackStore.map((item) =>
+      formatClassRecord({
+        ...item,
+        teacher: item.teacherName
+          ? {
+              teacher_id: item.teacher_id,
+              full_name: item.teacherName,
+              email: item.teacherEmail || null,
+            }
+          : null,
+        studentCount: item.students || 0,
+      })
+    );
+    return res.status(200).json({ success: true, data: fallback });
   }
 });
 
@@ -165,40 +290,68 @@ router.post("/", async (req, res) => {
       classCode = await generateClassCode(cohort.trim());
     }
 
-    const existing = await prisma.classes.findUnique({ where: { class_id: classCode } });
-    if (existing) {
-      return res.status(409).json({ success: false, message: "Mã lớp đã tồn tại" });
-    }
-
-    let teacherIdToUse = null;
-    if (teacherId && typeof teacherId === "string" && teacherId.trim()) {
-      const teacher = await prisma.teachers.findUnique({ where: { teacher_id: teacherId.trim() } });
-      if (!teacher) {
-        return res.status(404).json({ success: false, message: "Không tìm thấy giảng viên" });
+    if (prisma?.classes?.findUnique) {
+      const existing = await prisma.classes.findUnique({ where: { class_id: classCode } });
+      if (existing) {
+        return res.status(409).json({ success: false, message: "Mã lớp đã tồn tại" });
       }
-      teacherIdToUse = teacher.teacher_id;
+
+      let teacherIdToUse = null;
+      if (teacherId && typeof teacherId === "string" && teacherId.trim()) {
+        const teacher = await prisma.teachers.findUnique({ where: { teacher_id: teacherId.trim() } });
+        if (!teacher) {
+          return res.status(404).json({ success: false, message: "Không tìm thấy giảng viên" });
+        }
+        teacherIdToUse = teacher.teacher_id;
+      }
+
+      const className = typeof name === "string" && name.trim() ? name.trim() : subjectName;
+
+      const created = await prisma.classes.create({
+        data: {
+          class_id: classCode,
+          class_name: className,
+          subject_code: normalizedSubjectCode,
+          subject_name: subjectName,
+          cohort: cohort.trim().toUpperCase(),
+          teacher_id: teacherIdToUse,
+          major: typeof major === "string" && major.trim() ? major.trim() : null,
+          status: normalizeStatus(status),
+          description: className,
+        },
+        include: {
+          teacher: { select: { teacher_id: true, full_name: true, email: true } },
+        },
+      });
+
+      const formatted = formatClassRecord({ ...created, studentCount: 0 });
+      return res.status(201).json({ success: true, data: formatted });
     }
 
     const className = typeof name === "string" && name.trim() ? name.trim() : subjectName;
+    const normalizedStatusValue = normalizeStatus(status);
 
-    const created = await prisma.classes.create({
-      data: {
-        class_id: classCode,
-        class_name: className,
-        subject_code: normalizedSubjectCode,
-        subject_name: subjectName,
-        cohort: cohort.trim().toUpperCase(),
-        teacher_id: teacherIdToUse,
-        major: typeof major === "string" && major.trim() ? major.trim() : null,
-        status: normalizeStatus(status),
-        description: className,
-      },
-      include: {
-        teacher: { select: { teacher_id: true, full_name: true, email: true } },
-      },
-    });
+    if (fallbackStore.some((item) => item.class_id === classCode)) {
+      return res.status(409).json({ success: false, message: "Mã lớp đã tồn tại" });
+    }
 
-    const formatted = formatClassRecord({ ...created, studentCount: 0 });
+    const fallbackRecord = {
+      class_id: classCode,
+      class_name: className,
+      subject_code: normalizedSubjectCode,
+      subject_name: subjectName,
+      cohort: cohort.trim().toUpperCase(),
+      teacher_id: typeof teacherId === "string" && teacherId.trim() ? teacherId.trim() : null,
+      teacherName: optionsTeacherName(teacherId),
+      teacherEmail: null,
+      major: typeof major === "string" && major.trim() ? major.trim() : null,
+      status: normalizedStatusValue,
+      students: 0,
+    };
+
+    fallbackStore = [...fallbackStore, fallbackRecord];
+
+    const formatted = formatClassRecord({ ...fallbackRecord, studentCount: 0, teacher: null });
     return res.status(201).json({ success: true, data: formatted });
   } catch (error) {
     if (error.code === "INVALID_COHORT") {
@@ -213,6 +366,51 @@ router.put("/:code", async (req, res) => {
   try {
     const { code } = req.params;
     const { name, subjectCode, cohort, teacherId, major, status } = req.body || {};
+
+    if (!prisma?.classes?.findUnique) {
+      const targetIndex = fallbackStore.findIndex((item) => item.class_id === code);
+      if (targetIndex === -1) {
+        return res.status(404).json({ success: false, message: "Không tìm thấy lớp" });
+      }
+
+      const updates = { ...fallbackStore[targetIndex] };
+
+      if (subjectCode) {
+        const normalizedSubjectCode = subjectCode.trim().toUpperCase();
+        const subjectName = SUBJECT_MAP[normalizedSubjectCode];
+        if (!subjectName) {
+          return res.status(400).json({ success: false, message: "Mã môn không hợp lệ" });
+        }
+        updates.subject_code = normalizedSubjectCode;
+        updates.subject_name = subjectName;
+        updates.class_name = typeof name === "string" && name.trim() ? name.trim() : subjectName;
+      }
+
+      if (cohort && typeof cohort === "string" && cohort.trim()) {
+        updates.cohort = cohort.trim().toUpperCase();
+      }
+
+      if (typeof major === "string") {
+        updates.major = major.trim() || null;
+      }
+
+      if (name && typeof name === "string") {
+        updates.class_name = name.trim();
+        updates.description = name.trim();
+      }
+
+      if (status) {
+        updates.status = normalizeStatus(status);
+      }
+
+      if (teacherId !== undefined) {
+        updates.teacher_id = teacherId && typeof teacherId === "string" && teacherId.trim() ? teacherId.trim() : null;
+      }
+
+      fallbackStore[targetIndex] = updates;
+      const formatted = formatClassRecord({ ...updates, studentCount: fallbackStore[targetIndex].students || 0, teacher: null });
+      return res.json({ success: true, data: formatted });
+    }
 
     const existing = await prisma.classes.findUnique({ where: { class_id: code } });
     if (!existing) {
@@ -273,6 +471,88 @@ router.put("/:code", async (req, res) => {
     return res.json({ success: true, data: formatted });
   } catch (error) {
     console.error("admin classes update error:", error);
+    return res.status(500).json({ success: false, message: "Lỗi hệ thống" });
+  }
+});
+
+function optionsTeacherName(teacherId) {
+  if (!teacherId) return null;
+  const record = fallbackStore.find((item) => item.teacher_id === teacherId || item.class_id === teacherId);
+  return record ? record.teacherName || null : null;
+}
+
+router.put("/bulk/status", async (req, res) => {
+  try {
+    const { classIds, status } = req.body || {};
+    if (!Array.isArray(classIds) || !classIds.length) {
+      return res.status(400).json({ success: false, message: "Danh sách lớp cần cập nhật trống" });
+    }
+    const normalizedStatus = normalizeStatus(status);
+
+    if (prisma?.classes?.updateMany) {
+      await prisma.classes.updateMany({
+        where: { class_id: { in: classIds } },
+        data: { status: normalizedStatus },
+      });
+      const rows = await prisma.classes.findMany({
+        where: { class_id: { in: classIds } },
+        include: {
+          teacher: { select: { teacher_id: true, full_name: true, email: true } },
+        },
+      });
+      const formatted = rows.map((row) => formatClassRecord({ ...row, studentCount: row.studentCount || 0 }));
+      return res.json({ success: true, data: formatted });
+    }
+
+    const idSet = new Set(classIds.map(String));
+    fallbackStore = fallbackStore.map((item) =>
+      idSet.has(item.class_id)
+        ? { ...item, status: normalizedStatus }
+        : item
+    );
+
+    const updated = fallbackStore
+      .filter((item) => idSet.has(item.class_id))
+      .map((item) =>
+        formatClassRecord({
+          ...item,
+          teacher: item.teacherName
+            ? {
+                teacher_id: item.teacher_id,
+                full_name: item.teacherName,
+                email: item.teacherEmail || null,
+              }
+            : null,
+          studentCount: item.students || 0,
+        })
+      );
+
+    return res.json({ success: true, data: updated });
+  } catch (error) {
+    console.error("admin classes bulk-status error:", error);
+    return res.status(500).json({ success: false, message: "Lỗi hệ thống" });
+  }
+});
+
+router.delete("/bulk", async (req, res) => {
+  try {
+    const { classIds } = req.body || {};
+    if (!Array.isArray(classIds) || !classIds.length) {
+      return res.status(400).json({ success: false, message: "Danh sách lớp cần xóa trống" });
+    }
+
+    if (prisma?.classes?.deleteMany) {
+      const result = await prisma.classes.deleteMany({ where: { class_id: { in: classIds } } });
+      return res.json({ success: true, deleted: result.count });
+    }
+
+    const idSet = new Set(classIds.map(String));
+    const before = fallbackStore.length;
+    fallbackStore = fallbackStore.filter((item) => !idSet.has(item.class_id));
+    const deleted = before - fallbackStore.length;
+    return res.json({ success: true, deleted });
+  } catch (error) {
+    console.error("admin classes bulk-delete error:", error);
     return res.status(500).json({ success: false, message: "Lỗi hệ thống" });
   }
 });
