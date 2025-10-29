@@ -9,7 +9,20 @@ const SAMPLE_SEMESTERS = [
   { code: 'K21', name: 'Khoá K21', totalStudents: 1870, attendanceRatio: 0.93 },
 ];
 
+const INITIAL_COHORTS = [
+  { code: 'K18', year: 2018 },
+  { code: 'K19', year: 2019 },
+];
+
 async function main() {
+  for (const cohort of INITIAL_COHORTS) {
+    await prisma.cohorts.upsert({
+      where: { code: cohort.code },
+      update: { year: cohort.year },
+      create: { code: cohort.code, year: cohort.year },
+    });
+  }
+
   for (const item of SAMPLE_SEMESTERS) {
     await prisma.semester_attendance_stats.upsert({
       where: { code: item.code },
@@ -28,7 +41,7 @@ async function main() {
     });
   }
 
-  console.log(`Seeded ${SAMPLE_SEMESTERS.length} semester attendance rows.`);
+  console.log(`Seeded ${INITIAL_COHORTS.length} cohorts and ${SAMPLE_SEMESTERS.length} semester attendance rows.`);
 }
 
 main()

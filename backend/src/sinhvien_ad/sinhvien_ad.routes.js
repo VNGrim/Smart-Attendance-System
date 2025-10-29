@@ -85,12 +85,9 @@ router.get('/options', async (req, res) => {
         FROM classes
         ORDER BY class_name ASC
       `,
-      prisma.$queryRaw`
-        SELECT DISTINCT course
-        FROM students
-        WHERE course IS NOT NULL AND course <> ''
-        ORDER BY course ASC
-      `,
+      prisma.cohorts.findMany({
+        orderBy: [{ year: 'asc' }],
+      }),
       prisma.$queryRaw`
         SELECT DISTINCT major
         FROM students
@@ -108,9 +105,27 @@ router.get('/options', async (req, res) => {
       name: cls.class_name || cls.class_id,
     }));
 
-    const cohorts = (cohortRows || [])
-      .map((row) => row.course)
-      .filter(Boolean);
+    const cohortSet = new Set((cohortRows || []).map((row) => row.code).filter(Boolean));
+    const sortedCohortRows = [...(cohortRows || [])].sort((a, b) => (a.year || 0) - (b.year || 0));
+    let latestYear = sortedCohortRows.length ? sortedCohortRows[sortedCohortRows.length - 1].year : null;
+    const currentYear = new Date().getFullYear();
+
+    if (!latestYear) {
+      latestYear = currentYear;
+    }
+
+    while (latestYear < currentYear) {
+      latestYear += 1;
+      const nextCode = `K${String(latestYear).slice(-2)}`;
+      await prisma.cohorts.upsert({
+        where: { code: nextCode },
+        update: { year: latestYear },
+        create: { code: nextCode, year: latestYear },
+      });
+      cohortSet.add(nextCode);
+    }
+
+    const cohorts = Array.from(cohortSet).sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
 
     const majors = (majorRows || [])
       .map((row) => row.major)
@@ -180,6 +195,8 @@ router.get('/', async (req, res) => {
     const normalizedStatus = normalizeStatusFilter(status);
     if (normalizedStatus) {
       where.status = normalizedStatus;
+    } else {
+      where.status = 'active';
     }
 
     const students = await prisma.students.findMany({

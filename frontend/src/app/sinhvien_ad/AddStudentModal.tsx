@@ -13,18 +13,6 @@ type AddStudentModalProps = {
   onSaved: (student: Student) => void;
 };
 
-const findClassId = (options: StudentOptions, value?: string | null) => {
-  if (!value) return options.classes[0]?.id || "";
-  const match = options.classes.find((cls) => cls.id === value || cls.name === value);
-  return match?.id || value;
-};
-
-const findAdvisorName = (options: StudentOptions, value?: string | null) => {
-  if (!value) return options.advisors[0]?.name || "";
-  const match = options.advisors.find((adv) => adv.id === value || adv.name === value);
-  return match?.name || value;
-};
-
 const findMajor = (options: StudentOptions, value?: string | null) => {
   if (!value) return options.majors[0] || "";
   const match = options.majors.find((major) => major === value);
@@ -43,21 +31,17 @@ const AddStudentModal = ({ open, onClose, options, student, onSaved }: AddStuden
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState(DEFAULT_PASSWORD);
   const [passwordEditable, setPasswordEditable] = useState(false);
-  const [classId, setClassId] = useState("");
   const [cohort, setCohort] = useState("");
   const [major, setMajor] = useState("");
-  const [advisor, setAdvisor] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const mssvTouchedRef = useRef(false);
 
   const summary = useMemo(() => ({
-    advisor,
     cohort,
     status: student?.status ?? "Hoạt động",
-    classLabel: options.classes.find((cls) => cls.id === classId)?.name || classId,
     major,
-  }), [advisor, cohort, student?.status, options.classes, classId, major]);
+  }), [cohort, student?.status, major]);
 
   const resetForm = useCallback(() => {
     mssvTouchedRef.current = false;
@@ -70,18 +54,14 @@ const AddStudentModal = ({ open, onClose, options, student, onSaved }: AddStuden
       setMssv(student.mssv);
       setName(student.name);
       setEmail(student.email || "");
-      setClassId(findClassId(options, student.className));
       setCohort(findCohort(options, student.cohort));
       setMajor(findMajor(options, student.major));
-      setAdvisor(findAdvisorName(options, student.advisor));
     } else {
       setMssv("");
       setName("");
       setEmail("");
-      setClassId(findClassId(options));
       setCohort(findCohort(options));
       setMajor(findMajor(options));
-      setAdvisor(findAdvisorName(options));
     }
   }, [options, student]);
 
@@ -89,6 +69,26 @@ const AddStudentModal = ({ open, onClose, options, student, onSaved }: AddStuden
     if (!open) return;
     resetForm();
   }, [open, resetForm]);
+
+  useEffect(() => {
+    if (!open || student) return;
+    if (options.cohorts.length) {
+      setCohort((current) => {
+        if (!current || !options.cohorts.includes(current)) {
+          return findCohort(options);
+        }
+        return current;
+      });
+    }
+    if (options.majors.length) {
+      setMajor((current) => {
+        if (!current || !options.majors.includes(current)) {
+          return findMajor(options);
+        }
+        return current;
+      });
+    }
+  }, [open, student, options]);
 
   useEffect(() => {
     if (!open || student) return;
@@ -136,10 +136,8 @@ const AddStudentModal = ({ open, onClose, options, student, onSaved }: AddStuden
         const mapped = mapBackendStudent(data.student);
         setName(mapped.name);
         setEmail(mapped.email || "");
-        setClassId(findClassId(options, mapped.className));
         setCohort(findCohort(options, mapped.cohort));
         setMajor(findMajor(options, mapped.major));
-        setAdvisor(findAdvisorName(options, mapped.advisor));
       }
     } catch (err) {
       console.error("lookup student info error", err);
@@ -169,9 +167,7 @@ const AddStudentModal = ({ open, onClose, options, student, onSaved }: AddStuden
         fullName: name.trim(),
         email: email.trim() || undefined,
         cohort,
-        className: classId,
         major,
-        advisor,
         password: passwordEditable ? password : undefined,
       };
 
@@ -197,11 +193,9 @@ const AddStudentModal = ({ open, onClose, options, student, onSaved }: AddStuden
     } finally {
       setSaving(false);
     }
-  }, [student, name, cohort, mssv, email, classId, major, advisor, passwordEditable, password, onSaved]);
+  }, [student, name, cohort, mssv, email, major, passwordEditable, password, onSaved]);
 
-  const classOptions = useMemo(() => options.classes, [options.classes]);
   const cohortOptions = useMemo(() => options.cohorts, [options.cohorts]);
-  const advisorOptions = useMemo(() => options.advisors, [options.advisors]);
   const majorOptions = useMemo(() => options.majors, [options.majors]);
 
   return (
@@ -285,37 +279,20 @@ const AddStudentModal = ({ open, onClose, options, student, onSaved }: AddStuden
                 <div className="section-subtitle">Sắp xếp sinh viên vào lớp và cố vấn</div>
               </div>
               <div className="field-stack">
-                <div className="grid-2">
-                  <div>
-                    <label className="label">Lớp</label>
-                    <select className="input" value={classId} onChange={(e) => setClassId(e.target.value)}>
-                      {classOptions.map((cls) => (
-                        <option key={cls.id} value={cls.id}>{cls.name}</option>
-                      ))}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="label">Khóa</label>
-                    <select className="input" value={cohort} onChange={(e) => {
-                      mssvTouchedRef.current = true;
-                      setCohort(e.target.value);
-                    }}>
-                      {cohortOptions.map((co) => (
-                        <option key={co} value={co}>{co}</option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
+                <label className="label">Khóa</label>
+                <select className="input" value={cohort} onChange={(e) => {
+                  mssvTouchedRef.current = false;
+                  setCohort(e.target.value);
+                  setMssv("");
+                }}>
+                  {cohortOptions.map((co) => (
+                    <option key={co} value={co}>{co}</option>
+                  ))}
+                </select>
                 <label className="label">Ngành</label>
                 <select className="input" value={major} onChange={(e) => setMajor(e.target.value)}>
                   {majorOptions.map((mjr) => (
                     <option key={mjr} value={mjr}>{mjr}</option>
-                  ))}
-                </select>
-                <label className="label">Giảng viên phụ trách</label>
-                <select className="input" value={advisor} onChange={(e) => setAdvisor(e.target.value)}>
-                  {advisorOptions.map((adv) => (
-                    <option key={adv.id} value={adv.name}>{adv.name}</option>
                   ))}
                 </select>
               </div>
@@ -327,9 +304,9 @@ const AddStudentModal = ({ open, onClose, options, student, onSaved }: AddStuden
               </div>
               <div className="summary-grid">
                 <div className="summary-pill">✅ Trạng thái mặc định: {summary.status}</div>
-                <div className="summary-pill">👨‍🏫 Giảng viên: {summary.advisor}</div>
+                <div className="summary-pill">🧑‍🎓 Sinh viên: {name || "Chưa nhập"}</div>
                 <div className="summary-pill">🎓 Khóa: {summary.cohort}</div>
-                <div className="summary-pill">🏫 Lớp: {summary.classLabel}</div>
+                <div className="summary-pill">🆔 MSSV: {mssv || "Chưa có"}</div>
                 <div className="summary-pill">🧑‍🎓 Ngành: {summary.major}</div>
               </div>
             </div>

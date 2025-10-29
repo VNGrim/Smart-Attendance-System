@@ -1,39 +1,18 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { Lecturer, LecturerStatus, LECTURER_STATUSES } from "./lecturerUtils";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Lecturer, LecturerStatus, mapBackendLecturer } from "./lecturerUtils";
 
 type AddLecturerModalProps = {
   open: boolean;
   onClose: () => void;
   lecturer: Lecturer | null;
-  existingClasses: string[];
-  onSaved: (payload: { lecturer: Lecturer; classes: string[] }) => void;
+  onSaved: (lecturer: Lecturer) => void;
 };
 
 const DEFAULT_PASSWORD = "giangvienfpt";
 
-const SUBJECT_OPTIONS = [
-  { code: "PRJ301", name: "Dự án phần mềm", faculty: "CNTT" },
-  { code: "DBI201", name: "Cơ sở dữ liệu", faculty: "CNTT" },
-  { code: "IOT102", name: "Internet of Things", faculty: "Điện - Điện tử" },
-  { code: "MOB101", name: "Lập trình di động", faculty: "CNTT" },
-  { code: "MAS202", name: "Khai phá dữ liệu", faculty: "CNTT" },
-];
-
-const BASE_CLASS_OPTIONS = [
-  "SE1601",
-  "SE1602",
-  "SE1603",
-  "JS22",
-  "DBI201",
-  "PRJ301",
-  "IOT201",
-  "IOT202",
-  "CE301",
-];
-
-const AddLecturerModal = ({ open, onClose, lecturer, existingClasses, onSaved }: AddLecturerModalProps) => {
+const AddLecturerModal = ({ open, onClose, lecturer, onSaved }: AddLecturerModalProps) => {
   const [name, setName] = useState("");
   const [code, setCode] = useState("");
   const [email, setEmail] = useState("");
@@ -41,28 +20,16 @@ const AddLecturerModal = ({ open, onClose, lecturer, existingClasses, onSaved }:
   const [password, setPassword] = useState(DEFAULT_PASSWORD);
   const [passwordEditable, setPasswordEditable] = useState(false);
   const [status, setStatus] = useState<LecturerStatus>("Đang dạy");
-  const [subjectCode, setSubjectCode] = useState(SUBJECT_OPTIONS[0]?.code || "");
-  const [faculty, setFaculty] = useState(SUBJECT_OPTIONS[0]?.faculty || "CNTT");
-  const [selectedClasses, setSelectedClasses] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  const subjectMap = useMemo(() => {
-    const map = new Map<string, { name: string; faculty: string }>();
-    SUBJECT_OPTIONS.forEach((opt) => map.set(opt.code, { name: opt.name, faculty: opt.faculty }));
-    return map;
-  }, []);
-
-  const classOptions = useMemo(() => {
-    const merged = new Set<string>([...BASE_CLASS_OPTIONS, ...(existingClasses || [])]);
-    return Array.from(merged);
-  }, [existingClasses]);
+  const codeTouchedRef = useRef(false);
 
   const resetForm = useCallback(() => {
     setError(null);
     setSaving(false);
     setPasswordEditable(false);
     setPassword(DEFAULT_PASSWORD);
+    codeTouchedRef.current = false;
 
     if (lecturer) {
       setName(lecturer.name);
@@ -70,21 +37,14 @@ const AddLecturerModal = ({ open, onClose, lecturer, existingClasses, onSaved }:
       setEmail(lecturer.email || "");
       setPhone(lecturer.phone || "");
       setStatus(lecturer.status);
-      const initialSubject = lecturer.dept || SUBJECT_OPTIONS[0]?.code || "";
-      setSubjectCode(initialSubject);
-      setFaculty(lecturer.faculty || subjectMap.get(initialSubject)?.faculty || "CNTT");
-      setSelectedClasses(existingClasses || []);
     } else {
       setName("");
       setCode("");
       setEmail("");
       setPhone("");
       setStatus("Đang dạy");
-      setSubjectCode(SUBJECT_OPTIONS[0]?.code || "");
-      setFaculty(SUBJECT_OPTIONS[0]?.faculty || "CNTT");
-      setSelectedClasses(existingClasses || []);
     }
-  }, [existingClasses, lecturer, subjectMap]);
+  }, [lecturer]);
 
   useEffect(() => {
     if (!open) return;
@@ -92,55 +52,95 @@ const AddLecturerModal = ({ open, onClose, lecturer, existingClasses, onSaved }:
   }, [open, resetForm]);
 
   useEffect(() => {
-    if (!open) return;
-    const subject = subjectMap.get(subjectCode);
-    if (subject) {
-      setFaculty(subject.faculty);
-    }
-  }, [open, subjectCode, subjectMap]);
+    if (!open || lecturer || codeTouchedRef.current) return;
 
-  const handleToggleClass = (cls: string) => {
-    setSelectedClasses((prev) => {
-      const next = prev.includes(cls) ? prev.filter((item) => item !== cls) : [...prev, cls];
-      return next;
-    });
-  };
+    let cancelled = false;
+    const controller = new AbortController();
 
-  const subjectName = subjectMap.get(subjectCode)?.name || subjectCode;
+    const fetchNextId = async () => {
+      try {
+        const resp = await fetch("http://localhost:8080/api/admin/lecturers/next-id", {
+          credentials: "include",
+          signal: controller.signal,
+        });
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+        const data = await resp.json();
+        const nextId = data?.data?.nextId;
+        if (!cancelled && typeof nextId === "string" && nextId.trim()) {
+          setCode((current) => (current.trim() ? current : nextId));
+        }
+      } catch (err: any) {
+        if (err?.name === "AbortError") return;
+        console.error("fetch next lecturer id error", err);
+      }
+    };
+
+    fetchNextId();
+    return () => {
+      cancelled = true;
+      controller.abort();
+    };
+  }, [open, lecturer]);
 
   const summary = useMemo(() => {
     return {
-      subjectName,
+      code: code || "Chưa nhập",
+      name: name || "Chưa nhập",
+      email: email || "Chưa nhập",
       status,
-      classes: selectedClasses,
     };
-  }, [selectedClasses, status, subjectName]);
+  }, [code, email, name, status]);
 
-  const handleSave = () => {
+  const summaryItems = useMemo(
+    () => [
+      { icon: "🆔", label: "Mã GV", value: summary.code },
+      { icon: "📛", label: "Họ tên", value: summary.name },
+      { icon: "✉️", label: "Email", value: summary.email },
+      { icon: "✅", label: "Trạng thái", value: summary.status },
+    ],
+    [summary]
+  );
+
+  const handleSave = async () => {
     if (saving) return;
     if (!name.trim()) {
       setError("Họ tên là bắt buộc");
       return;
     }
     const trimmedCode = code.trim();
-    const generatedCode = trimmedCode || lecturer?.code || `GV${Date.now().toString().slice(-5)}`;
-    const id = lecturer?.id || (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function" ? crypto.randomUUID() : `gv_${Date.now()}`);
-
-    const nextLecturer: Lecturer = {
-      id,
-      name: name.trim(),
-      code: generatedCode,
-      email: email.trim() || undefined,
-      phone: phone.trim() || undefined,
-      dept: subjectCode,
-      faculty,
-      status,
-      classes: selectedClasses.length,
-    };
 
     setSaving(true);
     try {
-      onSaved({ lecturer: nextLecturer, classes: selectedClasses });
+      const payload = {
+        code: trimmedCode || undefined,
+        fullName: name.trim(),
+        email: email.trim() || undefined,
+        phone: phone.trim() || undefined,
+        status,
+        password: passwordEditable ? password.trim() || undefined : undefined,
+      };
+
+      const resp = await fetch("http://localhost:8080/api/admin/lecturers", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify(payload),
+      });
+
+      if (!resp.ok) {
+        const data = await resp.json().catch(() => null);
+        const message = data?.message || `HTTP ${resp.status}`;
+        throw new Error(message);
+      }
+
+      const data = await resp.json();
+      if (!data?.lecturer) throw new Error("Phản hồi không hợp lệ từ máy chủ");
+      const mapped = mapBackendLecturer(data.lecturer);
+      onSaved(mapped);
+      onClose();
+    } catch (err: any) {
+      console.error("create lecturer error", err);
+      setError(err?.message || "Không thể lưu giảng viên");
     } finally {
       setSaving(false);
     }
@@ -174,7 +174,15 @@ const AddLecturerModal = ({ open, onClose, lecturer, existingClasses, onSaved }:
                 <label className="label">Họ tên</label>
                 <input className="input" value={name} onChange={(e) => setName(e.target.value)} placeholder="Nguyễn Văn A" />
                 <label className="label">Mã giảng viên</label>
-                <input className="input" value={code} onChange={(e) => setCode(e.target.value)} placeholder="GV001" />
+                <input
+                  className="input"
+                  value={code}
+                  onChange={(e) => {
+                    codeTouchedRef.current = true;
+                    setCode(e.target.value);
+                  }}
+                  placeholder="GV001"
+                />
                 <label className="label">Email</label>
                 <input className="input" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="email@domain.com" />
                 <label className="label">Số điện thoại</label>
@@ -215,68 +223,35 @@ const AddLecturerModal = ({ open, onClose, lecturer, existingClasses, onSaved }:
           </div>
 
           <div className="form-col secondary">
-            <div className="form-section">
-              <div className="section-head">
-                <div className="section-title">Phân công giảng dạy</div>
-                <div className="section-subtitle">Chọn mã môn và các lớp giảng viên phụ trách</div>
-              </div>
-              <div className="field-stack">
-                <label className="label">Mã môn</label>
-                <select className="input" value={subjectCode} onChange={(e) => setSubjectCode(e.target.value)}>
-                  {SUBJECT_OPTIONS.map((subject) => (
-                    <option key={subject.code} value={subject.code}>{subject.code} - {subject.name}</option>
-                  ))}
-                </select>
-                <label className="label">Trạng thái</label>
-                <select className="input" value={status} onChange={(e) => setStatus(e.target.value as LecturerStatus)}>
-                  {LECTURER_STATUSES.map((stt) => (
-                    <option key={stt} value={stt}>{stt}</option>
-                  ))}
-                </select>
-                <label className="label">Chọn lớp</label>
-                <div className="class-picker">
-                  {classOptions.map((cls) => {
-                    const active = selectedClasses.includes(cls);
-                    return (
-                      <button
-                        key={cls}
-                        type="button"
-                        className={`class-chip${active ? " active" : ""}`}
-                        onClick={() => handleToggleClass(cls)}
-                        title={active ? "Bỏ lớp" : "Chọn lớp"}
-                      >
-                        <span>{cls}</span>
-                      </button>
-                    );
-                  })}
-                </div>
-                <label className="label">Lớp phụ trách</label>
-                <div className="chips">
-                  {selectedClasses.length > 0 ? selectedClasses.map((cls) => (
-                    <span className="pill" key={cls}>{cls}</span>
-                  )) : <span className="pill muted">Chưa chọn lớp</span>}
-                </div>
-              </div>
-            </div>
             <div className="form-section soft">
               <div className="section-head">
                 <div className="section-title">Tóm tắt nhanh</div>
                 <div className="section-subtitle">Kiểm tra lại thông tin trước khi lưu</div>
               </div>
               <div className="summary-grid">
-                <div className="summary-pill">📛 {name || "Chưa nhập tên"}</div>
-                <div className="summary-pill">🆔 {code || "Chưa nhập mã"}</div>
-                <div className="summary-pill">📚 Mã môn: {subjectName}</div>
-                <div className="summary-pill">📌 Trạng thái: {summary.status}</div>
-                <div className="summary-pill">🏫 {summary.classes.length} lớp phụ trách</div>
+                {summaryItems.map((item) => (
+                  <div className="summary-pill" key={item.label}>
+                    <span className="summary-icon" aria-hidden>{item.icon}</span>
+                    <div className="summary-text">
+                      <span className="summary-label">{item.label}</span>
+                      <span className="summary-value">{item.value}</span>
+                    </div>
+                  </div>
+                ))}
               </div>
             </div>
           </div>
         </div>
         <div className="modal-foot">
-          <button className="qr-btn" onClick={onClose}>Hủy</button>
-          <button className="qr-btn" onClick={handleSave} disabled={saving}>💾 {saving ? "Đang lưu..." : "Lưu"}</button>
-          {error && <span className="error-text" style={{ marginLeft: "1rem" }}>{error}</span>}
+          <div className="foot-left">
+            {error && <span className="error-text">{error}</span>}
+          </div>
+          <div className="foot-right">
+            <button className="qr-btn ghost" onClick={onClose}>Hủy</button>
+            <button className="qr-btn" onClick={handleSave} disabled={saving}>
+              {saving ? "⏳ Đang lưu..." : "💾 Lưu"}
+            </button>
+          </div>
         </div>
       </div>
     </div>

@@ -40,6 +40,14 @@ app.use("/api/admin/overview", adminOverviewRoutes);
 const adminAnnouncementRoutes = require("./src/thongbao_ad/thongbao_ad.routes");
 app.use("/api/admin/notifications", adminAnnouncementRoutes);
 
+// Admin lecturers routes
+const adminLecturerRoutes = require("./src/giangvien_ad/giangvien_ad.routes");
+app.use("/api/admin/lecturers", adminLecturerRoutes);
+
+// Admin classes routes
+const adminClassRoutes = require("./src/lophoc_ad/lophoc_ad.routes");
+app.use("/api/admin/classes", adminClassRoutes);
+
 // Admin students routes
 const adminStudentRoutes = require("./src/sinhvien_ad/sinhvien_ad.routes");
 app.use("/api/admin/students", adminStudentRoutes);

@@ -24,19 +24,19 @@ DROP TABLE IF EXISTS `announcements`;
 /*!50503 SET character_set_client = utf8mb4 */;
 CREATE TABLE `announcements` (
   `id` int NOT NULL AUTO_INCREMENT,
-  `title` varchar(200) COLLATE utf8mb4_unicode_ci NOT NULL,
-  `content` text COLLATE utf8mb4_unicode_ci NOT NULL,
+  `title` varchar(200) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
+  `content` text CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
   `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  `category` varchar(50) COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'general',
-  `code` varchar(64) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `category` varchar(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'general',
+  `code` varchar(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `history` json DEFAULT NULL,
   `recipients` json DEFAULT NULL,
   `scheduled_at` timestamp NULL DEFAULT NULL,
   `send_time` timestamp NULL DEFAULT NULL,
-  `sender` varchar(100) COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'Admin',
-  `status` varchar(30) COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'Đã gửi',
-  `target` varchar(255) COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'Toàn trường',
-  `type` varchar(50) COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'Khác',
+  `sender` varchar(100) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'Admin',
+  `status` varchar(30) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'Đã gửi',
+  `target` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'Toàn trường',
+  `type` varchar(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'Khác',
   `updated_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
   UNIQUE KEY `announcements_code_key` (`code`),
@@ -63,4 +63,4 @@ UNLOCK TABLES;
 /*!40101 SET COLLATION_CONNECTION=@OLD_COLLATION_CONNECTION */;
 /*!40111 SET SQL_NOTES=@OLD_SQL_NOTES */;
 
--- Dump completed on 2025-10-28 13:23:55
+-- Dump completed on 2025-10-28 17:11:57

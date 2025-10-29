@@ -58,8 +58,9 @@ body { margin: 0; font-family: 'Inter', sans-serif; background: var(--background
 .notice-table .thead, .notice-table .trow { display: grid; grid-template-columns: 1.3fr 0.7fr 1fr 0.7fr 0.8fr 0.8fr 0.6fr; gap: 10px; align-items: center; }
 .thead { font-weight: 800; color: #64748b; padding: 6px 8px; }
 .tbody { display: grid; }
-.trow { background: rgba(2,6,23,0.02); border: 1px solid var(--card-border); border-radius: 12px; padding: 10px 8px; cursor: pointer; transition: background .15s ease, transform .15s ease; }
-.trow:hover { background: rgba(2,6,23,0.05); transform: translateY(-1px); }
+.trow { background: rgba(2,6,23,0.04); border: 1px solid rgba(148,163,184,0.22); border-radius: 14px; padding: 12px 10px; cursor: pointer; transition: background .18s ease, transform .18s ease, box-shadow .18s ease; }
+.trow:hover { background: rgba(59,130,246,0.08); box-shadow: 0 10px 24px rgba(15,23,42,0.08); transform: translateY(-2px); }
+.trow:active { transform: translateY(0); box-shadow: 0 6px 16px rgba(15,23,42,0.08); }
 .ttitle { font-weight: 800; }
 .status { padding: 4px 8px; border-radius: 9999px; font-weight: 800; font-size: 12px; border: 1px solid currentColor; }
 .status.Đã-gửi { color: #22c55e; }
