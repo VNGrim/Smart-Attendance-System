@@ -507,6 +507,8 @@ export default function AdminClassesPage() {
   const [drawerStudents, setDrawerStudents] = useState<StudentRow[]>([]);
   const [modalOpen, setModalOpen] = useState(false);
   const [edit, setEdit] = useState<ClassItem | null>(null);
+  const [statusMenuOpen, setStatusMenuOpen] = useState(false);
+  const statusMenuRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     try {
@@ -731,6 +733,24 @@ export default function AdminClassesPage() {
     return { total, active, teachers, totalStudents };
   }, [list]);
 
+  const anySelected = selected.size > 0;
+
+  useEffect(() => {
+    if (!statusMenuOpen) return;
+    const handler = (event: MouseEvent) => {
+      if (!statusMenuRef.current) return;
+      if (!statusMenuRef.current.contains(event.target as Node)) {
+        setStatusMenuOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [statusMenuOpen]);
+
+  useEffect(() => {
+    if (!anySelected) setStatusMenuOpen(false);
+  }, [anySelected]);
+
   const Shell = ({ children }: { children: React.ReactNode }) => (
     <div className={`layout ${collapsed ? "collapsed" : ""}`}>
       <aside className="sidebar">
@@ -761,32 +781,6 @@ export default function AdminClassesPage() {
             <i className="fas fa-search" />
             <input value={search} onChange={(e)=>setSearch(e.target.value)} placeholder="Tìm mã lớp, tên lớp, giảng viên, khóa" />
           </div>
-          <div className="filter-line">
-            <select className="input" value={filterMajor} onChange={(e)=>setFilterMajor(e.target.value)}>
-              <option>Tất cả ngành</option>
-              <option>CNTT</option>
-              <option>Điện - Điện tử</option>
-            </select>
-            <select className="input" value={filterCohort} onChange={(e)=>setFilterCohort(e.target.value)}>
-              <option>Tất cả khóa</option>
-              {options.cohorts.map((cohort) => (
-                <option key={cohort} value={cohort}>{cohort}</option>
-              ))}
-            </select>
-            <select className="input" value={filterTeacher} onChange={(e)=>setFilterTeacher(e.target.value)}>
-              <option>Tất cả giảng viên</option>
-              {options.teachers.map((teacher) => (
-                <option key={teacher.id} value={teacher.name}>{teacher.name}</option>
-              ))}
-            </select>
-            <select className="input" value={filterStatus} onChange={(e)=>setFilterStatus(e.target.value)}>
-              <option>Tất cả trạng thái</option>
-              <option>Đang hoạt động</option>
-              <option>Tạm nghỉ</option>
-              <option>Kết thúc</option>
-            </select>
-          </div>
-          <button className="btn-primary" onClick={onOpenCreate}>+ Tạo lớp mới</button>
           <button className="qr-btn" onClick={async ()=>{ 
             if (confirm('Bạn có chắc muốn đăng xuất?')) {
               try { await fetch('http://localhost:8080/api/auth/logout', { method: 'POST', credentials: 'include' }); } catch {}
@@ -801,8 +795,6 @@ export default function AdminClassesPage() {
     </div>
   );
 
-  const anySelected = selected.size > 0;
-
   return (
     <Shell>
       <section className="cards">
@@ -814,12 +806,62 @@ export default function AdminClassesPage() {
 
       <div className="toolbar-sub">
         <div className="left">
-          <button className="chip" disabled={!anySelected} onClick={()=>bulkStatus("Đang hoạt động")}>Cập nhật: Đang hoạt động</button>
-          <button className="chip" disabled={!anySelected} onClick={()=>bulkStatus("Tạm nghỉ")}>Cập nhật: Tạm nghỉ</button>
-          <button className="chip" disabled={!anySelected} onClick={()=>bulkStatus("Kết thúc")}>Cập nhật: Kết thúc</button>
-          <button className="chip" onClick={()=>alert("Nhập Excel/CSV")}>📥 Nhập danh sách</button>
-          <button className="chip" onClick={()=>alert("Xuất CSV/Excel")}>📤 Xuất danh sách</button>
-          <button className="chip danger" disabled={!anySelected} onClick={bulkDelete}>🗑 Xóa lớp</button>
+          <button className="chip primary" onClick={onOpenCreate}>➕ Tạo lớp mới</button>
+          <div
+            className="status-menu"
+            ref={statusMenuRef}
+            style={{ position: "relative" }}
+          >
+            <button
+              className="chip primary"
+              disabled={!anySelected}
+              onClick={() => setStatusMenuOpen((prev) => !prev)}
+            >
+              ⚙️ Cập nhật trạng thái
+            </button>
+            {statusMenuOpen && (
+              <div
+                className="status-dropdown"
+                style={{
+                  position: "absolute",
+                  top: "calc(100% + 8px)",
+                  left: 0,
+                  background: "#ffffff",
+                  borderRadius: "10px",
+                  boxShadow: "0 12px 24px rgba(15,23,42,0.18)",
+                  padding: "6px",
+                  display: "flex",
+                  flexDirection: "column",
+                  minWidth: "180px",
+                  zIndex: 20,
+                }}
+              >
+                {(["Đang hoạt động", "Tạm nghỉ", "Kết thúc"] as ClassItem["status"][]).map((status) => (
+                  <button
+                    key={status}
+                    type="button"
+                    onClick={() => { bulkStatus(status); setStatusMenuOpen(false); }}
+                    style={{
+                      border: "none",
+                      background: "transparent",
+                      textAlign: "left",
+                      padding: "8px 10px",
+                      borderRadius: "8px",
+                      fontWeight: 500,
+                      cursor: "pointer",
+                    }}
+                    onMouseEnter={(e) => (e.currentTarget.style.background = "#f3f4f6")}
+                    onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
+                  >
+                    {status}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+          <button className="chip ghost" onClick={()=>alert("Nhập Excel/CSV")}>📥 Nhập</button>
+          <button className="chip ghost" onClick={()=>alert("Xuất CSV/Excel")}>📤 Xuất</button>
+          <button className="chip danger" disabled={!anySelected} onClick={bulkDelete}>🗑 Xóa</button>
         </div>
         <div className="right">{anySelected ? `${selected.size} lớp đã chọn` : ""}</div>
       </div>
