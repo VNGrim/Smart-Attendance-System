@@ -16,31 +16,33 @@
 /*!40111 SET @OLD_SQL_NOTES=@@SQL_NOTES, SQL_NOTES=0 */;
 
 --
--- Table structure for table `cohorts`
+-- Table structure for table `room_availability`
 --
 
-DROP TABLE IF EXISTS `cohorts`;
+DROP TABLE IF EXISTS `room_availability`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!50503 SET character_set_client = utf8mb4 */;
-CREATE TABLE `cohorts` (
+CREATE TABLE `room_availability` (
   `id` int NOT NULL AUTO_INCREMENT,
-  `code` varchar(10) COLLATE utf8mb4_unicode_ci NOT NULL,
-  `year` int NOT NULL,
-  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `room_code` varchar(50) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `day_of_week` enum('Mon','Tue','Wed','Thu','Fri','Sat','Sun') COLLATE utf8mb4_unicode_ci NOT NULL,
+  `slot_id` int NOT NULL,
+  `is_available` tinyint(1) NOT NULL DEFAULT '1',
   PRIMARY KEY (`id`),
-  UNIQUE KEY `cohorts_code_key` (`code`),
-  KEY `cohorts_year_idx` (`year`)
-) ENGINE=InnoDB AUTO_INCREMENT=9 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+  KEY `room_availability_idx` (`room_code`,`day_of_week`,`slot_id`),
+  KEY `room_availability_slot_fk` (`slot_id`),
+  CONSTRAINT `room_availability_room_fk` FOREIGN KEY (`room_code`) REFERENCES `rooms` (`code`) ON DELETE CASCADE,
+  CONSTRAINT `room_availability_slot_fk` FOREIGN KEY (`slot_id`) REFERENCES `time_slots` (`slot_id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
--- Dumping data for table `cohorts`
+-- Dumping data for table `room_availability`
 --
 
-LOCK TABLES `cohorts` WRITE;
-/*!40000 ALTER TABLE `cohorts` DISABLE KEYS */;
-INSERT INTO `cohorts` VALUES (1,'K18',2018,'2025-10-28 07:34:18'),(2,'K19',2019,'2025-10-28 07:34:18'),(3,'K20',2020,'2025-10-28 10:38:37'),(4,'K21',2021,'2025-10-28 10:38:37'),(5,'K22',2022,'2025-10-28 10:38:37'),(6,'K23',2023,'2025-10-28 10:38:37'),(7,'K24',2024,'2025-10-28 10:38:37'),(8,'K25',2025,'2025-10-28 10:38:37');
-/*!40000 ALTER TABLE `cohorts` ENABLE KEYS */;
+LOCK TABLES `room_availability` WRITE;
+/*!40000 ALTER TABLE `room_availability` DISABLE KEYS */;
+/*!40000 ALTER TABLE `room_availability` ENABLE KEYS */;
 UNLOCK TABLES;
 /*!40103 SET TIME_ZONE=@OLD_TIME_ZONE */;
 
@@ -52,4 +54,4 @@ UNLOCK TABLES;
 /*!40101 SET COLLATION_CONNECTION=@OLD_COLLATION_CONNECTION */;
 /*!40111 SET SQL_NOTES=@OLD_SQL_NOTES */;
 
--- Dump completed on 2025-10-30  9:47:07
+-- Dump completed on 2025-10-30  9:47:08
