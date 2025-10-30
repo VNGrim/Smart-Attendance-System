@@ -20,6 +20,15 @@ async function getClassesByTeacher(teacherId) {
       ON s.classes IS NOT NULL
      AND FIND_IN_SET(UPPER(c.class_id), REPLACE(UPPER(s.classes), ' ', '')) > 0
     WHERE c.teacher_id = ${teacherId}
+    GROUP BY
+      c.class_id,
+      c.class_name,
+      c.subject_name,
+      c.subject_code,
+      c.semester,
+      c.school_year,
+      c.teacher_id,
+      c.status
     ORDER BY COALESCE(c.school_year, '9999') DESC, COALESCE(c.semester, '') DESC, c.class_name ASC
   `;
   return rows;
@@ -35,7 +44,7 @@ async function getClassSlotsByDay(classId, dayKey) {
   return prisma.timetable.findMany({
     where: {
       classes: classId,
-      day_of_week: dayKey,
+      ...(dayKey ? { day_of_week: dayKey } : {}),
     },
     select: {
       id: true,
@@ -44,6 +53,7 @@ async function getClassSlotsByDay(classId, dayKey) {
       week_key: true,
       subject_name: true,
       teacher_name: true,
+      day_of_week: true,
     },
     orderBy: { slot_id: "asc" },
   });

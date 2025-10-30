@@ -19,6 +19,7 @@ type SlotInfo = {
   weekKey?: string | null;
   subject?: string | null;
   teacherName?: string | null;
+  dayOfWeek?: string | null;
 };
 
 type SessionSummary = {
@@ -70,6 +71,61 @@ type Filter = "all" | "present" | "absent" | "excused";
 
 const API_BASE = "http://localhost:8080/api/attendances";
 
+const DAY_LABELS: Record<string, string> = {
+  Mon: "Thứ 2",
+  Tue: "Thứ 3",
+  Wed: "Thứ 4",
+  Thu: "Thứ 5",
+  Fri: "Thứ 6",
+  Sat: "Thứ 7",
+  Sun: "Chủ nhật",
+};
+
+const SESSION_REQUIREMENTS: Record<Mode, { title: string; description: string }[]> = {
+  qr: [
+    {
+      title: "Mã QR",
+      description: "Sinh viên quét QR bằng ứng dụng điểm danh để vào lớp",
+    },
+    {
+      title: "Thời hạn 60s",
+      description: "QR sẽ hết hạn sau 60 giây, có thể reset tối đa 3 lần",
+    },
+    {
+      title: "Kết nối mạng",
+      description: "Đảm bảo thiết bị của giảng viên và sinh viên có kết nối internet",
+    },
+  ],
+  code: [
+    {
+      title: "Mã 6 ký tự",
+      description: "Mã tự sinh gồm chữ cái và số, dùng cho sinh viên nhập tay",
+    },
+    {
+      title: "Hiệu lực 60s",
+      description: "Mã hết hạn sau 60 giây, reset tối đa 3 lần trước khi đóng phiên",
+    },
+    {
+      title: "Chia sẻ mã",
+      description: "Giảng viên hiển thị hoặc đọc mã cho sinh viên nhập",
+    },
+  ],
+  manual: [
+    {
+      title: "Chọn sinh viên",
+      description: "Tích chọn những sinh viên có mặt trực tiếp trong bảng danh sách",
+    },
+    {
+      title: "Lưu kết quả",
+      description: "Nhấn 'Lưu điểm danh thủ công' để cập nhật trạng thái",
+    },
+    {
+      title: "Không reset mã",
+      description: "Chế độ thủ công không sử dụng mã tự sinh",
+    },
+  ],
+};
+
 async function fetchJson<T>(input: RequestInfo | URL, init?: RequestInit): Promise<T> {
   const resp = await fetch(input, {
     credentials: "include",
@@ -118,6 +174,24 @@ export default function LecturerAttendancePage() {
   const [error, setError] = useState<string | null>(null);
   const [polling, setPolling] = useState<NodeJS.Timeout | null>(null);
   const [qrImage, setQrImage] = useState<string | null>(null);
+  const [requirements, setRequirements] = useState<{ title: string; description: string }[]>([]);
+
+  const updateQrPreview = useCallback(
+    async (code: string, sessionType: Mode) => {
+      if (sessionType !== "qr") {
+        setQrImage(null);
+        return;
+      }
+      try {
+        const url = await QRCode.toDataURL(code, { width: 256, margin: 1 });
+        setQrImage(url || null);
+      } catch (qrErr) {
+        console.error("generate qr error", qrErr);
+        setQrImage(null);
+      }
+    },
+    []
+  );
 
   const filtered = useMemo(() => {
     if (filter === "present") return students.filter((s) => s.status === "present");
@@ -209,6 +283,7 @@ export default function LecturerAttendancePage() {
         try {
           const payload = await fetchJson<{ success: boolean; data: SessionDetail }>(`${API_BASE}/sessions/${sessionId}`);
           setSession(payload.data);
+          updateQrPreview(payload.data.code, payload.data.type);
           if (payload.data.status !== "active") {
             clearInterval(timer);
             setPolling(null);
@@ -232,6 +307,7 @@ export default function LecturerAttendancePage() {
           `${API_BASE}/classes/${classId}/slots?date=${today}`
         );
         setSlots(payload.data || []);
+        setError(null);
         if (payload.data?.length) {
           setSlot(payload.data[0].slotId);
         }
@@ -288,17 +364,6 @@ export default function LecturerAttendancePage() {
           `${API_BASE}/sessions/${sessionId}`
         );
         setSession(payload.data);
-        if (payload.data.type === "qr") {
-          try {
-            const url = await QRCode.toDataURL(payload.data.code, { width: 256, margin: 1 });
-            setQrImage(url || null);
-          } catch (qrErr) {
-            console.error("generate qr error", qrErr);
-            setQrImage(null);
-          }
-        } else {
-          setQrImage(null);
-        }
         if (payload.data.status === "active") {
           pollSession(sessionId);
         }
@@ -317,9 +382,10 @@ export default function LecturerAttendancePage() {
       try {
         setSessionLoading(true);
         setError(null);
+        const today = new Date().toISOString().slice(0, 10);
         const payload = await fetchJson<{ success: boolean; data: SessionSummary; reused?: boolean }>(`${API_BASE}/sessions`, {
           method: "POST",
-          body: JSON.stringify({ classId, slotId, type: selectedMode }),
+          body: JSON.stringify({ classId, slotId, type: selectedMode, date: today }),
         });
         const summary = payload.data;
         await loadSessionDetail(summary.id);
@@ -338,6 +404,7 @@ export default function LecturerAttendancePage() {
       setCls(classId);
       setSession(null);
       setStudents([]);
+       setQrImage(null);
       stopPolling();
       if (classId) {
         fetchSlots(classId);
@@ -362,10 +429,18 @@ export default function LecturerAttendancePage() {
   useEffect(() => {
     if (!session) {
       setStudents([]);
+      setQrImage(null);
+      setRequirements([]);
       return;
     }
     loadSessionStudents(session.id);
   }, [session, loadSessionStudents]);
+
+  useEffect(() => {
+    if (!session) return;
+    updateQrPreview(session.code, session.type);
+    setRequirements(SESSION_REQUIREMENTS[session.type] || []);
+  }, [session, updateQrPreview]);
 
   const handleCreateSession = useCallback(() => {
     if (!cls || slot == null) {
@@ -379,11 +454,13 @@ export default function LecturerAttendancePage() {
     (nextMode: Mode) => {
       setMode(nextMode);
       if (session && nextMode !== session.type) {
+        stopPolling();
         setSession(null);
         setStudents([]);
+        setQrImage(null);
       }
     },
-    [session]
+    [session, stopPolling]
   );
 
   const handleReset = useCallback(async () => {
@@ -426,19 +503,19 @@ export default function LecturerAttendancePage() {
     }
   }, [session, students]);
 
-  const toggleStudentStatus = useCallback(
-    (studentId: string) => {
+  const handleManualCheckbox = useCallback(
+    (studentId: string, checked: boolean) => {
       if (!session || session.type !== "manual") return;
       setStudents((prev) =>
-        prev.map((item) => {
-          if (item.studentId !== studentId) return item;
-          const nextStatus = item.status === "present" ? "absent" : "present";
-          return {
-            ...item,
-            status: nextStatus,
-            markedAt: nextStatus === "present" ? new Date().toISOString() : null,
-          };
-        })
+        prev.map((item) =>
+          item.studentId === studentId
+            ? {
+                ...item,
+                status: checked ? "present" : "absent",
+                markedAt: checked ? new Date().toISOString() : null,
+              }
+            : item
+        )
       );
     },
     [session]
@@ -488,40 +565,63 @@ export default function LecturerAttendancePage() {
         <div className="panel">
           <div className="section-title">Tạo buổi điểm danh</div>
           <div className="form">
-            <div className="kv"><div className="k">Chọn lớp</div>
-              <select className="input" value={cls} onChange={(e)=>handleClassChange(e.target.value)}>
-                <option value="" disabled>-- Chọn lớp --</option>
-                {classes.map(c => (
-                  <option key={c.id} value={c.id}>{c.code} – {c.name}</option>
-                ))}
-              </select>
-            </div>
-            <div className="kv"><div className="k">Chọn slot/buổi</div>
-              <select
-                className="input"
-                value={slot ?? ""}
-                onChange={(e)=>setSlot(e.target.value ? Number(e.target.value) : null)}
-              >
-                <option value="" disabled>-- Chọn slot --</option>
-                {slots.map((item) => (
-                  <option key={item.slotId} value={item.slotId}>
-                    Slot {item.slotId}{item.room ? ` • Phòng ${item.room}` : ""}
+            <div className="kv">
+              <div className="k">Chọn lớp</div>
+              <select className="input" value={cls} onChange={(e) => handleClassChange(e.target.value)}>
+                <option value="" disabled>
+                  -- Chọn lớp --
+                </option>
+                {classes.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.code} – {c.name}
                   </option>
                 ))}
               </select>
             </div>
-            <div className="kv"><div className="k">Hình thức</div>
+            <div className="kv">
+              <div className="k">Chọn slot/buổi</div>
+              <select
+                className="input"
+                value={slot ?? ""}
+                onChange={(e) => setSlot(e.target.value ? Number(e.target.value) : null)}
+              >
+                <option value="" disabled>
+                  -- Chọn slot --
+                </option>
+                {slots.map((item) => (
+                  <option key={item.slotId} value={item.slotId}>
+                    Slot {item.slotId}
+                    {item.dayOfWeek ? ` • ${DAY_LABELS[item.dayOfWeek] || item.dayOfWeek}` : ""}
+                    {item.room ? ` • Phòng ${item.room || "?"}` : ""}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="kv">
+              <div className="k">Hình thức</div>
               <div className="seg">
-                <button className={`seg-btn ${mode==='qr'?'active':''}`} onClick={()=>handleModeChange('qr')}>QR code</button>
-                <button className={`seg-btn ${mode==='code'?'active':''}`} onClick={()=>handleModeChange('code')}>Nhập mã</button>
-                <button className={`seg-btn ${mode==='manual'?'active':''}`} onClick={()=>handleModeChange('manual')}>Thủ công</button>
+                <button className={`seg-btn ${mode === "qr" ? "active" : ""}`} onClick={() => handleModeChange("qr")}>
+                  QR code
+                </button>
+                <button className={`seg-btn ${mode === "code" ? "active" : ""}`} onClick={() => handleModeChange("code")}>
+                  Nhập mã
+                </button>
+                <button className={`seg-btn ${mode === "manual" ? "active" : ""}`} onClick={() => handleModeChange("manual")}>
+                  Thủ công
+                </button>
               </div>
             </div>
-            <div className="actions">
-              <button className="btn-primary" disabled={!cls || slot === null || sessionLoading} onClick={handleCreateSession}>
-                {sessionLoading ? "Đang xử lý..." : "🧾 Tạo buổi điểm danh"}
-              </button>
-            </div>
+            {!(mode === "manual" && session?.type === "manual") && (
+              <div className="actions">
+                <button className="btn-primary" disabled={!cls || slot === null || sessionLoading} onClick={handleCreateSession}>
+                  {sessionLoading
+                    ? "Đang xử lý..."
+                    : mode === "manual"
+                    ? "📋 Hiển thị danh sách sinh viên"
+                    : "🧾 Tạo buổi điểm danh"}
+                </button>
+              </div>
+            )}
           </div>
 
           {error && <div className="error-banner">⚠️ {error}</div>}
@@ -530,33 +630,64 @@ export default function LecturerAttendancePage() {
             <div className="session-box">
               <div className="qr-preview">
                 <div className="qr-box">
-                  {mode === "qr" ? (
+                  {session.type === "qr" ? (
                     qrImage ? (
                       <img src={qrImage} alt="QR" style={{ width: 140, height: 140 }} />
                     ) : (
                       <span style={{ fontSize: 16 }}>Đang tạo QR...</span>
                     )
+                  ) : session.type === "code" ? (
+                    <span className="big-code">{session.code}</span>
                   ) : (
-                    <span style={{ fontSize: 24 }}>{mode === "manual" ? "Thủ công" : "Mã"}</span>
+                    <span style={{ fontSize: 18, fontWeight: 600 }}>Điểm danh thủ công</span>
                   )}
                 </div>
                 <div className="qr-meta">
-                  <div className="big-code">{session.code}</div>
                   <div className="time-left">Trạng thái: {session.status}</div>
-                  {mode !== "manual" && (
-                    <div className="time-left">Còn lại: {timeLeftDisplay}</div>
+                  {session.type !== "manual" && <div className="time-left">Còn lại: {timeLeftDisplay}</div>}
+                  {session.type !== "manual" && <div className="time-left">Đã reset: {session.attempts}/{3}</div>}
+                  {typeof session.totalStudents === "number" && <div className="time-left">Tổng SV: {session.totalStudents}</div>}
+                  {session.type === "manual" && (
+                    <div className="time-left">Chọn sinh viên có mặt và nhấn lưu để cập nhật.</div>
                   )}
-                  <div className="time-left">Đã reset: {session.attempts}/{3}</div>
                 </div>
               </div>
               <div className="actions end">
-                <button className="btn-outline" onClick={exportCsv}>Xuất Excel</button>
-                {mode !== "manual" && (
-                  <button className="btn-primary" onClick={handleReset} disabled={resetLoading || session.attempts >= 3 || session.status !== "active"}>
+                <button className="btn-outline" onClick={exportCsv}>
+                  Xuất Excel
+                </button>
+                {session.type !== "manual" && (
+                  <button
+                    className="btn-primary"
+                    onClick={handleReset}
+                    disabled={resetLoading || session.attempts >= 3 || session.status !== "active"}
+                  >
                     ♻️ {resetLoading ? "Đang reset" : "Reset mã"}
                   </button>
                 )}
               </div>
+            </div>
+          )}
+
+          {!!requirements.length && (
+            <div className="requirements-table">
+              <div className="requirements-title">Yêu cầu khi điểm danh ({session?.type === "qr" ? "QR" : session?.type === "code" ? "Nhập mã" : "Thủ công"})</div>
+              <table>
+                <thead>
+                  <tr>
+                    <th>Nội dung</th>
+                    <th>Mô tả</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {requirements.map((item, idx) => (
+                    <tr key={idx}>
+                      <td>{item.title}</td>
+                      <td>{item.description}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
           )}
         </div>
@@ -565,10 +696,18 @@ export default function LecturerAttendancePage() {
           <div className="section-title">Danh sách điểm danh</div>
           <div className="row-actions">
             <div className="seg">
-              <button className={`seg-btn ${filter==='all'?'active':''}`} onClick={()=>setFilter('all')}>Tất cả</button>
-              <button className={`seg-btn ${filter==='present'?'active':''}`} onClick={()=>setFilter('present')}>Đã điểm danh</button>
-              <button className={`seg-btn ${filter==='absent'?'active':''}`} onClick={()=>setFilter('absent')}>Chưa điểm danh</button>
-              <button className={`seg-btn ${filter==='excused'?'active':''}`} onClick={()=>setFilter('excused')}>Có phép</button>
+              <button className={`seg-btn ${filter === "all" ? "active" : ""}`} onClick={() => setFilter("all")}>
+                Tất cả
+              </button>
+              <button className={`seg-btn ${filter === "present" ? "active" : ""}`} onClick={() => setFilter("present")}>
+                Đã điểm danh
+              </button>
+              <button className={`seg-btn ${filter === "absent" ? "active" : ""}`} onClick={() => setFilter("absent")}>
+                Chưa điểm danh
+              </button>
+              <button className={`seg-btn ${filter === "excused" ? "active" : ""}`} onClick={() => setFilter("excused")}>
+                Có phép
+              </button>
             </div>
           </div>
           {studentLoading && <div className="loading-row">Đang tải danh sách...</div>}
@@ -581,7 +720,7 @@ export default function LecturerAttendancePage() {
                   <th>Email</th>
                   <th>Trạng thái</th>
                   <th>Thời gian</th>
-                  {mode === "manual" && <th>Thao tác</th>}
+                  {session?.type === "manual" && <th>Thao tác</th>}
                 </tr>
               </thead>
               <tbody>
@@ -592,16 +731,23 @@ export default function LecturerAttendancePage() {
                     <td>{s.email || "--"}</td>
                     <td>{s.status === "present" ? "✅ Có mặt" : s.status === "excused" ? "📝 Có phép" : "❌ Vắng"}</td>
                     <td>{s.markedAt ? new Date(s.markedAt).toLocaleTimeString() : "--"}</td>
-                    {mode === "manual" && (
+                    {session?.type === "manual" && (
                       <td>
-                        <button className="btn-outline" onClick={() => toggleStudentStatus(s.studentId)}>Đổi trạng thái</button>
+                        <label className="manual-check">
+                          <input
+                            type="checkbox"
+                            checked={s.status === "present"}
+                            onChange={(event) => handleManualCheckbox(s.studentId, event.target.checked)}
+                          />
+                          Có mặt
+                        </label>
                       </td>
                     )}
                   </tr>
                 ))}
                 {!filtered.length && !studentLoading && (
                   <tr>
-                    <td colSpan={mode === "manual" ? 6 : 5} style={{ textAlign: "center", padding: 16, color: "#64748b" }}>
+                    <td colSpan={session?.type === "manual" ? 6 : 5} style={{ textAlign: "center", padding: 16, color: "#64748b" }}>
                       Chưa có dữ liệu điểm danh
                     </td>
                   </tr>
@@ -609,9 +755,11 @@ export default function LecturerAttendancePage() {
               </tbody>
             </table>
           </div>
-          {mode === "manual" && session && (
+          {session?.type === "manual" && (
             <div className="actions end" style={{ marginTop: 12 }}>
-              <button className="btn-primary" onClick={handleManualUpdate}>💾 Lưu điểm danh thủ công</button>
+              <button className="btn-primary" onClick={handleManualUpdate}>
+                💾 Lưu điểm danh thủ công
+              </button>
             </div>
           )}
         </div>
@@ -655,4 +803,3 @@ export default function LecturerAttendancePage() {
     </Shell>
   );
 }
-
