@@ -30,7 +30,7 @@ CREATE TABLE `room_availability` (
   `is_available` tinyint(1) NOT NULL DEFAULT '1',
   PRIMARY KEY (`id`),
   KEY `room_availability_idx` (`room_code`,`day_of_week`,`slot_id`),
-  KEY `room_availability_slot_fk` (`slot_id`),
+  KEY `room_availability_slot_idx` (`slot_id`),
   CONSTRAINT `room_availability_room_fk` FOREIGN KEY (`room_code`) REFERENCES `rooms` (`code`) ON DELETE CASCADE,
   CONSTRAINT `room_availability_slot_fk` FOREIGN KEY (`slot_id`) REFERENCES `time_slots` (`slot_id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
@@ -54,4 +54,4 @@ UNLOCK TABLES;
 /*!40101 SET COLLATION_CONNECTION=@OLD_COLLATION_CONNECTION */;
 /*!40111 SET SQL_NOTES=@OLD_SQL_NOTES */;
 
--- Dump completed on 2025-10-30  9:47:08
+-- Dump completed on 2025-10-30 15:21:09

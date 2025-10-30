@@ -10,6 +10,8 @@ const prisma = require("./src/config/prisma"); // Import cấu hình Prisma
 const app = express();
 const PORT = 8080;
 
+app.set("trust proxy", 1);
+
 app.use(cors({ origin: true, credentials: true }));
 app.use(bodyParser.json());
 app.use(cookieParser());
@@ -22,9 +24,21 @@ app.use("/api/lichhoc", lichhocRoutes);
 const thongbaoRoutes = require("./src/thongbao_hienthi/thongbao_hienthi.routes");
 app.use("/api/thongbao", thongbaoRoutes);
 
+// Mount thongbao_gv routes (Teacher notifications)
+const thongbaoGVRoutes = require("./src/thongbao_gv/thongbao_gv.routes");
+app.use("/api/teacher/notifications", thongbaoGVRoutes);
+
 // Mount lop_gv routes
 const lopRoutes = require("./src/lop_gv/lop_gv.routes");
 app.use("/api/lop", lopRoutes);
+
+// Lecturer attendance routes
+const attendanceRoutes = require("./src/diemdanh_gv");
+app.use("/api/attendances", attendanceRoutes);
+
+// Student attendance routes
+const studentAttendanceRoutes = require("./src/diemdanh_sv");
+app.use("/api/student-attendance", studentAttendanceRoutes);
 
 // Auth & User routes (JWT + cookie)
 const authRoutes = require("./src/routes/auth.routes");
@@ -51,6 +65,10 @@ app.use("/api/admin/classes", adminClassRoutes);
 // Admin students routes
 const adminStudentRoutes = require("./src/sinhvien_ad/sinhvien_ad.routes");
 app.use("/api/admin/students", adminStudentRoutes);
+
+// Admin accounts routes
+const adminAccountsRoutes = require("./src/taikhoan_ad.routes");
+app.use("/api/admin/accounts", adminAccountsRoutes);
 
 // API xem danh sách lớp
 app.get("/api/classes", (req, res) => {

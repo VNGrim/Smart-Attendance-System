@@ -19,8 +19,6 @@ function signAccessToken(user) {
     { expiresIn: JWT_EXPIRES_IN }
   );
 }
-
-
 // 🔹 Login
 router.post('/login', async (req, res) => {
   const { userId, password } = req.body;
@@ -48,28 +46,28 @@ router.post('/login', async (req, res) => {
       fullName = t?.[0]?.full_name || fullName;
     }
 
-    // ← Đây chính là dòng tạo token JWT
+    // Tạo token JWT
     const token = jwt.sign(
       { user_code: account.user_code, role: account.role, fullName },
       JWT_SECRET,
       { expiresIn: JWT_EXPIRES_IN }
     );
 
+    const isSecure = req.secure || req.headers['x-forwarded-proto'] === 'https';
     res.cookie('access_token', token, {
       httpOnly: true,
-      sameSite: 'lax',
-      secure: false,
-      maxAge: 1000 * 60 * 60,
+      sameSite: isSecure ? 'none' : 'lax',
+      secure: isSecure,
+      maxAge: 1000 * 60 * 60, // 1h
       path: '/',
     });
 
-    return res.json({ success: true, role: account.role, userId: account.user_code, fullName });
+    return res.json({ success: true, role: account.role, userId: account.user_code, fullName, token });
   } catch (err) {
     console.error('Login error:', err);
     return res.status(500).json({ success: false, message: 'Lỗi hệ thống' });
   }
 });
-
 
 // 🔹 Logout
 router.post('/logout', (req, res) => {
@@ -77,55 +75,43 @@ router.post('/logout', (req, res) => {
   return res.json({ success: true });
 });
 
+// 🔹 Change Password
 router.post('/change-password', auth, async (req, res) => {
   const userCode = req.user?.user_code;
   const { oldPassword, newPassword, confirmPassword } = req.body || {};
 
-  // 1️⃣ Kiểm tra dữ liệu đầu vào
   if (!oldPassword || !newPassword || !confirmPassword) {
     return res.status(400).json({ success: false, message: 'Thiếu mật khẩu cũ hoặc mật khẩu mới/nhập lại' });
   }
 
   try {
-    // 2️⃣ Lấy tài khoản
     const acc = await prisma.accounts.findUnique({ where: { user_code: userCode } });
     if (!acc) return res.status(404).json({ success: false, message: 'Không tìm thấy tài khoản' });
 
-    // 3️⃣ Kiểm tra mật khẩu cũ
     const ok = await bcrypt.compare(oldPassword, acc.password);
     if (!ok) return res.status(400).json({ success: false, message: 'Mật khẩu cũ không đúng' });
 
-    // 4️⃣ Mật khẩu mới khác mật khẩu cũ
     if (oldPassword === newPassword) {
       return res.status(400).json({ success: false, message: 'Mật khẩu mới phải khác mật khẩu cũ' });
     }
 
-    // 5️⃣ Kiểm tra độ dài mật khẩu mới
     if (newPassword.length < 6) {
       return res.status(400).json({ success: false, message: 'Mật khẩu mới phải từ 6 ký tự trở lên' });
     }
 
-    // 6️⃣ Kiểm tra mật khẩu xác nhận
     if (newPassword !== confirmPassword) {
       return res.status(400).json({ success: false, message: 'Mật khẩu xác nhận không khớp với mật khẩu mới' });
     }
 
-    // 7️⃣ Hash và cập nhật mật khẩu
     const hashed = await bcrypt.hash(newPassword, 10);
     await prisma.accounts.update({ where: { id: acc.id }, data: { password: hashed } });
 
     return res.json({ success: true, message: 'Đổi mật khẩu thành công' });
-
   } catch (err) {
     console.error('Change password error:', err);
     return res.status(500).json({ success: false, message: 'Lỗi hệ thống' });
   }
 });
 
-
-
-
-  
-  // ✅ Dòng này phải có ở cuối file!
-  module.exports = router;
-  
+// ✅ Export router
+module.exports = router;

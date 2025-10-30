@@ -1,8 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import QRButton from "@/app/components/QRButton";
 import { useState, useEffect, useMemo } from "react";
+import { apiFetchJson } from "../../lib/authClient";
 
 interface Announcement {
   id: number;
@@ -72,8 +72,7 @@ export default function ThongBaoPage() {
       setError(null);
 
       // Fetch announcements
-      const announcementsResponse = await fetch('http://localhost:8080/api/thongbao/announcements');
-      const announcementsData = await announcementsResponse.json();
+      const announcementsData = await apiFetchJson('/api/thongbao/announcements');
 
       if (announcementsData.success) {
         setAnnouncements(announcementsData.data);
@@ -82,8 +81,7 @@ export default function ThongBaoPage() {
       }
 
       // Fetch student info
-      const studentResponse = await fetch(`http://localhost:8080/api/thongbao/students/${studentId}`);
-      const studentData = await studentResponse.json();
+      const studentData = await apiFetchJson(`/api/thongbao/students/${studentId}`);
 
       if (studentData.success) {
         setStudentInfo(studentData.data);
@@ -98,9 +96,8 @@ export default function ThongBaoPage() {
 
   const handleAnnouncementClick = async (announcement: Announcement) => {
     try {
-      const response = await fetch(`http://localhost:8080/api/thongbao/announcements/${announcement.id}`);
-      const data = await response.json();
-      
+      const data = await apiFetchJson(`/api/thongbao/announcements/${announcement.id}`);
+
       if (data.success) {
         setSelectedAnnouncement(data.data);
       }

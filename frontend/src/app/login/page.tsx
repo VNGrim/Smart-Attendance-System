@@ -3,6 +3,7 @@
 import Image from "next/image";
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import { makeApiUrl } from "../../lib/apiBase";
 
 /**
  * Component trang đăng nhập
@@ -59,7 +60,7 @@ export default function LoginPage() {
 
     try {
       // Gửi request đăng nhập đến backend
-      const res = await fetch("http://localhost:8080/api/auth/login", {
+      const res = await fetch(makeApiUrl("/api/auth/login"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ userId, password }), // Gửi userId và password
@@ -81,7 +82,8 @@ export default function LoginPage() {
           role: data.role,
           name: data.name,
           teacher_id: data.teacher_id,
-          full_name: data.full_name
+          full_name: data.full_name,
+          token: data.token,
         }));
       } catch {}
 
