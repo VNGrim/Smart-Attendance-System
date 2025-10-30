@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import QRButton from "@/app/components/QRButton";
 
 const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
@@ -16,7 +16,7 @@ export default function LichHocPage() {
   const [flat, setFlat] = useState<any[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string>("");
-
+  const [themeDark, setThemeDark] = useState(true);
   const studentId = (() => {
     if (typeof window === "undefined") return "";
     try {
@@ -60,22 +60,29 @@ export default function LichHocPage() {
       }
     }
     if (studentId) fetchData();
-    // Apply settings theme from localStorage and subscribe changes
+
+    // Áp dụng theme từ localStorage
     try {
-      const saved = localStorage.getItem('sas_settings');
-      if (saved) {
-        const s = JSON.parse(saved);
-        document.documentElement.style.colorScheme = s.themeDark ? 'dark' : 'light';
-      }
-    } catch {}
+    const saved = localStorage.getItem('sas_settings');
+    if (saved) {
+      const s = JSON.parse(saved);
+      setThemeDark(s.themeDark ?? true);
+      document.documentElement.classList.toggle('dark-theme', s.themeDark);
+      document.documentElement.classList.toggle('light-theme', !s.themeDark);
+    }
+  } catch {}
+
     const handler = (e: any) => {
-      const s = e?.detail;
-      if (!s) return;
-      document.documentElement.style.colorScheme = s.themeDark ? 'dark' : 'light';
-    };
-    window.addEventListener('sas_settings_changed' as any, handler);
-    return () => { isMounted = false; };
-  }, [studentId]);
+    const s = e.detail;
+    if (!s) return;
+    setThemeDark(s.themeDark);
+    document.documentElement.classList.toggle('dark-theme', s.themeDark);
+    document.documentElement.classList.toggle('light-theme', !s.themeDark);
+  };
+  window.addEventListener('sas_settings_changed', handler);
+
+  return () => window.removeEventListener('sas_settings_changed', handler);
+}, []);
 
   const slotTimeById = useMemo(() => {
     const map: Record<number, { start: string; end: string }> = {};
@@ -140,7 +147,9 @@ export default function LichHocPage() {
           }}>🚪 Đăng xuất</button>
         </div>
       </header>
-      <main className="main">{children}</main>
+      <main className={`main ${themeDark ? 'dark-theme' : 'light-theme'}`}>
+  {children}
+</main>
     </div>
   );
 
@@ -178,6 +187,7 @@ export default function LichHocPage() {
             <option value="13/10 - 19/10">13/10 - 19/10</option>
           </select>
         </div>
+
         {/* Headers */}
         <div className="grid" style={{ marginBottom: 6 }}>
           <div></div>
@@ -185,11 +195,12 @@ export default function LichHocPage() {
             <div key={d} className="col-header">{d}</div>
           ))}
         </div>
+
         {/* Grid */}
         <div className="grid">
           {SLOT_IDS.map((slotId) => (
-            <>
-              <div key={`slot-${slotId}`} className="row-header">
+            <React.Fragment key={slotId}>
+              <div className="row-header">
                 <div className="slot-badge">Slot {slotId}</div>
                 {slotTimeById[slotId] && (
                   <div style={{ fontSize: 11, color: "#64748b", marginTop: 2 }}>
@@ -221,7 +232,7 @@ export default function LichHocPage() {
                   </div>
                 );
               })}
-            </>
+            </React.Fragment>
           ))}
         </div>
       </div>

@@ -23,7 +23,7 @@ export default function StudentDashboardPage() {
   const [notifCount] = useState(2);
   const [filter, setFilter] = useState<"all"|"teacher"|"school">("all");
   const [selectedAnnouncement, setSelectedAnnouncement] = useState<Announcement | null>(null);
-  
+  const [themeDark, setThemeDark] = useState(true);
   // QR Code Scanner State
   const [showQRScanner, setShowQRScanner] = useState(false);
   const [showCodeInput, setShowCodeInput] = useState(false);
@@ -36,14 +36,26 @@ export default function StudentDashboardPage() {
     const savedUser = localStorage.getItem("sas_user");
     try { if (savedUser) { const u = JSON.parse(savedUser); if (u?.role === 'student') setStudent({ id: u.userId, name: u.fullName || "Sinh viên" }); } } catch {}
     try {
-      const saved = localStorage.getItem("sas_settings");
-      if (saved) { const s = JSON.parse(saved); setDark(!!s.themeDark); document.documentElement.style.colorScheme = s.themeDark ? "dark" : "light"; }
-    } catch {}
-    const handler = (e: any) => { const s = e?.detail; if (!s) return; document.documentElement.style.colorScheme = s.themeDark ? 'dark' : 'light'; };
-    window.addEventListener('sas_settings_changed' as any, handler);
-    return () => window.removeEventListener('sas_settings_changed' as any, handler);
-  }, []);
+    const saved = localStorage.getItem('sas_settings');
+    if (saved) {
+      const s = JSON.parse(saved);
+      setThemeDark(s.themeDark ?? true);
+      document.documentElement.classList.toggle('dark-theme', s.themeDark);
+      document.documentElement.classList.toggle('light-theme', !s.themeDark);
+    }
+  } catch {}
+  
+  const handler = (e: any) => {
+    const s = e.detail;
+    if (!s) return;
+    setThemeDark(s.themeDark);
+    document.documentElement.classList.toggle('dark-theme', s.themeDark);
+    document.documentElement.classList.toggle('light-theme', !s.themeDark);
+  };
+  window.addEventListener('sas_settings_changed', handler);
 
+  return () => window.removeEventListener('sas_settings_changed', handler);
+}, []);
   const todayStr = useMemo(() => {
     const now = new Date();
     const weekday = ["Chủ nhật","Thứ Hai","Thứ Ba","Thứ Tư","Thứ Năm","Thứ Sáu","Thứ Bảy"][now.getDay()];
@@ -188,7 +200,9 @@ export default function StudentDashboardPage() {
           }}>🚪 Đăng xuất</button>
         </div>
       </header>
-      <main className="main">{children}</main>
+      <main className={`main ${themeDark ? 'dark-theme' : 'light-theme'}`}>
+  {children}
+</main>
     </div>
   );
 

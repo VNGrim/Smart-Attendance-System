@@ -32,7 +32,7 @@ export default function LichSuPage() {
 
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [dateFilter, setDateFilter] = useState<string>("");
-
+  const [themeDark, setThemeDark] = useState(true);
   const studentId = (() => {
     if (typeof window === "undefined") return "";
     try {
@@ -53,16 +53,22 @@ export default function LichSuPage() {
       const saved = localStorage.getItem('sas_settings');
       if (saved) {
         const s = JSON.parse(saved);
-        document.documentElement.style.colorScheme = s.themeDark ? 'dark' : 'light';
+        setThemeDark(s.themeDark ?? true);
+        document.documentElement.classList.toggle('dark-theme', s.themeDark);
+        document.documentElement.classList.toggle('light-theme', !s.themeDark);
       }
-    } catch {}
+    } catch { }
     const handler = (e: any) => {
-      const s = e?.detail; if (!s) return;
-      document.documentElement.style.colorScheme = s.themeDark ? 'dark' : 'light';
+      const s = e.detail;
+      if (!s) return;
+      setThemeDark(s.themeDark);
+      document.documentElement.classList.toggle('dark-theme', s.themeDark);
+      document.documentElement.classList.toggle('light-theme', !s.themeDark);
     };
-    window.addEventListener('sas_settings_changed' as any, handler);
-    return () => window.removeEventListener('sas_settings_changed' as any, handler);
-  }, [studentId]);
+    window.addEventListener('sas_settings_changed', handler);
+
+    return () => window.removeEventListener('sas_settings_changed', handler);
+  }, []);
 
   const fetchData = async () => {
     try {
@@ -126,15 +132,18 @@ export default function LichSuPage() {
         </div>
         <div className="controls">
           <button className="qr-btn">📷 Quét QR</button>
-          <button className="qr-btn" onClick={() => { 
+          <button className="qr-btn" onClick={() => {
             if (confirm('Bạn có chắc muốn đăng xuất?')) {
-              localStorage.removeItem('sas_user'); 
-              window.location.href = '/login'; 
+              localStorage.removeItem('sas_user');
+              window.location.href = '/login';
             }
           }}>🚪 Đăng xuất</button>
         </div>
       </header>
-      <main className="main">{children}</main>
+      <main className={`main ${themeDark ? 'dark-theme' : 'light-theme'}`}>
+        {children}
+      </main>
+
     </div>
   );
 

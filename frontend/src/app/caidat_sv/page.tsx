@@ -13,11 +13,12 @@ type ShellProps = {
   collapsed: boolean;
   setCollapsed: Dispatch<SetStateAction<boolean>>;
   student: StudentInfo | null;
+  themeDark: boolean;
 };
 
-function Shell({ children, collapsed, setCollapsed, student }: PropsWithChildren<ShellProps>) {
+function Shell({ children, collapsed, setCollapsed, student, themeDark }: PropsWithChildren<ShellProps>) {
   return (
-    <div className={`layout ${collapsed ? 'collapsed' : ''}`}>
+    <div className={`layout ${collapsed ? 'collapsed' : ''} ${themeDark ? '' : 'light-theme'}`}>
       <aside className="sidebar">
         <div className="side-header">
           <button className="collapse-btn" onClick={() => setCollapsed(v => !v)} title={collapsed ? 'Mở rộng' : 'Thu gọn'}>
@@ -82,6 +83,7 @@ export default function CaiDatPage() {
     } catch { return ""; }
   })();
 
+  // Fetch student info
   useEffect(() => {
     async function fetchInfo() {
       try {
@@ -96,21 +98,48 @@ export default function CaiDatPage() {
     if (studentId) fetchInfo();
   }, [studentId]);
 
-  // Load and apply saved settings (theme, notifications, language)
+  // Load settings
   useEffect(() => {
-    try {
-      const saved = localStorage.getItem('sas_settings');
-      if (saved) {
-        const s = JSON.parse(saved);
-        if (typeof s.notifEnabled === 'boolean') setNotifEnabled(s.notifEnabled);
-        if (typeof s.themeDark === 'boolean') {
-          setThemeDark(!!s.themeDark);
-          document.documentElement.style.colorScheme = s.themeDark ? 'dark' : 'light';
-        }
-        if (typeof s.lang === 'string') setLang(s.lang);
+  try {
+    const saved = localStorage.getItem('sas_settings');
+    if (saved) {
+      const s = JSON.parse(saved);
+      setThemeDark(s.themeDark ?? true);
+
+      // Áp dụng ngay cho <html>
+      if (s.themeDark) {
+        document.documentElement.classList.add('dark-theme');
+        document.documentElement.classList.remove('light-theme');
+      } else {
+        document.documentElement.classList.add('light-theme');
+        document.documentElement.classList.remove('dark-theme');
       }
-    } catch {}
-  }, []);
+    }
+  } catch {}
+}, []);
+
+
+ const setTheme = (dark: boolean) => {
+  setThemeDark(dark);
+
+  // Lưu vào localStorage
+  const saved = localStorage.getItem('sas_settings');
+  const prev = saved ? JSON.parse(saved) : {};
+  const merged = { ...prev, themeDark: dark };
+  localStorage.setItem('sas_settings', JSON.stringify(merged));
+
+  // Áp dụng class cho toàn bộ <html>
+  if (dark) {
+    document.documentElement.classList.add('dark-theme');
+    document.documentElement.classList.remove('light-theme');
+  } else {
+    document.documentElement.classList.add('light-theme');
+    document.documentElement.classList.remove('dark-theme');
+  }
+  // Thông báo cho các component khác (nếu cần)
+  window.dispatchEvent(new CustomEvent('sas_settings_changed', { detail: merged }));
+};
+
 
   const handleSave = async () => {
     const settings = { notifEnabled, themeDark, lang };
@@ -122,69 +151,41 @@ export default function CaiDatPage() {
   };
 
   const handleLogoutAll = async () => {
-    // TODO: gọi API đăng xuất tất cả thiết bị
     alert("Đã đăng xuất tất cả thiết bị.");
   };
 
-const handleChangePassword = async () => {
-  // 1️⃣ Kiểm tra dữ liệu đầu vào
-  if (!oldPw || !newPw || !confirmPw) {
-    alert("⚠️ Vui lòng nhập đầy đủ mật khẩu cũ, mật khẩu mới và xác nhận mật khẩu.");
-    return;
-  }
+  const handleChangePassword = async () => {
+    if (!oldPw || !newPw || !confirmPw) return alert("⚠️ Vui lòng nhập đầy đủ mật khẩu cũ, mật khẩu mới và xác nhận mật khẩu.");
+    if (newPw.length < 6) return alert("⚠️ Mật khẩu mới phải từ 6 ký tự trở lên.");
+    if (oldPw === newPw) return alert("⚠️ Mật khẩu mới phải khác mật khẩu cũ.");
+    if (newPw !== confirmPw) return alert("⚠️ Mật khẩu xác nhận không khớp với mật khẩu mới.");
 
-  // 2️⃣ Kiểm tra độ dài mật khẩu mới
-  if (newPw.length < 6) {
-    alert("⚠️ Mật khẩu mới phải từ 6 ký tự trở lên.");
-    return;
-  }
+    try {
+      const base = process.env.NEXT_PUBLIC_API_BASE || "http://localhost:8080";
+      const res = await fetch(`${base}/api/auth/change-password`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ oldPassword: oldPw, newPassword: newPw, confirmPassword: confirmPw }),
+      });
 
-  // 3️⃣ Mật khẩu mới phải khác mật khẩu cũ
-  if (oldPw === newPw) {
-    alert("⚠️ Mật khẩu mới phải khác mật khẩu cũ.");
-    return;
-  }
-
-  // 4️⃣ Mật khẩu xác nhận khớp
-  if (newPw !== confirmPw) {
-    alert("⚠️ Mật khẩu xác nhận không khớp với mật khẩu mới.");
-    return;
-  }
-
-  try {
-    const base = process.env.NEXT_PUBLIC_API_BASE || "http://localhost:8080";
-    const res = await fetch(`${base}/api/auth/change-password`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      credentials: "include",
-      body: JSON.stringify({ oldPassword: oldPw, newPassword: newPw, confirmPassword: confirmPw }),
-    });
-
-    const data = await res.json();
-
-    if (res.ok && data.success) {
-      alert("✅ Đổi mật khẩu thành công!");
-      setPwModal(false);
-      setOldPw("");
-      setNewPw("");
-      setConfirmPw("");
-    } else {
-      // Hiển thị lỗi chính xác từ backend (mật khẩu cũ sai, v.v.)
-      alert(`❌ Lỗi: ${data.message || "Không thể đổi mật khẩu"}`);
+      const data = await res.json();
+      if (res.ok && data.success) {
+        alert("✅ Đổi mật khẩu thành công!");
+        setPwModal(false);
+        setOldPw(""); setNewPw(""); setConfirmPw("");
+      } else alert(`❌ Lỗi: ${data.message || "Không thể đổi mật khẩu"}`);
+    } catch {
+      alert("❌ Lỗi kết nối tới máy chủ!");
     }
-  } catch (err) {
-    console.error("Error changing password:", err);
-    alert("❌ Lỗi kết nối tới máy chủ!");
-  }
-};
+  };
 
   return (
-    <Shell collapsed={collapsed} setCollapsed={setCollapsed} student={student}>
+    <Shell collapsed={collapsed} setCollapsed={setCollapsed} student={student} themeDark={themeDark}>
       <div className="container">
-        {/* Left: Thông tin cá nhân */}
+        {/* Thông tin cá nhân */}
         <div className="card">
-          <div className="section-title"><span className="icon">👤</span>Thông tin cá nhân</div>
-          {/* Hero inside personal info */}
+          <div className="section-title">👤 Thông tin cá nhân</div>
           <div className="hero">
             <div className="avatar-wrap">
               <img src={photoUrl} className="avatar-lg" alt="avatar" />
@@ -196,51 +197,40 @@ const handleChangePassword = async () => {
             </div>
           </div>
           <div className="form">
-            <div className="divider"></div>
             <div className="info-grid">
-              <div className="info-fields">
-                <div>
-                  <div className="label">Họ và tên</div>
-                  <input className="input" value={student?.full_name || ''} disabled />
-                </div>
-                <div>
-                  <div className="label">MSSV</div>
-                  <input className="input" value={student?.student_id || ''} disabled />
-                </div>
-                <div className="full">
-                  <div className="label">Khóa học</div>
-                  <input className="input" value={student?.course || ''} readOnly />
-                </div>
+              <div>
+                <div className="label">Họ và tên</div>
+                <input className="input" value={student?.full_name || ''} disabled />
               </div>
-              <div className="photo" style={{ alignSelf: 'start', justifyContent: 'flex-end' }}>
-                <label className="btn btn-outline" style={{ cursor: 'pointer' }}>
-                  Thay đổi ảnh
-                  <input type="file" accept="image/*" style={{ display: 'none' }} onChange={(e) => {
-                    const file = e.target.files?.[0];
-                    if (file) {
-                      const url = URL.createObjectURL(file);
-                      setPhotoUrl(url);
-                    }
-                  }} />
-                </label>
+              <div>
+                <div className="label">MSSV</div>
+                <input className="input" value={student?.student_id || ''} disabled />
+              </div>
+              <div className="full">
+                <div className="label">Khóa học</div>
+                <input className="input" value={student?.course || ''} readOnly />
               </div>
             </div>
-
-            <div>
-              <button className="btn btn-primary" onClick={handleSave}>Lưu thay đổi</button>
-            </div>
+            <label className="btn btn-outline" style={{ cursor: 'pointer' }}>
+              Thay đổi ảnh
+              <input type="file" accept="image/*" style={{ display: 'none' }} onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (file) setPhotoUrl(URL.createObjectURL(file));
+              }} />
+            </label>
+            <button className="btn btn-primary" onClick={handleSave}>Lưu thay đổi</button>
           </div>
         </div>
 
-        {/* Right: Cài đặt tài khoản */}
+        {/* Cài đặt tài khoản */}
         <div className="card">
-          <div className="section-title"><span className="icon">⚙️</span>Cài đặt tài khoản</div>
+          <div className="section-title">⚙️ Cài đặt tài khoản</div>
           <div className="form">
             <div className="tile">
               <div>🔒</div>
               <div>
                 <div className="title">Đổi mật khẩu</div>
-                <div className="desc">Tăng cường bảo mật tài khoản của bạn</div>
+                <div className="desc">Tăng cường bảo mật tài khoản</div>
               </div>
               <button className="btn btn-outline" onClick={() => setPwModal(true)}>Mở</button>
             </div>
@@ -250,120 +240,71 @@ const handleChangePassword = async () => {
                 <div className="title">Đăng xuất tất cả thiết bị</div>
                 <div className="desc">Buộc đăng xuất trên các thiết bị đã đăng nhập</div>
               </div>
-              <button
-                className="btn btn-outline"
-                onClick={() => {
-                  setOldPw("");
-                  setNewPw("");
-                  setConfirmPw("");
-                  setPwModal(true);
-                }}
+              <button className="btn btn-outline" onClick={handleLogoutAll}>Mở</button>
+            </div>
+
+            {/* Notifications */}
+            <div className="label">Thông báo</div>
+            <div className="switch" onClick={() => setNotifEnabled(v => !v)}>
+              <input type="checkbox" checked={notifEnabled} readOnly />
+              <div className="knob"></div>
+            </div>
+
+            {/* Theme toggle */}
+            <div className="Giao diện">
+              <div
+                className={`theme-opt ${!themeDark ? 'active' : ''}`}
+                onClick={() => setTheme(false)}
               >
-                Mở
-              </button>
-            </div>
-
-            <div>
-              <div className="label">Thông báo</div>
-              <div className="switch" onClick={() => setNotifEnabled(v => !v)}>
-                <input type="checkbox" checked={notifEnabled} readOnly />
-                <div className="knob"></div>
+                🌞 Sáng
+              </div>
+              <div
+                className={`theme-opt ${themeDark ? 'active' : ''}`}
+                onClick={() => setTheme(true)}
+              >
+                🌑 Tối
               </div>
             </div>
 
-            <div>
-              <div className="label">Giao diện</div>
-              <div className="theme-toggle">
-                <div
-                  className={`theme-opt ${!themeDark ? 'active' : ''}`}
-                  onClick={() => {
-                    setThemeDark(false);
-                    try {
-                      const saved = localStorage.getItem('sas_settings');
-                      const prev = saved ? JSON.parse(saved) : {};
-                      const merged = { ...prev, themeDark: false };
-                      localStorage.setItem('sas_settings', JSON.stringify(merged));
-                      document.documentElement.style.colorScheme = 'light';
-                      window.dispatchEvent(new CustomEvent('sas_settings_changed' as any, { detail: merged }));
-                    } catch {}
-                  }}
-                >
-                  <span className="theme-ic">🌙</span> Sáng
-                </div>
-                <div
-                  className={`theme-opt ${themeDark ? 'active' : ''}`}
-                  onClick={() => {
-                    setThemeDark(true);
-                    try {
-                      const saved = localStorage.getItem('sas_settings');
-                      const prev = saved ? JSON.parse(saved) : {};
-                      const merged = { ...prev, themeDark: true };
-                      localStorage.setItem('sas_settings', JSON.stringify(merged));
-                      document.documentElement.style.colorScheme = 'dark';
-                      window.dispatchEvent(new CustomEvent('sas_settings_changed' as any, { detail: merged }));
-                    } catch {}
-                  }}
-                >
-                  <span className="theme-ic">🌑</span> Tối
-                </div>
-              </div>
-            </div>
 
-            <div>
-              <div className="label">Ngôn ngữ</div>
-              <div className="row" style={{ alignItems: 'center' }}>
-                <select className="select" value={lang} onChange={(e) => setLang(e.target.value)} style={{ width: '100%' }}>
-                  <option value="vi">Tiếng Việt</option>
-                  <option value="en">English</option>
-                </select>
-              </div>
-            </div>
+            
+
+            {/* Language */}
+            <div className="label">Ngôn ngữ</div>
+            <select className="select" value={lang} onChange={e => setLang(e.target.value)} style={{ width: '100%' }}>
+              <option value="vi">Tiếng Việt</option>
+              <option value="en">English</option>
+            </select>
           </div>
         </div>
       </div>
 
       {/* Modal đổi mật khẩu */}
-<div className={`modal ${pwModal ? 'active' : ''}`} onClick={() => setPwModal(false)}>
-  <div className="modal-card" onClick={(e) => e.stopPropagation()}>
-    <div className="modal-title">Đổi mật khẩu</div>
-    <form className="form" onSubmit={(e) => { e.preventDefault(); handleChangePassword(); }}>
-      <div>
-        <div className="label">Mật khẩu cũ</div>
-        <input
-          className="input"
-          type="password"
-          value={oldPw}
-          onChange={(e) => setOldPw(e.target.value)}
-        />
-      </div>
-      <div className="row">
-        <div>
-          <div className="label">Mật khẩu mới</div>
-          <input
-            className="input"
-            type="password"
-            value={newPw}
-            onChange={(e) => setNewPw(e.target.value)}
-          />
-        </div>
-        <div>
-          <div className="label">Nhập lại mật khẩu mới</div>
-          <input
-            className="input"
-            type="password"
-            value={confirmPw}
-            onChange={(e) => setConfirmPw(e.target.value)}
-          />
+      <div className={`modal ${pwModal ? 'active' : ''}`} onClick={() => setPwModal(false)}>
+        <div className="modal-card" onClick={e => e.stopPropagation()}>
+          <div className="modal-title">Đổi mật khẩu</div>
+          <form className="form" onSubmit={e => { e.preventDefault(); handleChangePassword(); }}>
+            <div>
+              <div className="label">Mật khẩu cũ</div>
+              <input type="password" className="input" value={oldPw} onChange={e => setOldPw(e.target.value)} />
+            </div>
+            <div className="row">
+              <div>
+                <div className="label">Mật khẩu mới</div>
+                <input type="password" className="input" value={newPw} onChange={e => setNewPw(e.target.value)} />
+              </div>
+              <div>
+                <div className="label">Nhập lại mật khẩu mới</div>
+                <input type="password" className="input" value={confirmPw} onChange={e => setConfirmPw(e.target.value)} />
+              </div>
+            </div>
+            <div className="modal-actions">
+              <button type="button" className="btn btn-outline" onClick={() => setPwModal(false)}>Hủy</button>
+              <button type="submit" className="btn btn-primary">Lưu</button>
+            </div>
+          </form>
         </div>
       </div>
-      <div className="modal-actions">
-        <button type="button" className="btn btn-outline" onClick={() => setPwModal(false)}>Hủy</button>
-        <button type="submit" className="btn btn-primary">Lưu</button>
-      </div>
-    </form>
-  </div>
-</div>
-
     </Shell>
   );
 }

@@ -215,3 +215,32 @@ body::before {
 .card-pink + .pop h4 { color: #EC4899; }
 .card-indigo + .pop h4 { color: #6366F1; }
 .card-red + .pop h4 { color: #EF4444; }
+
+:root {
+  --background: #ffffff;
+  --foreground: #1e293b;
+  --card-bg: #f8fafc;
+  --card-border: rgba(0,0,0,0.08);
+  --input-bg: #ffffff;
+  --input-border: rgba(0,0,0,0.3);
+}
+
+/* Light theme */
+.light-theme {
+  --background: radial-gradient(ellipse at center, #f8fafc 0%, #e2e8f0 50%, #cbd5e1 100%);
+  --foreground: #1e293b;
+  --card-bg: rgba(30,41,59,0.95);
+  --card-border: rgba(255,255,255,0.08);
+  --input-bg: rgba(248,250,252,0.8);
+  --input-border: rgba(226,232,240,0.6);
+}
+
+/* Dark theme */
+.dark-theme {
+  --background: radial-gradient(ellipse at center, #0F172A 0%, #020617 50%, #000000 100%);
+  --foreground: #e2e8f0;
+  --card-bg: rgba(30,41,59,0.95);
+  --card-border: rgba(255,255,255,0.08);
+  --input-bg: rgba(15,23,42,0.8);
+  --input-border: rgba(51,65,85,0.6);
+}

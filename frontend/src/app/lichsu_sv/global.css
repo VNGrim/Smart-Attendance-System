@@ -199,3 +199,32 @@ body::before {
 .sas-tabs { display: inline-flex; gap: 6px; background: rgba(255,255,255,0.7); padding: 6px; border-radius: 12px; border: 1px solid rgba(0,0,0,0.08); backdrop-filter: saturate(150%) blur(6px); }
 .sas-tab { font-weight: 600; font-size: 14px; color: #1a1a1a; cursor: pointer; padding: 8px 14px; border-radius: 10px; text-decoration: none; transition: all 0.2s ease; }
 .sas-tab.active { background: #ffffff; color: #1a1a1a; box-shadow: 0 1px 0 rgba(0,0,0,0.04) inset, 0 4px 10px rgba(0,0,0,0.04); }
+
+:root {
+  --background: #ffffff;
+  --foreground: #1e293b;
+  --card-bg: #f8fafc;
+  --card-border: rgba(0,0,0,0.08);
+  --input-bg: #ffffff;
+  --input-border: rgba(0,0,0,0.3);
+}
+
+/* Light theme */
+.light-theme {
+  --background: radial-gradient(ellipse at center, #f8fafc 0%, #e2e8f0 50%, #cbd5e1 100%);
+  --foreground: #1e293b;
+  --card-bg: rgba(30,41,59,0.95);
+  --card-border: rgba(255,255,255,0.08);
+  --input-bg: rgba(248,250,252,0.8);
+  --input-border: rgba(226,232,240,0.6);
+}
+
+/* Dark theme */
+.dark-theme {
+  --background: radial-gradient(ellipse at center, #0F172A 0%, #020617 50%, #000000 100%);
+  --foreground: #e2e8f0;
+  --card-bg: rgba(30,41,59,0.95);
+  --card-border: rgba(255,255,255,0.08);
+  --input-bg: rgba(15,23,42,0.8);
+  --input-border: rgba(51,65,85,0.6);
+}
