@@ -69,6 +69,7 @@ model teachers {
   updated_at DateTime  @default(now()) @updatedAt @db.Timestamp(0)
   accounts   accounts? @relation(fields: [account_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "teachers_ibfk_1")
   classAssignments classes[] @relation("TeacherClasses")
+  availability teacher_availability[]
 
   @@index([account_id], map: "account_id")
 }
@@ -100,6 +101,10 @@ model time_slots {
   start_time DateTime    @db.Time(0)
   end_time   DateTime    @db.Time(0)
   timetable  timetable[]
+  teacherAvailability teacher_availability[]
+  roomAvailability    room_availability[]
+
+  @@index([slot_id], map: "time_slots_slot_idx")
 }
 
 model timetable {
@@ -108,9 +113,57 @@ model timetable {
   day_of_week timetable_day_of_week
   slot_id     Int
   room        String                @db.VarChar(50)
+  week_key    String                @default("UNASSIGNED") @db.VarChar(20)
+  teacher_id  String?               @db.VarChar(20)
+  teacher_name String?              @db.VarChar(150)
+  subject_name String?              @db.VarChar(150)
+  room_name   String?               @db.VarChar(150)
   time_slots  time_slots            @relation(fields: [slot_id], references: [slot_id], onDelete: Cascade, map: "timetable_ibfk_1")
 
+  @@index([week_key, day_of_week, slot_id], map: "timetable_week_slot_idx")
+  @@index([week_key, teacher_id], map: "timetable_week_teacher_idx")
   @@index([slot_id], map: "slot_id")
+}
+
+model rooms {
+  room_id   Int      @id @default(autoincrement())
+  code      String   @unique @db.VarChar(50)
+  name      String?  @db.VarChar(150)
+  capacity  Int?
+  location  String?  @db.VarChar(150)
+  notes     String?  @db.Text
+  created_at DateTime @default(now()) @db.Timestamp(0)
+  updated_at DateTime @default(now()) @updatedAt @db.Timestamp(0)
+
+  roomAvailability room_availability[]
+}
+
+model teacher_availability {
+  id         Int                   @id @default(autoincrement())
+  teacher_id String                @db.VarChar(20)
+  day_of_week timetable_day_of_week
+  slot_id    Int
+  is_available Boolean             @default(true)
+
+  teacher   teachers?  @relation(fields: [teacher_id], references: [teacher_id], onDelete: Cascade, onUpdate: NoAction, map: "teacher_availability_teacher_fk")
+  time_slot time_slots @relation(fields: [slot_id], references: [slot_id], onDelete: Cascade, onUpdate: NoAction, map: "teacher_availability_slot_fk")
+
+  @@index([teacher_id, day_of_week, slot_id], map: "teacher_availability_idx")
+  @@index([slot_id], map: "teacher_availability_slot_idx")
+}
+
+model room_availability {
+  id         Int                   @id @default(autoincrement())
+  room_code  String                @db.VarChar(50)
+  day_of_week timetable_day_of_week
+  slot_id    Int
+  is_available Boolean             @default(true)
+
+  room      rooms?      @relation(fields: [room_code], references: [code], onDelete: Cascade, onUpdate: NoAction, map: "room_availability_room_fk")
+  time_slot time_slots @relation(fields: [slot_id], references: [slot_id], onDelete: Cascade, onUpdate: NoAction, map: "room_availability_slot_fk")
+
+  @@index([room_code, day_of_week, slot_id], map: "room_availability_idx")
+  @@index([slot_id], map: "room_availability_slot_idx")
 }
 
 model semester_attendance_stats {
