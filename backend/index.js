@@ -66,6 +66,10 @@ app.use("/api/admin/classes", adminClassRoutes);
 const adminStudentRoutes = require("./src/sinhvien_ad/sinhvien_ad.routes");
 app.use("/api/admin/students", adminStudentRoutes);
 
+// Admin accounts routes
+const adminAccountsRoutes = require("./src/taikhoan_ad.routes");
+app.use("/api/admin/accounts", adminAccountsRoutes);
+
 // API xem danh sách lớp
 app.get("/api/classes", (req, res) => {
   res.json([
