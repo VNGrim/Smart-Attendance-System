@@ -1,5 +1,7 @@
 const prisma = require("../config/prisma");
 
+const normalizeClassId = (value) => String(value ?? "").trim().toUpperCase();
+
 async function getClassesByTeacher(teacherId) {
   await prisma.$ready;
   const rows = await prisma.$queryRaw`
@@ -10,12 +12,15 @@ async function getClassesByTeacher(teacherId) {
       c.subject_code,
       c.semester,
       c.school_year,
-      COUNT(DISTINCT sc.student_id) AS student_count
+      c.teacher_id,
+      c.status,
+      COUNT(DISTINCT s.student_id) AS student_count
     FROM classes c
-    LEFT JOIN student_classes sc ON sc.class_id = c.class_id
+    LEFT JOIN students s
+      ON s.classes IS NOT NULL
+     AND FIND_IN_SET(UPPER(c.class_id), REPLACE(UPPER(s.classes), ' ', '')) > 0
     WHERE c.teacher_id = ${teacherId}
-    GROUP BY c.class_id, c.class_name, c.subject_name, c.subject_code, c.semester, c.school_year
-    ORDER BY COALESCE(c.school_year, '0000') DESC, COALESCE(c.semester, '') DESC, c.class_name ASC
+    ORDER BY COALESCE(c.school_year, '9999') DESC, COALESCE(c.semester, '') DESC, c.class_name ASC
   `;
   return rows;
 }
@@ -79,17 +84,18 @@ async function getSessionWithClass(id) {
 
 async function getClassStudents(classId) {
   await prisma.$ready;
+  const normalized = normalizeClassId(classId);
   return prisma.$queryRaw`
     SELECT
       s.student_id,
       s.full_name,
       s.email,
       s.course,
-      sc.status,
-      sc.enrolled_at
+      s.status,
+      NULL AS enrolled_at
     FROM students s
-    JOIN student_classes sc ON sc.student_id = s.student_id
-    WHERE sc.class_id = ${classId}
+    WHERE s.classes IS NOT NULL
+      AND FIND_IN_SET(UPPER(${normalized}), REPLACE(UPPER(s.classes), ' ', '')) > 0
     ORDER BY s.full_name
   `;
 }
@@ -138,7 +144,14 @@ async function saveManualAttendance(sessionId, entries) {
 
 async function countClassStudents(classId) {
   await prisma.$ready;
-  return prisma.student_classes.count({ where: { class_id: classId } });
+  const normalized = normalizeClassId(classId);
+  const rows = await prisma.$queryRaw`
+    SELECT COUNT(*) AS total
+    FROM students s
+    WHERE s.classes IS NOT NULL
+      AND FIND_IN_SET(UPPER(${normalized}), REPLACE(UPPER(s.classes), ' ', '')) > 0
+  `;
+  return rows?.[0]?.total || 0;
 }
 
 async function getClassHistory(classId, slotId, limit = 20) {
