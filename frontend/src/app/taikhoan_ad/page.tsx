@@ -559,51 +559,81 @@ export default function AdminAccountsPage() {
 
       {modalOpen && (
         <div className="modal" onClick={() => setModalOpen(false)}>
-          <div className="modal-content wide" onClick={(e)=>e.stopPropagation()}>
+          <div className="modal-content account-modal" onClick={(e)=>e.stopPropagation()}>
             <div className="modal-head">
               <div className="title">{edit?"Chỉnh sửa tài khoản":"Tạo tài khoản mới"}</div>
               <button className="icon-btn" onClick={() => setModalOpen(false)}>✖</button>
             </div>
-            <div className="modal-body grid2">
-              <div className="form-col">
-                <label className="label">Họ và tên</label>
-                <input className="input" value={formName} onChange={(e)=>setFormName(e.target.value)} placeholder="Nguyễn Văn A" />
-                <label className="label">Email đăng nhập</label>
-                <input className="input" value={formEmail} onChange={(e)=>setFormEmail(e.target.value)} placeholder="email@school.edu.vn" />
-                <label className="label">Mã số</label>
-                <input className="input" value={formCode} onChange={(e)=>setFormCode(e.target.value)} placeholder="SVxxxx / GVxxx / ADxxx" />
-                <label className="label">Vai trò</label>
-                <select className="input" value={formRole} onChange={(e)=>setFormRole(e.target.value as Role)}>
-                  <option>Admin</option>
-                  <option>Giảng viên</option>
-                  <option>Sinh viên</option>
-                </select>
-                <label className="label">Trạng thái</label>
-                <select className="input" value={formStatus} onChange={(e)=>setFormStatus(e.target.value as Status)}>
-                  <option>Hoạt động</option>
-                  <option>Bị khóa</option>
-                  <option>Chờ kích hoạt</option>
-                </select>
-                <label className="label">Mật khẩu</label>
-                <div className="inline">
-                  <input className="input" value={formPassword} onChange={(e)=>setFormPassword(e.target.value)} placeholder="Tự động nếu để trống" />
-                  <button className="chip" onClick={()=>setFormPassword(randomPass())}>Tạo ngẫu nhiên</button>
+            <div className="modal-body account-grid">
+              <div className="form-panel">
+                <div className="panel-header">
+                  <div className="panel-title">Thông tin tài khoản</div>
+                </div>
+                <div className="panel-body">
+                  <div className="field">
+                    <label className="label">Họ và tên</label>
+                    <input className="input" value={formName} onChange={(e)=>setFormName(e.target.value)} placeholder="Nguyễn Văn A" />
+                  </div>
+                  <div className="field">
+                    <label className="label">Email đăng nhập</label>
+                    <input className="input" value={formEmail} onChange={(e)=>setFormEmail(e.target.value)} placeholder="email@school.edu.vn" />
+                  </div>
+                  <div className="field">
+                    <label className="label">Mã số</label>
+                    <input className="input" value={formCode} onChange={(e)=>setFormCode(e.target.value)} placeholder="SVxxxx / GVxxx / ADxxx" />
+                  </div>
+                  <div className="field two-cols">
+                    <div>
+                      <label className="label">Vai trò</label>
+                      <select className="input" value={formRole} onChange={(e)=>setFormRole(e.target.value as Role)}>
+                        <option>Admin</option>
+                        <option>Giảng viên</option>
+                        <option>Sinh viên</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="label">Trạng thái</label>
+                      <select className="input" value={formStatus} onChange={(e)=>setFormStatus(e.target.value as Status)}>
+                        <option>Hoạt động</option>
+                        <option>Bị khóa</option>
+                        <option>Chờ kích hoạt</option>
+                      </select>
+                    </div>
+                  </div>
+                  <div className="field">
+                    <label className="label">Mật khẩu</label>
+                    <div className="inline">
+                      <input className="input" value={formPassword} onChange={(e)=>setFormPassword(e.target.value)} placeholder="Tự động nếu để trống" />
+                      <button className="chip" onClick={()=>setFormPassword(randomPass())}>Tạo ngẫu nhiên</button>
+                    </div>
+                  </div>
                 </div>
               </div>
-              <div className="form-col">
-                <label className="label">Ghi chú</label>
-                <textarea className="input" rows={3} value={formNote} onChange={(e)=>setFormNote(e.target.value)} placeholder="Ghi chú nếu cần..."></textarea>
-                <div className="section-title">Phân quyền chi tiết</div>
-                <div className="perm-list">
-                  <label><input type="checkbox" checked={perm.view_students} onChange={(e)=>setPerm(prev=>({...prev, view_students: e.target.checked}))} /> Xem danh sách sinh viên</label>
-                  <label><input type="checkbox" checked={perm.edit_schedule} onChange={(e)=>setPerm(prev=>({...prev, edit_schedule: e.target.checked}))} /> Chỉnh sửa lịch học</label>
-                  <label><input type="checkbox" checked={perm.manage_lecturers} onChange={(e)=>setPerm(prev=>({...prev, manage_lecturers: e.target.checked}))} /> Quản lý giảng viên</label>
-                  <label><input type="checkbox" checked={perm.export_reports} onChange={(e)=>setPerm(prev=>({...prev, export_reports: e.target.checked}))} /> Xuất báo cáo</label>
+              <div className="form-panel secondary">
+                <div className="panel-header">
+                  <div className="panel-title">Tóm tắt & phân quyền</div>
+                </div>
+                <div className="panel-body">
+                  <div className="summary-box">
+                    <div className="summary-item"><span className="summary-icon">🆔</span><span>Mã số: {formCode || "Chưa nhập"}</span></div>
+                    <div className="summary-item"><span className="summary-icon">🎯</span><span>Vai trò: {formRole}</span></div>
+                    <div className="summary-item"><span className="summary-icon">📨</span><span>Email: {formEmail || "Chưa nhập"}</span></div>
+                    <div className="summary-item"><span className="summary-icon">💡</span><span>Trạng thái: {formStatus}</span></div>
+                  </div>
+                  <label className="label">Ghi chú</label>
+                  <textarea className="input" rows={3} value={formNote} onChange={(e)=>setFormNote(e.target.value)} placeholder="Ghi chú nếu cần..."></textarea>
+                  <div className="section-title">Phân quyền chi tiết</div>
+                  <div className="perm-list">
+                    <label><input type="checkbox" checked={perm.view_students} onChange={(e)=>setPerm(prev=>({...prev, view_students: e.target.checked}))} /> Xem danh sách sinh viên</label>
+                    <label><input type="checkbox" checked={perm.edit_schedule} onChange={(e)=>setPerm(prev=>({...prev, edit_schedule: e.target.checked}))} /> Chỉnh sửa lịch học</label>
+                    <label><input type="checkbox" checked={perm.manage_lecturers} onChange={(e)=>setPerm(prev=>({...prev, manage_lecturers: e.target.checked}))} /> Quản lý giảng viên</label>
+                    <label><input type="checkbox" checked={perm.export_reports} onChange={(e)=>setPerm(prev=>({...prev, export_reports: e.target.checked}))} /> Xuất báo cáo</label>
+                  </div>
                 </div>
               </div>
             </div>
-            <div className="modal-foot space">
-              <button className="qr-btn" onClick={()=>setModalOpen(false)}>Hủy</button>
+            <div className="modal-foot account-foot">
+              <button className="qr-btn ghost" onClick={()=>setModalOpen(false)}>Hủy</button>
               <div className="actions-row">
                 <button className="qr-btn" onClick={()=>onSubmit(false)}>💾 Lưu</button>
                 <button className="qr-btn" onClick={()=>onSubmit(true)}>📩 Lưu & Gửi mail</button>
