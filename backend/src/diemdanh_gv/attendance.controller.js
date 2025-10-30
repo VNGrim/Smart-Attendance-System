@@ -361,10 +361,14 @@ const getClassHistoryHandler = async (req, res) => {
     const { classId } = req.params;
     const slot = req.query?.slot ? Number(req.query.slot) : undefined;
     await ensureTeacherOwnsClass(teacherId, classId);
-    const rows = await getClassHistory(classId, slot, 50);
+    const [rows, totalStudents] = await Promise.all([
+      getClassHistory(classId, slot, 50),
+      countClassStudents(classId),
+    ]);
     const data = rows.map((row) => {
-      const total = row.records?.length || 0;
       const present = row.records?.filter((r) => r.status === "present").length || 0;
+      const total = totalStudents || row.records?.length || 0;
+      const ratio = total ? Math.round((present / total) * 100) : 0;
       return {
         id: row.id,
         day: dayjs(row.day).format("YYYY-MM-DD"),
@@ -374,11 +378,11 @@ const getClassHistoryHandler = async (req, res) => {
         code: row.code,
         present,
         total,
-        ratio: total ? Math.round((present / total) * 100) : 0,
+        ratio,
         createdAt: dayjs(row.created_at).toISOString(),
       };
     });
-    return res.json({ success: true, data });
+    return jsonResponse(res, { success: true, data });
   } catch (error) {
     if (error.status === 404) return res.status(404).json({ success: false, message: "Không tìm thấy lớp" });
     if (error.status === 403) return res.status(403).json({ success: false, message: "Bạn không có quyền với lớp này" });

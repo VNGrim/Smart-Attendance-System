@@ -35,15 +35,16 @@ router.post('/login', async (req, res) => {
 
     const token = jwt.sign({ userId: account.user_code, role: account.role, fullName }, JWT_SECRET, { expiresIn: JWT_EXPIRES_IN });
 
+    const isSecure = req.secure || req.headers['x-forwarded-proto'] === 'https';
     res.cookie('access_token', token, {
       httpOnly: true,
-      sameSite: 'lax',
-      secure: false,
+      sameSite: isSecure ? 'none' : 'lax',
+      secure: isSecure,
       maxAge: 1000 * 60 * 60, // 1h (browser cap; JWT ttl theo JWT_EXPIRES_IN)
       path: '/',
     });
 
-    return res.json({ success: true, role: account.role, userId: account.user_code, fullName });
+    return res.json({ success: true, role: account.role, userId: account.user_code, fullName, token });
   } catch (err) {
     console.error('Login error:', err);
     return res.status(500).json({ success: false, message: 'Lỗi hệ thống' });

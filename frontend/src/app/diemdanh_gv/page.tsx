@@ -3,6 +3,8 @@
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import QRCode from "qrcode";
+import { makeApiUrl } from "../../lib/apiBase";
+import { formatVietnamDate, formatVietnamTime, formatVietnamWeekday } from "../../lib/timezone";
 
 type ClassInfo = {
   id: string;
@@ -69,7 +71,7 @@ type Mode = "qr" | "code" | "manual";
 
 type Filter = "all" | "present" | "absent" | "excused";
 
-const API_BASE = "http://localhost:8080/api/attendances";
+const API_BASE = makeApiUrl("/api/attendances");
 
 const DAY_LABELS: Record<string, string> = {
   Mon: "Thứ 2",
@@ -126,14 +128,32 @@ const SESSION_REQUIREMENTS: Record<Mode, { title: string; description: string }[
   ],
 };
 
+const getToken = () => {
+  if (typeof window === "undefined") return null;
+  try {
+    const stored = localStorage.getItem("sas_user");
+    if (!stored) return null;
+    const parsed = JSON.parse(stored);
+    return parsed?.token || null;
+  } catch {
+    return null;
+  }
+};
+
 async function fetchJson<T>(input: RequestInfo | URL, init?: RequestInit): Promise<T> {
+  const token = getToken();
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+    ...(init?.headers as Record<string, string> | undefined),
+  };
+  if (token) {
+    headers.Authorization = `Bearer ${token}`;
+  }
+
   const resp = await fetch(input, {
     credentials: "include",
     ...init,
-    headers: {
-      "Content-Type": "application/json",
-      ...(init?.headers || {}),
-    },
+    headers,
   });
   const data = await resp.json().catch(() => ({}));
   if (!resp.ok) {
@@ -383,10 +403,13 @@ export default function LecturerAttendancePage() {
         setSessionLoading(true);
         setError(null);
         const today = new Date().toISOString().slice(0, 10);
-        const payload = await fetchJson<{ success: boolean; data: SessionSummary; reused?: boolean }>(`${API_BASE}/sessions`, {
-          method: "POST",
-          body: JSON.stringify({ classId, slotId, type: selectedMode, date: today }),
-        });
+        const payload = await fetchJson<{ success: boolean; data: SessionSummary; reused?: boolean }>(
+          `${API_BASE}/sessions`,
+          {
+            method: "POST",
+            body: JSON.stringify({ classId, slotId, type: selectedMode, date: today }),
+          }
+        );
         const summary = payload.data;
         await loadSessionDetail(summary.id);
         fetchHistory(classId, slotId);
@@ -404,7 +427,7 @@ export default function LecturerAttendancePage() {
       setCls(classId);
       setSession(null);
       setStudents([]);
-       setQrImage(null);
+      setQrImage(null);
       stopPolling();
       if (classId) {
         fetchSlots(classId);
@@ -469,7 +492,9 @@ export default function LecturerAttendancePage() {
       setResetLoading(true);
       const payload = await fetchJson<{ success: boolean; data: SessionSummary }>(
         `${API_BASE}/sessions/${session.id}/reset`,
-        { method: "POST" }
+        {
+          method: "POST",
+        }
       );
       await loadSessionDetail(payload.data.id);
     } catch (err: any) {
@@ -730,7 +755,7 @@ export default function LecturerAttendancePage() {
                     <td>{s.fullName}</td>
                     <td>{s.email || "--"}</td>
                     <td>{s.status === "present" ? "✅ Có mặt" : s.status === "excused" ? "📝 Có phép" : "❌ Vắng"}</td>
-                    <td>{s.markedAt ? new Date(s.markedAt).toLocaleTimeString() : "--"}</td>
+                    <td>{s.markedAt ? formatVietnamTime(s.markedAt) : "--"}</td>
                     {session?.type === "manual" && (
                       <td>
                         <label className="manual-check">
@@ -782,7 +807,10 @@ export default function LecturerAttendancePage() {
             <tbody>
               {history.map((h) => (
                 <tr key={h.id}>
-                  <td>{h.day}</td>
+                  <td>
+                    <div>{formatVietnamDate(h.day)}</div>
+                    <div style={{ fontSize: 12, color: "#64748b" }}>{formatVietnamWeekday(h.day)}</div>
+                  </td>
                   <td>{h.slotId}</td>
                   <td>{h.type}</td>
                   <td>{h.status}</td>

@@ -10,6 +10,8 @@ const prisma = require("./src/config/prisma"); // Import cấu hình Prisma
 const app = express();
 const PORT = 8080;
 
+app.set("trust proxy", 1);
+
 app.use(cors({ origin: true, credentials: true }));
 app.use(bodyParser.json());
 app.use(cookieParser());
@@ -33,6 +35,10 @@ app.use("/api/lop", lopRoutes);
 // Lecturer attendance routes
 const attendanceRoutes = require("./src/diemdanh_gv");
 app.use("/api/attendances", attendanceRoutes);
+
+// Student attendance routes
+const studentAttendanceRoutes = require("./src/diemdanh_sv");
+app.use("/api/student-attendance", studentAttendanceRoutes);
 
 // Auth & User routes (JWT + cookie)
 const authRoutes = require("./src/routes/auth.routes");

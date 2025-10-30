@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
+import { apiFetch, apiFetchJson } from "../../lib/authClient";
 import { useRouter } from "next/navigation";
 
 type NoticeCategory = "toantruong" | "giangvien" | "sinhvien" | "scheduled" | "deleted" | "khac";
@@ -67,17 +68,20 @@ function AnnouncementModal({ open, edit, saving, onClose, onSubmit }: Announceme
   const [lecturerError, setLecturerError] = useState<string | null>(null);
   const [lecturerSearch, setLecturerSearch] = useState("");
 
-  const fetchLecturers = useCallback(async (options: { search?: string; ids?: string[] } = {}) => {
+  const fetchLecturers = async (options: { search?: string; ids?: string[] } = {}) => {
     const rawSearch = typeof options.search === "string" ? options.search : "";
     const trimmedSearch = rawSearch.trim();
     const ids = Array.isArray(options.ids) ? options.ids.filter((item) => item && item.trim().length) : undefined;
     setLecturerLoading(true);
     setLecturerError(null);
     try {
-      const url = new URL("http://localhost:8080/api/admin/notifications/lecturers");
-      if (trimmedSearch) url.searchParams.set("search", trimmedSearch);
-      if (ids && ids.length) url.searchParams.set("ids", ids.join(","));
-      const res = await fetch(url.toString(), { credentials: "include" });
+      const res = await apiFetch(`/api/admin/notifications/lecturers`, {
+        method: "GET",
+        params: {
+          search: trimmedSearch,
+          ids: ids?.join(","),
+        },
+      });
       if (!res.ok) throw new Error(await res.text());
       const data = await res.json();
       const list: Lecturer[] = Array.isArray(data?.lecturers)
@@ -97,7 +101,7 @@ function AnnouncementModal({ open, edit, saving, onClose, onSubmit }: Announceme
     } finally {
       setLecturerLoading(false);
     }
-  }, []);
+  };
 
   useEffect(() => {
     if (!open) return;
@@ -526,11 +530,7 @@ export default function AdminNotifyPage() {
       setLoading(true);
       setError(null);
       try {
-        const response = await fetch("http://localhost:8080/api/admin/notifications", {
-          credentials: "include",
-        });
-        if (!response.ok) throw new Error(await response.text());
-        const data = await response.json();
+        const data = await apiFetchJson("/api/admin/notifications");
         const rawList = Array.isArray(data?.announcements) ? data.announcements : [];
         const mapped: Notice[] = rawList.map(mapServerNotice);
         if (!ignore) {
@@ -564,11 +564,7 @@ export default function AdminNotifyPage() {
     setLoading(true);
     setError(null);
     try {
-      const response = await fetch("http://localhost:8080/api/admin/notifications", {
-        credentials: "include",
-      });
-      if (!response.ok) throw new Error(await response.text());
-      const data = await response.json();
+      const data = await apiFetchJson("/api/admin/notifications");
       const rawList = Array.isArray(data?.announcements) ? data.announcements : [];
       const mapped: Notice[] = rawList.map(mapServerNotice);
       setList(mapped);
@@ -652,25 +648,13 @@ export default function AdminNotifyPage() {
     };
 
     setSaving(true);
-    fetch("http://localhost:8080/api/admin/notifications", {
+    apiFetchJson("/api/admin/notifications", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      credentials: "include",
       body: JSON.stringify(body),
     })
-      .then(async (res) => {
-        if (res.status === 401) {
-          alert("Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.");
-          router.push("/login");
-          return;
-        }
-        if (!res.ok) {
-          const text = await res.text();
-          throw new Error(text || "Request failed");
-        }
-        await reloadList();
-        closeModal();
-      })
+      .then(() => reloadList())
+      .then(() => closeModal())
       .catch((err) => {
         console.error("create announcement error", err);
         alert("Tạo thông báo thất bại. " + (err.message || ""));
