@@ -239,3 +239,80 @@ body::before {
 .info-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 .info-fields .full { grid-column: 1 / -1; }
 .modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 12px; }
+
+
+/* Áp dụng cho chế độ sáng */
+.layout.light-theme {
+  --background: #ffffff;             /* nền chính */
+  --foreground: #1e293b;             /* chữ đen chính */
+  --card-bg: #ffffff;                 /* nền card */
+  --card-border: rgba(0,0,0,0.1);    /* viền card */
+  --tile-bg: #ffffff;                 /* nền tile */
+  --tile-border: rgba(0,0,0,0.1);    /* viền tile */
+  --input-bg: #f3f4f6;                /* nền input/select */
+  --input-border: rgba(0,0,0,0.2);   /* viền input/select */
+  --text-secondary: #334155;          /* chữ nhỏ, mô tả */
+  --btn-bg: #f3f4f6;                  /* nền nút */
+  --btn-border: rgba(0,0,0,0.1);      /* viền nút */
+}
+
+/* Main background */
+.layout.light-theme .main {
+  background: var(--background) !important;
+}
+
+/* Card */
+.layout.light-theme .card {
+  background: var(--card-bg);
+  border: 1px solid var(--card-border);
+  color: var(--foreground);
+}
+
+/* Tile */
+.layout.light-theme .tile {
+  background: var(--tile-bg);
+  border: 1px solid var(--tile-border);
+  color: var(--foreground);
+}
+
+/* Header, section title, hero, side-name */
+.layout.light-theme .topbar,
+.layout.light-theme .section-title,
+.layout.light-theme .hero .name,
+.layout.light-theme .hero .tag,
+.layout.light-theme .side-name {
+  color: var(--foreground);
+}
+
+/* Input, select */
+.layout.light-theme .input,
+.layout.light-theme .select {
+  background: var(--input-bg);
+  border: 1px solid var(--input-border);
+  color: var(--foreground);
+}
+
+/* Button chữ và nền */
+.layout.light-theme .btn,
+.layout.light-theme .btn-outline,
+.layout.light-theme .btn-primary,
+.layout.light-theme .theme-opt {
+  color: var(--foreground);
+  background: var(--btn-bg);
+  border: 1px solid var(--btn-border);
+  font-family: inherit;
+}
+
+/* Modal */
+.layout.light-theme .modal-card {
+  background: var(--card-bg);
+  border: 1px solid var(--card-border);
+  color: var(--foreground);
+}
+
+/* Text nhỏ, mô tả */
+.layout.light-theme .desc,
+.layout.light-theme .date,
+.layout.light-theme .label {
+  color: var(--text-secondary);
+}
