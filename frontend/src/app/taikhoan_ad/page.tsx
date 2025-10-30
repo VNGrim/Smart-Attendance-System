@@ -82,13 +82,6 @@ const ROLE_FILTER_LABEL_TO_KEY: Record<string, RoleKey | null> = {
   "Sinh viên": "student",
 };
 
-const STATUS_FILTER_LABEL_TO_KEY: Record<string, StatusKey | null> = {
-  "Tất cả trạng thái": null,
-  "Hoạt động": "active",
-  "Bị khóa": "locked",
-  "Chờ kích hoạt": "pending",
-};
-
 const roleLabelToKey = (label: Role): RoleKey => {
   switch (label) {
     case "Admin":
@@ -180,8 +173,7 @@ export default function AdminAccountsPage() {
   const [notifCount] = useState(2);
   const [search, setSearch] = useState("");
   const [filterRole, setFilterRole] = useState("Tất cả vai trò");
-  const [filterStatus, setFilterStatus] = useState("Tất cả trạng thái");
-  const [filterDate, setFilterDate] = useState("Tất cả");
+
   const [list, setList] = useState<Account[]>([]);
   const [summary, setSummary] = useState<AccountsSummary>(emptySummary());
   const [loading, setLoading] = useState(true);
@@ -263,16 +255,6 @@ export default function AdminAccountsPage() {
   const filtered = useMemo(() => {
     const searchTerm = search.trim().toLowerCase();
     const roleKeyFilter = ROLE_FILTER_LABEL_TO_KEY[filterRole] ?? null;
-    const statusKeyFilter = STATUS_FILTER_LABEL_TO_KEY[filterStatus] ?? null;
-
-    const within7Days = (lastLogin?: string | null) => {
-      if (!lastLogin) return false;
-      const parsed = new Date(lastLogin);
-      if (Number.isNaN(parsed.getTime())) return false;
-      const diff = Date.now() - parsed.getTime();
-      const sevenDaysMs = 7 * 24 * 60 * 60 * 1000;
-      return diff <= sevenDaysMs;
-    };
 
     const filteredData = list.filter((account) => {
       const matchesSearch = !searchTerm
@@ -282,11 +264,6 @@ export default function AdminAccountsPage() {
       if (!matchesSearch) return false;
 
       if (roleKeyFilter && account.roleKey !== roleKeyFilter) return false;
-      if (statusKeyFilter && account.statusKey !== statusKeyFilter) return false;
-
-      if (filterDate === "7 ngày") {
-        if (!within7Days(account.lastLoginRaw)) return false;
-      }
 
       return true;
     });
@@ -306,7 +283,7 @@ export default function AdminAccountsPage() {
     });
 
     return sorted;
-  }, [list, search, filterRole, filterStatus, filterDate, sortKey, sortAsc]);
+  }, [list, search, filterRole, sortKey, sortAsc]);
 
   const total = filtered.length;
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
@@ -320,15 +297,6 @@ export default function AdminAccountsPage() {
     setSelected((prev) => { const next = new Set(prev); if (next.has(id)) next.delete(id); else next.add(id); return next; });
   };
 
-  const bulkLock = (lock: boolean) => {
-    const nextStatus: Status = lock ? "Bị khóa" : "Hoạt động";
-    const nextStatusKey = statusLabelToKey(nextStatus);
-    updateList((prev) => prev.map((a) => {
-      if (!selected.has(a.id)) return a;
-      return { ...a, status: nextStatus, statusKey: nextStatusKey };
-    }));
-    setSelected(new Set());
-  };
   const bulkDelete = () => {
     if (!confirm("Xóa các tài khoản đã chọn?")) return;
     updateList((prev) => prev.filter((a) => !selected.has(a.id)));
@@ -464,28 +432,8 @@ export default function AdminAccountsPage() {
               <option>Giảng viên</option>
               <option>Sinh viên</option>
             </select>
-            <select className="input" value={filterStatus} onChange={(e)=>{ setFilterStatus(e.target.value); setPage(1); }}>
-              <option>Tất cả trạng thái</option>
-              <option>Hoạt động</option>
-              <option>Bị khóa</option>
-              <option>Chờ kích hoạt</option>
-            </select>
-            <select className="input" value={filterDate} onChange={(e)=>{ setFilterDate(e.target.value); setPage(1); }}>
-              <option>Tất cả</option>
-              <option>7 ngày</option>
-            </select>
           </div>
           <button className="btn-primary" onClick={onOpenCreate}>+ Tạo tài khoản mới</button>
-          <button className="btn-outline" onClick={()=>alert("Xuất Excel/PDF")}>📋 Xuất danh sách</button>
-          <button className="icon-btn" onClick={toggleDark} title="Chuyển giao diện">{dark?"🌙":"🌞"}</button>
-          <button className="icon-btn notif" title="Thông báo">🔔{notifCount>0 && <span className="badge">{notifCount}</span>}</button>
-          <div className="avatar-menu">
-            <div className="avatar">🧑‍💼</div>
-            <div className="dropdown">
-              <a href="#" onClick={(e)=>e.preventDefault()}>Hồ sơ</a>
-              <a href="#" onClick={(e)=>{e.preventDefault(); if(confirm("Đăng xuất?")){ localStorage.removeItem("sas_user"); router.push("/login"); }}}>Đăng xuất</a>
-            </div>
-          </div>
           <button className="qr-btn" onClick={async ()=>{ 
             if (confirm('Bạn có chắc muốn đăng xuất?')) {
               try { await fetch('http://localhost:8080/api/auth/logout', { method: 'POST', credentials: 'include' }); } catch {}
@@ -515,9 +463,6 @@ export default function AdminAccountsPage() {
 
       <div className="toolbar-sub">
         <div className="left">
-          <button className="chip" disabled={!anySelected} onClick={()=>bulkLock(false)}>✅ Mở khóa</button>
-          <button className="chip" disabled={!anySelected} onClick={()=>bulkLock(true)}>🔒 Khóa tài khoản</button>
-          <button className="chip" disabled={!anySelected} onClick={()=>alert("Gửi mail thông báo")}>📩 Gửi mail</button>
           <button className="chip danger" disabled={!anySelected} onClick={bulkDelete}>🗑 Xóa</button>
         </div>
         <div className="right">{anySelected ? `${selected.size} đã chọn` : ""}</div>
