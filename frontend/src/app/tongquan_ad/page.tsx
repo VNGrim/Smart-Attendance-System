@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import { apiFetch, apiFetchJson } from "../../lib/authClient";
 
 type Activity = {
   time: string;
@@ -125,11 +126,7 @@ export default function AdminOverviewPage() {
       setCompositionLoading(true);
       setCompositionError(null);
       try {
-        const res = await fetch("http://localhost:8080/api/admin/overview/composition", {
-          credentials: "include",
-        });
-        if (!res.ok) throw new Error(await res.text());
-        const data = await res.json();
+        const data = await apiFetchJson("/api/admin/overview/composition");
         if (typeof data?.total === "number" && data?.breakdown) {
           setComposition({
             total: data.total,
@@ -156,11 +153,7 @@ export default function AdminOverviewPage() {
       setSemesterLoading(true);
       setSemesterError(null);
       try {
-        const res = await fetch("http://localhost:8080/api/admin/overview/semesters/attendance", {
-          credentials: "include",
-        });
-        if (!res.ok) throw new Error(await res.text());
-        const data = await res.json();
+        const data = await apiFetchJson("/api/admin/overview/semesters/attendance");
         if (Array.isArray(data?.semesters)) {
           setSemesters(
             data.semesters.map((item: any) => ({
@@ -188,11 +181,7 @@ export default function AdminOverviewPage() {
       setActivityLoading(true);
       setActivityError(null);
       try {
-        const res = await fetch("http://localhost:8080/api/admin/overview/activities/recent", {
-          credentials: "include",
-        });
-        if (!res.ok) throw new Error(await res.text());
-        const data = await res.json();
+        const data = await apiFetchJson("/api/admin/overview/activities/recent");
         if (Array.isArray(data?.items)) {
           setActivity(
             data.items.map((item: any) => {
@@ -222,13 +211,8 @@ export default function AdminOverviewPage() {
   useEffect(() => {
     (async () => {
       try {
-        const res = await fetch("http://localhost:8080/api/admin/overview/students/count", {
-          credentials: "include",
-        });
-        if (res.ok) {
-          const data = await res.json();
-          if (typeof data?.count === "number") setStudentCount(data.count);
-        }
+        const data = await apiFetchJson("/api/admin/overview/students/count");
+        if (typeof data?.count === "number") setStudentCount(data.count);
       } catch {}
     })();
   }, []);
@@ -236,13 +220,8 @@ export default function AdminOverviewPage() {
   useEffect(() => {
     (async () => {
       try {
-        const res = await fetch("http://localhost:8080/api/admin/overview/lecturers/count", {
-          credentials: "include",
-        });
-        if (res.ok) {
-          const data = await res.json();
-          if (typeof data?.count === "number") setLecturerCount(data.count);
-        }
+        const data = await apiFetchJson("/api/admin/overview/lecturers/count");
+        if (typeof data?.count === "number") setLecturerCount(data.count);
       } catch {}
     })();
   }, []);
@@ -250,13 +229,8 @@ export default function AdminOverviewPage() {
   useEffect(() => {
     (async () => {
       try {
-        const res = await fetch("http://localhost:8080/api/admin/overview/classes/count", {
-          credentials: "include",
-        });
-        if (res.ok) {
-          const data = await res.json();
-          if (typeof data?.count === "number") setClassCount(data.count);
-        }
+        const data = await apiFetchJson("/api/admin/overview/classes/count");
+        if (typeof data?.count === "number") setClassCount(data.count);
       } catch {}
     })();
   }, []);
@@ -264,13 +238,8 @@ export default function AdminOverviewPage() {
   useEffect(() => {
     (async () => {
       try {
-        const res = await fetch("http://localhost:8080/api/admin/overview/sessions/today/count", {
-          credentials: "include",
-        });
-        if (res.ok) {
-          const data = await res.json();
-          if (typeof data?.count === "number") setSessionsTodayCount(data.count);
-        }
+        const data = await apiFetchJson("/api/admin/overview/sessions/today/count");
+        if (typeof data?.count === "number") setSessionsTodayCount(data.count);
       } catch {}
     })();
   }, []);
@@ -278,13 +247,8 @@ export default function AdminOverviewPage() {
   useEffect(() => {
     (async () => {
       try {
-        const res = await fetch("http://localhost:8080/api/admin/overview/students/monthly-delta", {
-          credentials: "include",
-        });
-        if (res.ok) {
-          const data = await res.json();
-          if (typeof data?.delta === "number") setStudentDelta(data.delta);
-        }
+        const data = await apiFetchJson("/api/admin/overview/students/monthly-delta");
+        if (typeof data?.delta === "number") setStudentDelta(data.delta);
       } catch {}
     })();
   }, []);
@@ -292,13 +256,8 @@ export default function AdminOverviewPage() {
   useEffect(() => {
     (async () => {
       try {
-        const res = await fetch("http://localhost:8080/api/admin/overview/lecturers/monthly-delta", {
-          credentials: "include",
-        });
-        if (res.ok) {
-          const data = await res.json();
-          if (typeof data?.delta === "number") setLecturerDelta(data.delta);
-        }
+        const data = await apiFetchJson("/api/admin/overview/lecturers/monthly-delta");
+        if (typeof data?.delta === "number") setLecturerDelta(data.delta);
       } catch {}
     })();
   }, []);
@@ -377,7 +336,7 @@ export default function AdminOverviewPage() {
             onClick={async () => {
               if (confirm("Bạn có chắc muốn đăng xuất?")) {
                 try {
-                  await fetch("http://localhost:8080/api/auth/logout", { method: "POST", credentials: "include" });
+                  await apiFetch("/api/auth/logout", { method: "POST" });
                 } catch {}
                 try {
                   localStorage.removeItem("sas_user");
@@ -448,21 +407,14 @@ export default function AdminOverviewPage() {
                     setSemesterDetail(null);
                     setSemesterDetailLoading(true);
                     try {
-                      const res = await fetch(`http://localhost:8080/api/admin/overview/semesters/attendance/${s.code}`, {
-                        credentials: "include",
-                      });
-                      if (res.ok) {
-                        const data = await res.json();
-                        if (data?.semester) {
-                          setSemesterDetail({
-                            code: String(data.semester.code ?? s.code),
-                            name: String(data.semester.name ?? s.name),
-                            totalStudents: Number(data.semester.totalStudents ?? data.semester.total_students ?? 0),
-                            attendanceRatio: Number(data.semester.attendanceRatio ?? data.semester.attendance_ratio ?? 0),
-                          });
-                        } else {
-                          setSemesterDetail(null);
-                        }
+                      const data = await apiFetchJson(`/api/admin/overview/semesters/attendance/${s.code}`);
+                      if (data?.semester) {
+                        setSemesterDetail({
+                          code: String(data.semester.code ?? s.code),
+                          name: String(data.semester.name ?? s.name),
+                          totalStudents: Number(data.semester.totalStudents ?? data.semester.total_students ?? 0),
+                          attendanceRatio: Number(data.semester.attendanceRatio ?? data.semester.attendance_ratio ?? 0),
+                        });
                       } else {
                         setSemesterDetail(null);
                       }

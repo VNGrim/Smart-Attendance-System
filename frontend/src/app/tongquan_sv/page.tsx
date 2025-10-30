@@ -3,6 +3,8 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import QRCodeScanner from "../components/QRCodeScanner";
+import { apiFetchJson } from "../../lib/authClient";
+import { makeApiUrl } from "../../lib/apiBase";
 
 type Student = { id: string; name: string };
 type Stat = { icon: string; title: string; value: string; color: string; href: string };
@@ -11,6 +13,8 @@ type Announcement = { id: number; title: string; sender: string; date: string; t
 type ProgressItem = { subject: string; percent: number; note?: string };
 type AttendanceItem = { subject: string; date: string; slot: string; present: boolean };
 type Assignment = { title: string; due: string; remain: string };
+
+const STUDENT_ATTENDANCE_API = makeApiUrl("/api/student-attendance");
 
 export default function StudentDashboardPage() {
   const [student, setStudent] = useState<Student | null>(null);
@@ -25,6 +29,8 @@ export default function StudentDashboardPage() {
   const [showCodeInput, setShowCodeInput] = useState(false);
   const [attendanceCode, setAttendanceCode] = useState("");
   const [qrResult, setQrResult] = useState("");
+  const [attendanceLoading, setAttendanceLoading] = useState(false);
+  const [attendanceMessage, setAttendanceMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
   useEffect(() => {
     const savedUser = localStorage.getItem("sas_user");
@@ -60,24 +66,45 @@ export default function StudentDashboardPage() {
     handleAttendanceSubmit(attendanceCode);
   };
 
-  const handleAttendanceSubmit = async (code: string) => {
+  const extractCode = (raw: string) => {
+    if (!raw) return "";
+    const trimmed = raw.trim();
     try {
-      // Mock API call - replace with actual API endpoint
-      console.log("Submitting attendance with code:", code);
-      
-      // Simulate API call
-      await new Promise(resolve => setTimeout(resolve, 500));
-      
-      // Close modals
+      const parsedUrl = new URL(trimmed);
+      const codeParam = parsedUrl.searchParams.get("code");
+      if (codeParam) return codeParam.trim().toUpperCase();
+    } catch {
+      // not a URL, treat as plain code
+    }
+    return trimmed.toUpperCase();
+  };
+
+  const handleAttendanceSubmit = async (rawCode: string) => {
+    const code = extractCode(rawCode);
+    if (!code || code.length < 4) {
+      setAttendanceMessage({ type: "error", text: "Mã điểm danh không hợp lệ." });
+      return;
+    }
+
+    setAttendanceLoading(true);
+    setAttendanceMessage(null);
+    try {
+      await apiFetchJson(`${STUDENT_ATTENDANCE_API}/attend`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ code }),
+      });
+
+      setAttendanceMessage({ type: "success", text: "✅ Điểm danh thành công!" });
       setShowQRScanner(false);
       setShowCodeInput(false);
       setAttendanceCode("");
       setQrResult("");
-      
-      alert(`✅ Điểm danh thành công! Mã: ${code}`);
-    } catch (error) {
+    } catch (error: any) {
       console.error("Attendance error:", error);
-      alert("❌ Có lỗi xảy ra khi điểm danh. Vui lòng thử lại!");
+      setAttendanceMessage({ type: "error", text: error?.message || "❌ Có lỗi xảy ra khi điểm danh." });
+    } finally {
+      setAttendanceLoading(false);
     }
   };
 
@@ -249,13 +276,27 @@ export default function StudentDashboardPage() {
             <div className="title">📷 Điểm danh bằng QR hoặc mã</div>
             <div className="sub">Nếu đang trong khung giờ học, hệ thống sẽ gợi ý lớp hiện tại.</div>
             <div className="attendance-buttons">
-              <button className="btn-qr-scan" onClick={() => setShowQRScanner(true)}>
+              <button className="btn-qr-scan" onClick={() => setShowQRScanner(true)} disabled={attendanceLoading}>
                 📷 Quét QR
               </button>
-              <button className="btn-code-input" onClick={() => setShowCodeInput(true)}>
+              <button className="btn-code-input" onClick={() => setShowCodeInput(true)} disabled={attendanceLoading}>
                 🔢 Nhập mã
               </button>
             </div>
+            {attendanceMessage && (
+              <div
+                style={{
+                  marginTop: 12,
+                  padding: "10px 12px",
+                  borderRadius: 12,
+                  fontWeight: 700,
+                  background: attendanceMessage.type === "success" ? "rgba(16,185,129,0.12)" : "rgba(239,68,68,0.12)",
+                  color: attendanceMessage.type === "success" ? "#047857" : "#b91c1c",
+                }}
+              >
+                {attendanceMessage.text}
+              </div>
+            )}
           </div>
           <div className="widget">
             <div className="title">📚 Bài tập & hạn nộp</div>
@@ -325,10 +366,24 @@ export default function StudentDashboardPage() {
                   maxLength={6}
                   autoFocus
                 />
-                <button className="btn-primary submit-code-btn" onClick={handleCodeSubmit}>
-                  Điểm danh
+                  <button className="btn-primary submit-code-btn" onClick={handleCodeSubmit} disabled={attendanceLoading}>
+                  {attendanceLoading ? "Đang xử lý..." : "Điểm danh"}
                 </button>
               </div>
+              {attendanceMessage && (
+                <div
+                  style={{
+                    marginTop: 12,
+                    padding: "10px 12px",
+                    borderRadius: 10,
+                    fontWeight: 600,
+                    background: attendanceMessage.type === "success" ? "rgba(16,185,129,0.12)" : "rgba(239,68,68,0.12)",
+                    color: attendanceMessage.type === "success" ? "#047857" : "#b91c1c",
+                  }}
+                >
+                  {attendanceMessage.text}
+                </div>
+              )}
             </div>
           </div>
         </div>

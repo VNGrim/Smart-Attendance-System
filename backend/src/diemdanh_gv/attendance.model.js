@@ -59,10 +59,33 @@ async function getClassSlotsByDay(classId, dayKey) {
   });
 }
 
+async function getAttendanceRecord(sessionId, studentId) {
+  await prisma.$ready;
+  return prisma.attendance_records.findUnique({
+    where: {
+      session_id_student_id: {
+        session_id: sessionId,
+        student_id: studentId,
+      },
+    },
+  });
+}
+
 async function findLatestSession({ classId, slotId, day }) {
   await prisma.$ready;
   return prisma.attendance_sessions.findFirst({
     where: { class_id: classId, slot_id: slotId, day },
+    orderBy: { created_at: "desc" },
+  });
+}
+
+async function findActiveSessionByCode(code) {
+  await prisma.$ready;
+  return prisma.attendance_sessions.findFirst({
+    where: {
+      code,
+      status: "active",
+    },
     orderBy: { created_at: "desc" },
   });
 }
@@ -152,6 +175,44 @@ async function saveManualAttendance(sessionId, entries) {
   return prisma.$transaction(tasks);
 }
 
+async function isStudentInClass(studentId, classId) {
+  await prisma.$ready;
+  const normalizedClass = normalizeClassId(classId);
+  const rows = await prisma.$queryRaw`
+    SELECT COUNT(*) AS total
+    FROM students s
+    WHERE s.student_id = ${studentId}
+      AND s.classes IS NOT NULL
+      AND FIND_IN_SET(UPPER(${normalizedClass}), REPLACE(UPPER(s.classes), ' ', '')) > 0
+  `;
+  return Boolean(rows?.[0]?.total);
+}
+
+async function markStudentAttendance(sessionId, studentId, status = "present", note = null) {
+  await prisma.$ready;
+  const now = new Date();
+  return prisma.attendance_records.upsert({
+    where: {
+      session_id_student_id: {
+        session_id: sessionId,
+        student_id: studentId,
+      },
+    },
+    update: {
+      status,
+      marked_at: now,
+      note,
+    },
+    create: {
+      session_id: sessionId,
+      student_id: studentId,
+      status,
+      marked_at: now,
+      note,
+    },
+  });
+}
+
 async function countClassStudents(classId) {
   await prisma.$ready;
   const normalized = normalizeClassId(classId);
@@ -161,7 +222,8 @@ async function countClassStudents(classId) {
     WHERE s.classes IS NOT NULL
       AND FIND_IN_SET(UPPER(${normalized}), REPLACE(UPPER(s.classes), ' ', '')) > 0
   `;
-  return rows?.[0]?.total || 0;
+  const value = rows?.[0]?.total ?? 0;
+  return typeof value === "bigint" ? Number(value) : value;
 }
 
 async function getClassHistory(classId, slotId, limit = 20) {
@@ -188,6 +250,7 @@ module.exports = {
   getClassById,
   getClassSlotsByDay,
   findLatestSession,
+  findActiveSessionByCode,
   createSession,
   updateSession,
   getSessionById,
@@ -195,6 +258,9 @@ module.exports = {
   getClassStudents,
   getAttendanceRecords,
   saveManualAttendance,
+  isStudentInClass,
+  markStudentAttendance,
+  getAttendanceRecord,
   countClassStudents,
   getClassHistory,
 };
