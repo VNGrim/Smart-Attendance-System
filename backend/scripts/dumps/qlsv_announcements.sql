@@ -41,7 +41,7 @@ CREATE TABLE `announcements` (
   PRIMARY KEY (`id`),
   UNIQUE KEY `announcements_code_key` (`code`),
   KEY `announcements_created_at_idx` (`created_at`)
-) ENGINE=InnoDB AUTO_INCREMENT=2 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=3 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -50,7 +50,7 @@ CREATE TABLE `announcements` (
 
 LOCK TABLES `announcements` WRITE;
 /*!40000 ALTER TABLE `announcements` DISABLE KEYS */;
-INSERT INTO `announcements` VALUES (1,'hihiu','hohodaw','2025-10-27 10:46:22','sinhvien','afad198a-068f-45ca-9946-9e3c1975e455',NULL,NULL,NULL,'2025-10-27 10:46:22','Admin','Đã gửi','Tất cả sinh viên','Học vụ','2025-10-27 10:46:22');
+INSERT INTO `announcements` VALUES (1,'hihiu','hohodaw','2025-10-27 10:46:22','sinhvien','afad198a-068f-45ca-9946-9e3c1975e455',NULL,NULL,NULL,'2025-10-27 10:46:22','Admin','Đã gửi','Tất cả sinh viên','Học vụ','2025-10-27 10:46:22'),(2,'Đại đi','Đại luôn','2025-10-29 20:01:44','sinhvien','5e07407a-efa6-4977-b5ea-473a63438b73',NULL,NULL,NULL,'2025-10-29 20:01:44','Admin','Đã gửi','Tất cả sinh viên','Học vụ','2025-10-29 20:01:44');
 /*!40000 ALTER TABLE `announcements` ENABLE KEYS */;
 UNLOCK TABLES;
 /*!40103 SET TIME_ZONE=@OLD_TIME_ZONE */;
@@ -63,4 +63,4 @@ UNLOCK TABLES;
 /*!40101 SET COLLATION_CONNECTION=@OLD_COLLATION_CONNECTION */;
 /*!40111 SET SQL_NOTES=@OLD_SQL_NOTES */;
 
--- Dump completed on 2025-10-30  9:47:08
+-- Dump completed on 2025-10-30 15:21:08

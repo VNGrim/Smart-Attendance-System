@@ -38,7 +38,7 @@ CREATE TABLE `timetable` (
   KEY `timetable_week_slot_idx` (`week_key`,`day_of_week`,`slot_id`),
   KEY `timetable_week_teacher_idx` (`week_key`,`teacher_id`),
   CONSTRAINT `timetable_ibfk_1` FOREIGN KEY (`slot_id`) REFERENCES `time_slots` (`slot_id`) ON DELETE CASCADE ON UPDATE CASCADE
-) ENGINE=InnoDB AUTO_INCREMENT=8 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=10 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -47,7 +47,7 @@ CREATE TABLE `timetable` (
 
 LOCK TABLES `timetable` WRITE;
 /*!40000 ALTER TABLE `timetable` DISABLE KEYS */;
-INSERT INTO `timetable` VALUES (7,'SE19B3','Thu',3,'','29/09 - 05/10','GV001','Đỗ Đình Văn','Programming Fundamentals',NULL);
+INSERT INTO `timetable` VALUES (7,'SE19B3','Thu',3,'','29/09 - 05/10','GV001','Đỗ Đình Văn','Programming Fundamentals',NULL),(8,'SE19B3','Thu',1,'','29/09 - 05/10','GV001','Đỗ Đình Văn','Programming Fundamentals',NULL),(9,'SE19B3','Mon',1,'','29/09 - 05/10','GV001','Đỗ Đình Văn','Programming Fundamentals',NULL);
 /*!40000 ALTER TABLE `timetable` ENABLE KEYS */;
 UNLOCK TABLES;
 /*!40103 SET TIME_ZONE=@OLD_TIME_ZONE */;
@@ -60,4 +60,4 @@ UNLOCK TABLES;
 /*!40101 SET COLLATION_CONNECTION=@OLD_COLLATION_CONNECTION */;
 /*!40111 SET SQL_NOTES=@OLD_SQL_NOTES */;
 
--- Dump completed on 2025-10-30  9:47:08
+-- Dump completed on 2025-10-30 15:21:09
