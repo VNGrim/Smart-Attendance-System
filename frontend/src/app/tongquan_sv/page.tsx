@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
+import QRCodeScanner from "../components/QRCodeScanner";
 
 type Student = { id: string; name: string };
 type Stat = { icon: string; title: string; value: string; color: string; href: string };
@@ -18,6 +19,12 @@ export default function StudentDashboardPage() {
   const [notifCount] = useState(2);
   const [filter, setFilter] = useState<"all"|"teacher"|"school">("all");
   const [selectedAnnouncement, setSelectedAnnouncement] = useState<Announcement | null>(null);
+  
+  // QR Code Scanner State
+  const [showQRScanner, setShowQRScanner] = useState(false);
+  const [showCodeInput, setShowCodeInput] = useState(false);
+  const [attendanceCode, setAttendanceCode] = useState("");
+  const [qrResult, setQrResult] = useState("");
 
   useEffect(() => {
     const savedUser = localStorage.getItem("sas_user");
@@ -39,6 +46,40 @@ export default function StudentDashboardPage() {
     const yyyy = now.getFullYear();
     return `${weekday}, ${dd}/${mm}/${yyyy}`;
   }, []);
+
+  const handleQRScan = (result: string) => {
+    setQrResult(result);
+    handleAttendanceSubmit(result);
+  };
+
+  const handleCodeSubmit = () => {
+    if (!attendanceCode.trim()) {
+      alert("Vui lòng nhập mã điểm danh!");
+      return;
+    }
+    handleAttendanceSubmit(attendanceCode);
+  };
+
+  const handleAttendanceSubmit = async (code: string) => {
+    try {
+      // Mock API call - replace with actual API endpoint
+      console.log("Submitting attendance with code:", code);
+      
+      // Simulate API call
+      await new Promise(resolve => setTimeout(resolve, 500));
+      
+      // Close modals
+      setShowQRScanner(false);
+      setShowCodeInput(false);
+      setAttendanceCode("");
+      setQrResult("");
+      
+      alert(`✅ Điểm danh thành công! Mã: ${code}`);
+    } catch (error) {
+      console.error("Attendance error:", error);
+      alert("❌ Có lỗi xảy ra khi điểm danh. Vui lòng thử lại!");
+    }
+  };
 
   const stats: Stat[] = [
     { icon: "🏫", title: "Số lớp đang học", value: "5", color: "stat-blue", href: "/lophoc_sv" },
@@ -102,7 +143,16 @@ export default function StudentDashboardPage() {
           <div className="date">Hôm nay: {todayStr}</div>
         </div>
         <div className="controls">
-          <button className="qr-btn">📷 Điểm danh ngay</button>
+          <div className="attendance-dropdown-wrapper">
+            <button className="qr-btn primary" onClick={() => {
+              // Show dropdown or modal with QR/Code options
+              if (confirm('Chọn hình thức điểm danh:\n1. OK = Quét QR Code\n2. Cancel = Nhập mã thủ công')) {
+                setShowQRScanner(true);
+              } else {
+                setShowCodeInput(true);
+              }
+            }}>📷 Điểm danh ngay</button>
+          </div>
           <button className="qr-btn" onClick={() => { 
             if (confirm('Bạn có chắc muốn đăng xuất?')) {
               localStorage.removeItem('sas_user'); 
@@ -198,7 +248,14 @@ export default function StudentDashboardPage() {
           <div className="widget big">
             <div className="title">📷 Điểm danh bằng QR hoặc mã</div>
             <div className="sub">Nếu đang trong khung giờ học, hệ thống sẽ gợi ý lớp hiện tại.</div>
-            <button className="btn-primary" style={{ marginTop: 8 }}>Điểm danh ngay</button>
+            <div className="attendance-buttons">
+              <button className="btn-qr-scan" onClick={() => setShowQRScanner(true)}>
+                📷 Quét QR
+              </button>
+              <button className="btn-code-input" onClick={() => setShowCodeInput(true)}>
+                🔢 Nhập mã
+              </button>
+            </div>
           </div>
           <div className="widget">
             <div className="title">📚 Bài tập & hạn nộp</div>
@@ -224,6 +281,54 @@ export default function StudentDashboardPage() {
             <div className="modal-body">
               <div className="modal-date">Người gửi: {selectedAnnouncement.sender} – Ngày: {selectedAnnouncement.date}</div>
               <div className="modal-content-text">{selectedAnnouncement.content}</div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* QR Scanner Modal */}
+      {showQRScanner && (
+        <div className="modal-overlay" onClick={() => setShowQRScanner(false)}>
+          <div className="modal-content qr-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h2>📷 Quét mã QR</h2>
+              <button className="close-btn" onClick={() => setShowQRScanner(false)}>×</button>
+            </div>
+            <div className="modal-body">
+              <QRCodeScanner onResult={handleQRScan} />
+              {qrResult && (
+                <div className="qr-result">
+                  <strong>Kết quả:</strong> {qrResult}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Code Input Modal */}
+      {showCodeInput && (
+        <div className="modal-overlay" onClick={() => setShowCodeInput(false)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h2>🔢 Nhập mã điểm danh</h2>
+              <button className="close-btn" onClick={() => setShowCodeInput(false)}>×</button>
+            </div>
+            <div className="modal-body">
+              <div className="code-input-wrapper">
+                <input
+                  type="text"
+                  className="code-input"
+                  placeholder="Nhập mã điểm danh (6 ký tự)"
+                  value={attendanceCode}
+                  onChange={(e) => setAttendanceCode(e.target.value.toUpperCase())}
+                  maxLength={6}
+                  autoFocus
+                />
+                <button className="btn-primary submit-code-btn" onClick={handleCodeSubmit}>
+                  Điểm danh
+                </button>
+              </div>
             </div>
           </div>
         </div>

@@ -1,12 +1,101 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import QRCode from "qrcode";
 
-type ClassInfo = { id: string; code: string; subject: string };
-type AttendanceRow = { id: string; name: string; time?: string; present: boolean };
-type HistoryItem = { date: string; slot: number; ratio: string; note?: string };
+type ClassInfo = {
+  id: string;
+  code: string;
+  name: string;
+  subjectName: string;
+  subjectCode?: string;
+  studentCount: number;
+};
+
+type SlotInfo = {
+  slotId: number;
+  room?: string | null;
+  weekKey?: string | null;
+  subject?: string | null;
+  teacherName?: string | null;
+};
+
+type SessionSummary = {
+  id: number;
+  classId: string;
+  slotId: number;
+  code: string;
+  type: Mode;
+  status: "active" | "expired" | "closed";
+  attempts: number;
+  attemptsRemaining: number;
+  expiresAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+type SessionDetail = SessionSummary & {
+  className?: string;
+  subjectName?: string;
+  totalStudents?: number;
+};
+
+type AttendanceRow = {
+  studentId: string;
+  fullName: string;
+  email?: string | null;
+  course?: string | null;
+  status: "present" | "absent" | "excused";
+  markedAt: string | null;
+  note?: string | null;
+};
+
+type HistoryItem = {
+  id: number;
+  day: string;
+  slotId: number;
+  type: Mode;
+  status: string;
+  code: string;
+  present: number;
+  total: number;
+  ratio: number;
+  createdAt: string;
+};
+
 type Mode = "qr" | "code" | "manual";
+
+type Filter = "all" | "present" | "absent" | "excused";
+
+const API_BASE = "http://localhost:8080/api/attendances";
+
+async function fetchJson<T>(input: RequestInfo | URL, init?: RequestInit): Promise<T> {
+  const resp = await fetch(input, {
+    credentials: "include",
+    ...init,
+    headers: {
+      "Content-Type": "application/json",
+      ...(init?.headers || {}),
+    },
+  });
+  const data = await resp.json().catch(() => ({}));
+  if (!resp.ok) {
+    const message = data?.message || `HTTP ${resp.status}`;
+    throw new Error(message);
+  }
+  return data as T;
+}
+
+const formatTimeLeft = (expiresAt: string | null) => {
+  if (!expiresAt) return "--";
+  const diff = new Date(expiresAt).getTime() - Date.now();
+  if (diff <= 0) return "00:00";
+  const seconds = Math.ceil(diff / 1000);
+  const minutes = Math.floor(seconds / 60);
+  const remain = seconds % 60;
+  return `${minutes.toString().padStart(2, "0")}:${remain.toString().padStart(2, "0")}`;
+};
 
 export default function LecturerAttendancePage() {
   const [collapsed, setCollapsed] = useState(false);
@@ -15,34 +104,29 @@ export default function LecturerAttendancePage() {
 
   const [classes, setClasses] = useState<ClassInfo[]>([]);
   const [cls, setCls] = useState<string>("");
-  const [slot, setSlot] = useState<string>("1");
+  const [slots, setSlots] = useState<SlotInfo[]>([]);
+  const [slot, setSlot] = useState<number | null>(null);
   const [mode, setMode] = useState<Mode>("qr");
-  const [duration, setDuration] = useState<number>(10);
-  const [note, setNote] = useState("");
-  const [code, setCode] = useState<string>("");
-  const [sessionActive, setSessionActive] = useState(false);
-  const [expiresAt, setExpiresAt] = useState<number | null>(null);
-
+  const [session, setSession] = useState<SessionDetail | null>(null);
+  const [sessionLoading, setSessionLoading] = useState(false);
+  const [resetLoading, setResetLoading] = useState(false);
   const [students, setStudents] = useState<AttendanceRow[]>([]);
-  const [filter, setFilter] = useState<"all"|"present"|"absent">("all");
-
+  const [filter, setFilter] = useState<Filter>("all");
   const [history, setHistory] = useState<HistoryItem[]>([]);
+  const [studentLoading, setStudentLoading] = useState(false);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [polling, setPolling] = useState<NodeJS.Timeout | null>(null);
+  const [qrImage, setQrImage] = useState<string | null>(null);
 
-  useEffect(() => {
-    const list: ClassInfo[] = [
-      { id: "CN201", code: "CN201", subject: ".NET" },
-      { id: "CN202", code: "CN202", subject: "CSDL" },
-      { id: "CN203", code: "CN203", subject: "CTDL" },
-    ];
-    setClasses(list);
-    setCls(list[0].id);
-    const mockSt = Array.from({ length: 50 }).map((_, i) => ({ id: `SV${(i+1).toString().padStart(3,'0')}`, name: `Sinh viên ${i+1}`, present: i % 3 !== 0, time: i % 3 !== 0 ? `08:${(3+i).toString().padStart(2,'0')}` : undefined }));
-    setStudents(mockSt);
-    setHistory([
-      { date: "20/10", slot: 1, ratio: "90%", note: "Ok" },
-      { date: "23/10", slot: 2, ratio: "88%", note: "5 bạn vắng có phép" },
-    ]);
-  }, []);
+  const filtered = useMemo(() => {
+    if (filter === "present") return students.filter((s) => s.status === "present");
+    if (filter === "absent") return students.filter((s) => s.status === "absent");
+    if (filter === "excused") return students.filter((s) => s.status === "excused");
+    return students;
+  }, [students, filter]);
+
+  const timeLeftDisplay = useMemo(() => formatTimeLeft(session?.expiresAt ?? null), [session]);
 
   useEffect(() => {
     try {
@@ -55,21 +139,29 @@ export default function LecturerAttendancePage() {
     } catch {}
   }, []);
 
-  useEffect(() => {
-    if (!sessionActive || !expiresAt) return;
-    const t = setInterval(() => {
-      if (Date.now() > expiresAt) {
-        setSessionActive(false);
-        setExpiresAt(null);
-      }
-    }, 1000);
-    return () => clearInterval(t);
-  }, [sessionActive, expiresAt]);
+  const stopPolling = useCallback(() => {
+    if (polling) {
+      clearInterval(polling);
+      setPolling(null);
+    }
+  }, [polling]);
 
-  const timeLeft = useMemo(() => {
-    if (!expiresAt) return 0;
-    return Math.max(0, Math.ceil((expiresAt - Date.now()) / 1000));
-  }, [expiresAt, sessionActive]);
+  useEffect(() => {
+    fetchJson<{ success: boolean; data: ClassInfo[] }>(`${API_BASE}/classes`)
+      .then((payload) => {
+        setClasses(payload.data || []);
+        if (payload.data?.length) {
+          setCls(payload.data[0].id);
+        }
+      })
+      .catch((err) => {
+        console.error("fetch classes error", err);
+        setError(err.message || "Không thể tải danh sách lớp");
+      });
+    return () => {
+      stopPolling();
+    };
+  }, [stopPolling]);
 
   const toggleDark = () => {
     const next = !dark;
@@ -84,35 +176,273 @@ export default function LecturerAttendancePage() {
     } catch {}
   };
 
-  const generateCode = () => {
-    const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-    let c = "";
-    for (let i=0; i<6; i++) c += chars[Math.floor(Math.random()*chars.length)];
-    setCode(c);
-    setSessionActive(true);
-    setExpiresAt(Date.now() + duration * 60 * 1000);
-  };
-
-  const filtered = useMemo(() => {
-    if (filter === "present") return students.filter(s => s.present);
-    if (filter === "absent") return students.filter(s => !s.present);
-    return students;
-  }, [students, filter]);
-
-  const exportCsv = () => {
-    const header = ["MaSV","HoTen","ThoiGian","TrangThai"];
-    const rows = filtered.map(s => [s.id, s.name, s.time||"", s.present?"Co mat":"Vang"]);
-    const csv = [header, ...rows].map(r => r.map(v => `"${String(v).replace(/"/g,'""')}"`).join(',')).join('\n');
-    const blob = new Blob(["\uFEFF" + csv], { type: 'text/csv;charset=utf-8;' });
+  const exportCsv = useCallback(() => {
+    if (!filtered.length) {
+      alert("Không có dữ liệu để xuất");
+      return;
+    }
+    const header = ["MaSV", "HoTen", "Email", "TrangThai", "ThoiGian", "GhiChu"];
+    const rows = filtered.map((s) => [
+      s.studentId,
+      s.fullName,
+      s.email || "",
+      s.status,
+      s.markedAt || "",
+      s.note || "",
+    ]);
+    const csv = [header, ...rows]
+      .map((r) => r.map((v) => `"${String(v ?? "").replace(/"/g, '""')}"`).join(","))
+      .join("\n");
+    const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
-    const a = document.createElement('a'); a.href = url; a.download = `${cls}-attendance.csv`; a.click(); URL.revokeObjectURL(url);
-  };
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${cls || "class"}-attendance.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }, [filtered, cls]);
 
-  const endSession = () => {
-    setSessionActive(false);
-    setExpiresAt(null);
-    alert('Đã kết thúc buổi điểm danh (mock)');
-  };
+  const pollSession = useCallback(
+    (sessionId: number) => {
+      stopPolling();
+      const timer = setInterval(async () => {
+        try {
+          const payload = await fetchJson<{ success: boolean; data: SessionDetail }>(`${API_BASE}/sessions/${sessionId}`);
+          setSession(payload.data);
+          if (payload.data.status !== "active") {
+            clearInterval(timer);
+            setPolling(null);
+          }
+        } catch (err) {
+          console.error("poll session error", err);
+        }
+      }, 5000);
+      setPolling(timer);
+    },
+    [stopPolling]
+  );
+
+  const fetchSlots = useCallback(
+    async (classId: string) => {
+      try {
+        setSlots([]);
+        setSlot(null);
+        const today = new Date().toISOString().slice(0, 10);
+        const payload = await fetchJson<{ success: boolean; data: SlotInfo[] }>(
+          `${API_BASE}/classes/${classId}/slots?date=${today}`
+        );
+        setSlots(payload.data || []);
+        if (payload.data?.length) {
+          setSlot(payload.data[0].slotId);
+        }
+      } catch (err: any) {
+        console.error("fetch slots error", err);
+        setSlots([]);
+        setError(err.message || "Không thể tải slot lớp");
+      }
+    },
+    []
+  );
+
+  const fetchHistory = useCallback(
+    async (classId: string, slotId?: number | null) => {
+      try {
+        setHistoryLoading(true);
+        const qs = slotId ? `?slot=${slotId}` : "";
+        const payload = await fetchJson<{ success: boolean; data: HistoryItem[] }>(
+          `${API_BASE}/classes/${classId}/history${qs}`
+        );
+        setHistory(payload.data || []);
+      } catch (err) {
+        console.error("fetch history error", err);
+        setHistory([]);
+      } finally {
+        setHistoryLoading(false);
+      }
+    },
+    []
+  );
+
+  const loadSessionStudents = useCallback(
+    async (sessionId: number) => {
+      try {
+        setStudentLoading(true);
+        const payload = await fetchJson<{ success: boolean; data: AttendanceRow[]; summary?: any }>(
+          `${API_BASE}/sessions/${sessionId}/students`
+        );
+        setStudents(payload.data || []);
+      } catch (err) {
+        console.error("fetch session students error", err);
+        setStudents([]);
+      } finally {
+        setStudentLoading(false);
+      }
+    },
+    []
+  );
+
+  const loadSessionDetail = useCallback(
+    async (sessionId: number) => {
+      try {
+        const payload = await fetchJson<{ success: boolean; data: SessionDetail }>(
+          `${API_BASE}/sessions/${sessionId}`
+        );
+        setSession(payload.data);
+        if (payload.data.type === "qr") {
+          try {
+            const url = await QRCode.toDataURL(payload.data.code, { width: 256, margin: 1 });
+            setQrImage(url || null);
+          } catch (qrErr) {
+            console.error("generate qr error", qrErr);
+            setQrImage(null);
+          }
+        } else {
+          setQrImage(null);
+        }
+        if (payload.data.status === "active") {
+          pollSession(sessionId);
+        }
+        await loadSessionStudents(sessionId);
+      } catch (err) {
+        console.error("load session detail error", err);
+        setSession(null);
+        stopPolling();
+      }
+    },
+    [loadSessionStudents, pollSession, stopPolling]
+  );
+
+  const createSession = useCallback(
+    async (classId: string, slotId: number, selectedMode: Mode) => {
+      try {
+        setSessionLoading(true);
+        setError(null);
+        const payload = await fetchJson<{ success: boolean; data: SessionSummary; reused?: boolean }>(`${API_BASE}/sessions`, {
+          method: "POST",
+          body: JSON.stringify({ classId, slotId, type: selectedMode }),
+        });
+        const summary = payload.data;
+        await loadSessionDetail(summary.id);
+        fetchHistory(classId, slotId);
+      } catch (err: any) {
+        setError(err.message || "Không thể tạo buổi điểm danh");
+      } finally {
+        setSessionLoading(false);
+      }
+    },
+    [fetchHistory, loadSessionDetail]
+  );
+
+  const handleClassChange = useCallback(
+    (classId: string) => {
+      setCls(classId);
+      setSession(null);
+      setStudents([]);
+      stopPolling();
+      if (classId) {
+        fetchSlots(classId);
+        fetchHistory(classId, null);
+      }
+    },
+    [fetchSlots, fetchHistory, stopPolling]
+  );
+
+  useEffect(() => {
+    if (cls) {
+      fetchSlots(cls);
+      fetchHistory(cls, null);
+    }
+  }, [cls, fetchSlots, fetchHistory]);
+
+  useEffect(() => {
+    if (!cls || slot == null) return;
+    fetchHistory(cls, slot);
+  }, [cls, slot, fetchHistory]);
+
+  useEffect(() => {
+    if (!session) {
+      setStudents([]);
+      return;
+    }
+    loadSessionStudents(session.id);
+  }, [session, loadSessionStudents]);
+
+  const handleCreateSession = useCallback(() => {
+    if (!cls || slot == null) {
+      setError("Vui lòng chọn lớp và slot");
+      return;
+    }
+    createSession(cls, slot, mode);
+  }, [cls, slot, mode, createSession]);
+
+  const handleModeChange = useCallback(
+    (nextMode: Mode) => {
+      setMode(nextMode);
+      if (session && nextMode !== session.type) {
+        setSession(null);
+        setStudents([]);
+      }
+    },
+    [session]
+  );
+
+  const handleReset = useCallback(async () => {
+    if (!session) return;
+    try {
+      setResetLoading(true);
+      const payload = await fetchJson<{ success: boolean; data: SessionSummary }>(
+        `${API_BASE}/sessions/${session.id}/reset`,
+        { method: "POST" }
+      );
+      await loadSessionDetail(payload.data.id);
+    } catch (err: any) {
+      alert(err.message || "Không thể reset mã");
+    } finally {
+      setResetLoading(false);
+    }
+  }, [session, loadSessionDetail]);
+
+  const handleManualUpdate = useCallback(async () => {
+    if (!session || !students.length) return;
+    try {
+      const payload = await fetchJson<{ success: boolean; data: AttendanceRow[] }>(
+        `${API_BASE}/sessions/${session.id}/manual`,
+        {
+          method: "POST",
+          body: JSON.stringify({
+            students: students.map((item) => ({
+              studentId: item.studentId,
+              status: item.status,
+              markedAt: item.markedAt,
+              note: item.note,
+            })),
+          }),
+        }
+      );
+      setStudents(payload.data || []);
+      alert("Đã lưu điểm danh thủ công");
+    } catch (err: any) {
+      alert(err.message || "Không thể lưu điểm danh");
+    }
+  }, [session, students]);
+
+  const toggleStudentStatus = useCallback(
+    (studentId: string) => {
+      if (!session || session.type !== "manual") return;
+      setStudents((prev) =>
+        prev.map((item) => {
+          if (item.studentId !== studentId) return item;
+          const nextStatus = item.status === "present" ? "absent" : "present";
+          return {
+            ...item,
+            status: nextStatus,
+            markedAt: nextStatus === "present" ? new Date().toISOString() : null,
+          };
+        })
+      );
+    },
+    [session]
+  );
 
   const Shell = ({ children }: { children: React.ReactNode }) => (
     <div className={`layout ${collapsed ? "collapsed" : ""}`}>
@@ -159,50 +489,73 @@ export default function LecturerAttendancePage() {
           <div className="section-title">Tạo buổi điểm danh</div>
           <div className="form">
             <div className="kv"><div className="k">Chọn lớp</div>
-              <select className="input" value={cls} onChange={(e)=>setCls(e.target.value)}>
-                {classes.map(c => <option key={c.id} value={c.id}>{c.code} – {c.subject}</option>)}
+              <select className="input" value={cls} onChange={(e)=>handleClassChange(e.target.value)}>
+                <option value="" disabled>-- Chọn lớp --</option>
+                {classes.map(c => (
+                  <option key={c.id} value={c.id}>{c.code} – {c.name}</option>
+                ))}
               </select>
             </div>
             <div className="kv"><div className="k">Chọn slot/buổi</div>
-              <select className="input" value={slot} onChange={(e)=>setSlot(e.target.value)}>
-                <option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option>
+              <select
+                className="input"
+                value={slot ?? ""}
+                onChange={(e)=>setSlot(e.target.value ? Number(e.target.value) : null)}
+              >
+                <option value="" disabled>-- Chọn slot --</option>
+                {slots.map((item) => (
+                  <option key={item.slotId} value={item.slotId}>
+                    Slot {item.slotId}{item.room ? ` • Phòng ${item.room}` : ""}
+                  </option>
+                ))}
               </select>
             </div>
             <div className="kv"><div className="k">Hình thức</div>
               <div className="seg">
-                <button className={`seg-btn ${mode==='qr'?'active':''}`} onClick={()=>setMode('qr')}>QR code</button>
-                <button className={`seg-btn ${mode==='code'?'active':''}`} onClick={()=>setMode('code')}>Nhập mã</button>
-                <button className={`seg-btn ${mode==='manual'?'active':''}`} onClick={()=>setMode('manual')}>Thủ công</button>
+                <button className={`seg-btn ${mode==='qr'?'active':''}`} onClick={()=>handleModeChange('qr')}>QR code</button>
+                <button className={`seg-btn ${mode==='code'?'active':''}`} onClick={()=>handleModeChange('code')}>Nhập mã</button>
+                <button className={`seg-btn ${mode==='manual'?'active':''}`} onClick={()=>handleModeChange('manual')}>Thủ công</button>
               </div>
             </div>
-            <div className="kv"><div className="k">Thời lượng hiệu lực</div>
-              <select className="input" value={duration} onChange={(e)=>setDuration(parseInt(e.target.value))}>
-                <option value={5}>5 phút</option>
-                <option value={10}>10 phút</option>
-                <option value={15}>15 phút</option>
-                <option value={20}>20 phút</option>
-              </select>
-            </div>
-            <div className="kv"><div className="k">Ghi chú</div>
-              <input className="input" value={note} onChange={(e)=>setNote(e.target.value)} placeholder="Ghi chú (tuỳ chọn)" />
-            </div>
             <div className="actions">
-              <button className="btn-primary" onClick={generateCode}>🧾 Tạo mã điểm danh</button>
+              <button className="btn-primary" disabled={!cls || slot === null || sessionLoading} onClick={handleCreateSession}>
+                {sessionLoading ? "Đang xử lý..." : "🧾 Tạo buổi điểm danh"}
+              </button>
             </div>
           </div>
 
-          {sessionActive && (
+          {error && <div className="error-banner">⚠️ {error}</div>}
+
+          {session && (
             <div className="session-box">
               <div className="qr-preview">
-                <div className="qr-box">QR</div>
+                <div className="qr-box">
+                  {mode === "qr" ? (
+                    qrImage ? (
+                      <img src={qrImage} alt="QR" style={{ width: 140, height: 140 }} />
+                    ) : (
+                      <span style={{ fontSize: 16 }}>Đang tạo QR...</span>
+                    )
+                  ) : (
+                    <span style={{ fontSize: 24 }}>{mode === "manual" ? "Thủ công" : "Mã"}</span>
+                  )}
+                </div>
                 <div className="qr-meta">
-                  <div className="big-code">{code}</div>
-                  <div className="time-left">Còn lại: {Math.floor(timeLeft/60)}:{String(timeLeft%60).padStart(2,'0')}</div>
+                  <div className="big-code">{session.code}</div>
+                  <div className="time-left">Trạng thái: {session.status}</div>
+                  {mode !== "manual" && (
+                    <div className="time-left">Còn lại: {timeLeftDisplay}</div>
+                  )}
+                  <div className="time-left">Đã reset: {session.attempts}/{3}</div>
                 </div>
               </div>
               <div className="actions end">
                 <button className="btn-outline" onClick={exportCsv}>Xuất Excel</button>
-                <button className="btn-danger" onClick={endSession}>Kết thúc buổi điểm danh</button>
+                {mode !== "manual" && (
+                  <button className="btn-primary" onClick={handleReset} disabled={resetLoading || session.attempts >= 3 || session.status !== "active"}>
+                    ♻️ {resetLoading ? "Đang reset" : "Reset mã"}
+                  </button>
+                )}
               </div>
             </div>
           )}
@@ -215,54 +568,86 @@ export default function LecturerAttendancePage() {
               <button className={`seg-btn ${filter==='all'?'active':''}`} onClick={()=>setFilter('all')}>Tất cả</button>
               <button className={`seg-btn ${filter==='present'?'active':''}`} onClick={()=>setFilter('present')}>Đã điểm danh</button>
               <button className={`seg-btn ${filter==='absent'?'active':''}`} onClick={()=>setFilter('absent')}>Chưa điểm danh</button>
+              <button className={`seg-btn ${filter==='excused'?'active':''}`} onClick={()=>setFilter('excused')}>Có phép</button>
             </div>
           </div>
+          {studentLoading && <div className="loading-row">Đang tải danh sách...</div>}
           <div className="table-wrap">
             <table>
               <thead>
                 <tr>
                   <th>Mã SV</th>
                   <th>Họ tên</th>
-                  <th>Thời gian</th>
+                  <th>Email</th>
                   <th>Trạng thái</th>
+                  <th>Thời gian</th>
+                  {mode === "manual" && <th>Thao tác</th>}
                 </tr>
               </thead>
               <tbody>
-                {filtered.map(s => (
-                  <tr key={s.id}>
-                    <td>{s.id}</td>
-                    <td>{s.name}</td>
-                    <td>{s.time||"—"}</td>
-                    <td>{s.present?"✅":"❌"} {s.present?"":"Chưa điểm danh"}</td>
+                {filtered.map((s) => (
+                  <tr key={s.studentId}>
+                    <td>{s.studentId}</td>
+                    <td>{s.fullName}</td>
+                    <td>{s.email || "--"}</td>
+                    <td>{s.status === "present" ? "✅ Có mặt" : s.status === "excused" ? "📝 Có phép" : "❌ Vắng"}</td>
+                    <td>{s.markedAt ? new Date(s.markedAt).toLocaleTimeString() : "--"}</td>
+                    {mode === "manual" && (
+                      <td>
+                        <button className="btn-outline" onClick={() => toggleStudentStatus(s.studentId)}>Đổi trạng thái</button>
+                      </td>
+                    )}
                   </tr>
                 ))}
+                {!filtered.length && !studentLoading && (
+                  <tr>
+                    <td colSpan={mode === "manual" ? 6 : 5} style={{ textAlign: "center", padding: 16, color: "#64748b" }}>
+                      Chưa có dữ liệu điểm danh
+                    </td>
+                  </tr>
+                )}
               </tbody>
             </table>
           </div>
+          {mode === "manual" && session && (
+            <div className="actions end" style={{ marginTop: 12 }}>
+              <button className="btn-primary" onClick={handleManualUpdate}>💾 Lưu điểm danh thủ công</button>
+            </div>
+          )}
         </div>
       </div>
 
       <div className="panel" style={{ marginTop: 16 }}>
         <div className="section-title">Lịch sử điểm danh</div>
+        {historyLoading && <div className="loading-row">Đang tải lịch sử...</div>}
         <div className="table-wrap">
           <table>
             <thead>
               <tr>
                 <th>Ngày</th>
                 <th>Slot</th>
+                <th>Hình thức</th>
+                <th>Trạng thái</th>
                 <th>Tỉ lệ tham dự</th>
-                <th>Ghi chú</th>
               </tr>
             </thead>
             <tbody>
-              {history.map((h,i)=> (
-                <tr key={i}>
-                  <td>{h.date}</td>
-                  <td>{h.slot}</td>
-                  <td>{h.ratio}</td>
-                  <td>{h.note||""}</td>
+              {history.map((h) => (
+                <tr key={h.id}>
+                  <td>{h.day}</td>
+                  <td>{h.slotId}</td>
+                  <td>{h.type}</td>
+                  <td>{h.status}</td>
+                  <td>{h.ratio}% ({h.present}/{h.total})</td>
                 </tr>
               ))}
+              {!history.length && !historyLoading && (
+                <tr>
+                  <td colSpan={5} style={{ textAlign: "center", padding: 16, color: "#64748b" }}>
+                    Chưa có lịch sử điểm danh
+                  </td>
+                </tr>
+              )}
             </tbody>
           </table>
         </div>

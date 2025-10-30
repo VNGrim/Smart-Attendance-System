@@ -42,4 +42,15 @@ cd Smart-Attendance-System
 ----------
 - Chỉ chia sẻ file dump SQL khi có cái gì mới.
 
+7. Cách lấy về máy/đẩy lên GIT
+-----------------------------
+- Lấy về máy:
++ git checkout dev
++ git pull
+- Đẩy lên git:
++ git checkout dev
++ git add .
++ git commit -m ""
++ git push
+
 Chúc bạn cài đặt thuận lợi! 🚀

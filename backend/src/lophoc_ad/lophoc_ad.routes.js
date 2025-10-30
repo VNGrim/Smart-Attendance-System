@@ -117,6 +117,29 @@ const formatClassRecord = (record) => ({
   createdAt: record.created_at,
 });
 
+const normalizeClassCode = (value) => {
+  if (!value) return "";
+  return String(value).trim().toUpperCase();
+};
+
+const splitClasses = (value) => {
+  if (!value) return [];
+  return String(value)
+    .split(",")
+    .map((item) => item.trim().toUpperCase())
+    .filter(Boolean);
+};
+
+const joinClasses = (list) => Array.from(new Set(list.filter(Boolean)));
+
+const mapStudentRecord = (student) => ({
+  studentId: student.student_id,
+  fullName: student.full_name,
+  email: student.email || "",
+  status: student.status,
+  course: student.course,
+});
+
 async function generateClassCode(cohort) {
   const digits = extractCohortDigits(cohort);
   if (!digits) {
@@ -552,6 +575,182 @@ function optionsTeacherName(teacherId) {
   const record = fallbackStore.find((item) => item.teacher_id === teacherId || item.class_id === teacherId);
   return record ? record.teacherName || null : null;
 }
+
+router.get("/:code/students", async (req, res) => {
+  try {
+    await prisma.$ready;
+    const code = normalizeClassCode(req.params.code);
+    const search = typeof req.query.search === "string" ? req.query.search.trim() : "";
+
+    if (!code) {
+      return res.status(400).json({ success: false, message: "Thiếu mã lớp" });
+    }
+
+    const cls = await prisma.classes.findUnique({ where: { class_id: code } });
+    if (!cls) {
+      return res.status(404).json({ success: false, message: "Không tìm thấy lớp" });
+    }
+
+    const whereClause = search
+      ? {
+          OR: [
+            { student_id: { contains: search } },
+            { full_name: { contains: search } },
+          ],
+        }
+      : {};
+
+    const rows = await prisma.students.findMany({
+      where: {
+        ...whereClause,
+        classes: { contains: code },
+      },
+      select: {
+        student_id: true,
+        full_name: true,
+        email: true,
+        status: true,
+        course: true,
+        classes: true,
+      },
+      orderBy: { student_id: "asc" },
+      take: 200,
+    });
+
+    const members = rows
+      .filter((row) => splitClasses(row.classes).includes(code))
+      .map(mapStudentRecord);
+
+    return res.json({ success: true, data: { members, total: members.length } });
+  } catch (error) {
+    console.error("admin classes list students error:", error);
+    return res.status(500).json({ success: false, message: "Không thể tải danh sách sinh viên" });
+  }
+});
+
+router.get("/:code/students/search", async (req, res) => {
+  try {
+    await prisma.$ready;
+    const code = normalizeClassCode(req.params.code);
+    const query = typeof req.query.query === "string" ? req.query.query.trim() : "";
+
+    if (!code) {
+      return res.status(400).json({ success: false, message: "Thiếu mã lớp" });
+    }
+
+    const cls = await prisma.classes.findUnique({ where: { class_id: code }, select: { class_id: true } });
+    if (!cls) {
+      return res.status(404).json({ success: false, message: "Không tìm thấy lớp" });
+    }
+
+    const rows = await prisma.students.findMany({
+      where: {
+        ...(query
+          ? {
+              OR: [
+                { student_id: { contains: query } },
+                { full_name: { contains: query } },
+              ],
+            }
+          : {}),
+      },
+      select: {
+        student_id: true,
+        full_name: true,
+        email: true,
+        status: true,
+        course: true,
+        classes: true,
+      },
+      orderBy: { student_id: "asc" },
+      take: 50,
+    });
+
+    const candidates = rows
+      .filter((row) => !splitClasses(row.classes).includes(code))
+      .map(mapStudentRecord);
+
+    return res.json({ success: true, data: { candidates } });
+  } catch (error) {
+    console.error("admin classes search students error:", error);
+    return res.status(500).json({ success: false, message: "Không thể tìm sinh viên" });
+  }
+});
+
+router.post("/:code/students", async (req, res) => {
+  try {
+    await prisma.$ready;
+    const code = normalizeClassCode(req.params.code);
+    const { studentId } = req.body || {};
+
+    if (!code || !studentId || typeof studentId !== "string") {
+      return res.status(400).json({ success: false, message: "Thiếu mã lớp hoặc mã sinh viên" });
+    }
+
+    const cls = await prisma.classes.findUnique({ where: { class_id: code } });
+    if (!cls) {
+      return res.status(404).json({ success: false, message: "Không tìm thấy lớp" });
+    }
+
+    const student = await prisma.students.findUnique({
+      where: { student_id: studentId.trim() },
+      select: {
+        student_id: true,
+        full_name: true,
+        email: true,
+        status: true,
+        course: true,
+        classes: true,
+      },
+    });
+
+    if (!student) {
+      return res.status(404).json({ success: false, message: "Không tìm thấy sinh viên" });
+    }
+
+    const currentClasses = splitClasses(student.classes);
+    if (currentClasses.includes(code)) {
+      return res.status(409).json({ success: false, message: "Sinh viên đã thuộc lớp này" });
+    }
+
+    currentClasses.push(code);
+    const updatedClasses = joinClasses(currentClasses).join(",");
+
+    await prisma.students.update({
+      where: { student_id: student.student_id },
+      data: { classes: updatedClasses },
+    });
+
+    const members = await prisma.students.findMany({
+      where: {
+        classes: { contains: code },
+      },
+      select: {
+        student_id: true,
+        full_name: true,
+        email: true,
+        status: true,
+        course: true,
+        classes: true,
+      },
+    });
+
+    const filteredMembers = members
+      .filter((row) => splitClasses(row.classes).includes(code))
+      .map(mapStudentRecord);
+
+    return res.status(201).json({
+      success: true,
+      data: {
+        student: mapStudentRecord(student),
+        total: filteredMembers.length,
+      },
+    });
+  } catch (error) {
+    console.error("admin classes add student error:", error);
+    return res.status(500).json({ success: false, message: "Không thể thêm sinh viên" });
+  }
+});
 
 router.put("/bulk/status", async (req, res) => {
   try {

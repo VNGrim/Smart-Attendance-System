@@ -1,41 +1,68 @@
 const prisma = require("../config/prisma");
-const { Prisma } = require("@prisma/client");
+const dayjs = require("dayjs");
+const utc = require("dayjs/plugin/utc");
+
+dayjs.extend(utc);
+
+function formatTime(value) {
+  if (!value) return null;
+  return dayjs(value).utc().format("HH:mm");
+}
 
 exports.getStudentInfo = async (studentId) => {
-  const rows = await prisma.$queryRaw`
-    SELECT s.student_id, s.full_name, s.course, s.classes
-    FROM students s
-    WHERE s.student_id = ${studentId}
-  `;
-  return rows[0] || null;
+  await prisma.$ready;
+  return prisma.students.findUnique({
+    where: { student_id: studentId },
+    select: {
+      student_id: true,
+      full_name: true,
+      course: true,
+      classes: true,
+    },
+  });
 };
 
-exports.getStudentSchedule = async (studentId) => {
-  // Lấy danh sách lớp mà SV theo học (CSV)
-  const student = await this.getStudentInfo(studentId);
-  if (!student || !student.classes) return [];
+exports.getStudentSchedule = async (studentId, weekKey) => {
+  await prisma.$ready;
+  const student = await exports.getStudentInfo(studentId);
+  if (!student?.classes) return [];
 
   const classList = student.classes
     .split(",")
     .map((s) => s.trim())
     .filter(Boolean);
 
-  if (classList.length === 0) return [];
+  if (!classList.length) return [];
 
-  // Tạo placeholders (?, ?, ...) theo số lớp
-  const placeholders = classList.map(() => "?").join(",");
+  const where = {
+    classes: { in: classList },
+  };
+  if (weekKey) {
+    where.week_key = weekKey;
+  }
 
-  // Truy vấn thời khóa biểu: join time_slots để lấy giờ, join teachers để lấy tên GV từ CSV classes
-  const inClause = Prisma.join(classList);
-  const rows = await prisma.$queryRaw`
-    SELECT t.day_of_week, t.slot_id, ts.start_time, ts.end_time, t.room,
-           t.classes AS class_name,
-           COALESCE(tea.full_name, '') AS teacher_name
-    FROM timetable t
-    JOIN time_slots ts ON ts.slot_id = t.slot_id
-    LEFT JOIN teachers tea ON FIND_IN_SET(t.classes, REPLACE(tea.classes,' ','')) > 0
-    WHERE t.classes IN (${inClause})
-    ORDER BY FIELD(t.day_of_week,'Mon','Tue','Wed','Thu','Fri','Sat','Sun'), t.slot_id
-  `;
-  return rows;
+  const rows = await prisma.timetable.findMany({
+    where,
+    include: {
+      time_slots: true,
+    },
+    orderBy: [
+      { day_of_week: "asc" },
+      { slot_id: "asc" },
+      { classes: "asc" },
+    ],
+  });
+
+  return rows.map((row) => ({
+    day_of_week: row.day_of_week,
+    slot_id: row.slot_id,
+    start_time: formatTime(row.time_slots?.start_time),
+    end_time: formatTime(row.time_slots?.end_time),
+    room: row.room_name || row.room || "",
+    class_name: row.subject_name || row.classes,
+    teacher_name: row.teacher_name || "",
+    class_id: row.classes,
+    subject_name: row.subject_name || row.classes,
+    week_key: row.week_key,
+  }));
 };

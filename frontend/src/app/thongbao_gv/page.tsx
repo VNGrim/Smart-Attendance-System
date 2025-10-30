@@ -6,6 +6,18 @@ import { useRouter } from "next/navigation";
 
 type TabKey = "inbox" | "send";
 type InboxItem = { id: string; title: string; from: string; date: string; content: string; attachments?: string[] };
+type Announcement = {
+  id: number;
+  title: string;
+  content: string;
+  sender: string;
+  date: string;
+  dateFormatted: string;
+  time: string;
+  type: string;
+  status: string;
+  category: string;
+};
 
 export default function LecturerNotificationsPage() {
   const router = useRouter();
@@ -16,6 +28,8 @@ export default function LecturerNotificationsPage() {
 
   const [inbox, setInbox] = useState<InboxItem[]>([]);
   const [detail, setDetail] = useState<InboxItem | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const [classes] = useState(["CN201 - .NET", "CN202 - CSDL", "CN203 - CTDL"]);
   const [toClass, setToClass] = useState("CN201 - .NET");
@@ -24,10 +38,7 @@ export default function LecturerNotificationsPage() {
   const [file, setFile] = useState<File | null>(null);
 
   useEffect(() => {
-    setInbox([
-      { id: "i1", title: "Thông báo họp giáo viên thứ 4", from: "Phòng đào tạo", date: "25/10/2025", content: "Kính mời quý thầy cô tham dự họp vào thứ 4 lúc 14:00 tại phòng A1." },
-      { id: "i2", title: "Lịch bảo trì hệ thống LMS", from: "Admin hệ thống", date: "23/10/2025", content: "Hệ thống LMS sẽ bảo trì từ 22:00 đến 23:30, mong thầy cô thông cảm." },
-    ]);
+    // Load settings
     try {
       const saved = localStorage.getItem("sas_settings");
       if (saved) {
@@ -36,6 +47,45 @@ export default function LecturerNotificationsPage() {
         document.documentElement.style.colorScheme = s.themeDark ? "dark" : "light";
       }
     } catch {}
+  }, []);
+
+  // Fetch announcements from backend
+  useEffect(() => {
+    const fetchAnnouncements = async () => {
+      setLoading(true);
+      setError(null);
+      try {
+        const response = await fetch('http://localhost:8080/api/teacher/notifications/announcements');
+        const result = await response.json();
+        
+        if (result.success && result.data) {
+          // Map API data to InboxItem format
+          const mappedData: InboxItem[] = result.data.map((item: Announcement) => ({
+            id: `i${item.id}`,
+            title: item.title,
+            from: item.sender,
+            date: item.dateFormatted || new Date(item.date).toLocaleDateString('vi-VN'),
+            content: item.content,
+          }));
+          setInbox(mappedData);
+          setNotifCount(mappedData.length);
+        } else {
+          setError(result.message || 'Không thể tải thông báo');
+        }
+      } catch (err) {
+        console.error('Error fetching announcements:', err);
+        setError('Lỗi kết nối đến server');
+        // Fallback to mock data if API fails
+        setInbox([
+          { id: "i1", title: "Thông báo họp giáo viên thứ 4", from: "Phòng đào tạo", date: "25/10/2025", content: "Kính mời quý thầy cô tham dự họp vào thứ 4 lúc 14:00 tại phòng A1." },
+          { id: "i2", title: "Lịch bảo trì hệ thống LMS", from: "Admin hệ thống", date: "23/10/2025", content: "Hệ thống LMS sẽ bảo trì từ 22:00 đến 23:30, mong thầy cô thông cảm." },
+        ]);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchAnnouncements();
   }, []);
 
   const toggleDark = () => {
@@ -95,14 +145,32 @@ export default function LecturerNotificationsPage() {
 
   const InboxView = () => (
     <div className="panel">
-      <div className="list">
-        {inbox.map(i => (
-          <div key={i.id} className="card-inbox" onClick={()=>setDetail(i)}>
-            <div className="title">🔔 {i.title}</div>
-            <div className="meta">{i.from} • {i.date}</div>
-          </div>
-        ))}
-      </div>
+      {loading && (
+        <div style={{ textAlign: 'center', padding: '20px' }}>
+          <div>⏳ Đang tải thông báo...</div>
+        </div>
+      )}
+      {error && !loading && (
+        <div style={{ textAlign: 'center', padding: '20px', color: '#ef4444' }}>
+          <div>⚠️ {error}</div>
+        </div>
+      )}
+      {!loading && !error && (
+        <div className="list">
+          {inbox.length === 0 ? (
+            <div style={{ textAlign: 'center', padding: '20px', color: '#64748b' }}>
+              📭 Chưa có thông báo nào
+            </div>
+          ) : (
+            inbox.map(i => (
+              <div key={i.id} className="card-inbox" onClick={()=>setDetail(i)}>
+                <div className="title">🔔 {i.title}</div>
+                <div className="meta">{i.from} • {i.date}</div>
+              </div>
+            ))
+          )}
+        </div>
+      )}
     </div>
   );
 
