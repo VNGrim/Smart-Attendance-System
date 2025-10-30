@@ -22,6 +22,10 @@ app.use("/api/lichhoc", lichhocRoutes);
 const thongbaoRoutes = require("./src/thongbao_hienthi/thongbao_hienthi.routes");
 app.use("/api/thongbao", thongbaoRoutes);
 
+// Mount thongbao_gv routes (Teacher notifications)
+const thongbaoGVRoutes = require("./src/thongbao_gv/thongbao_gv.routes");
+app.use("/api/teacher/notifications", thongbaoGVRoutes);
+
 // Mount lop_gv routes
 const lopRoutes = require("./src/lop_gv/lop_gv.routes");
 app.use("/api/lop", lopRoutes);
