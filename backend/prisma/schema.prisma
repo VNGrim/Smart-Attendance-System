@@ -16,6 +16,9 @@ model accounts {
   teachers  teachers[]
 }
 
+
+
+
 model announcements {
   id           Int       @id @default(autoincrement())
   title        String    @db.VarChar(200)
