@@ -17,6 +17,7 @@ const {
   countClassStudents,
   getClassHistory,
 } = require("./attendance.model");
+const { jsonResponse } = require("../utils/json");
 
 const CODE_CHARSET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 const CODE_LENGTH = 6;
@@ -34,11 +35,12 @@ const generateCode = () => {
   return code;
 };
 
-const toDateOnlyUtc = (input) => {
-  if (!input) return dayjs().utc().startOf("day");
+const toDateOnly = (input) => {
+  const fallback = dayjs().startOf("day");
+  if (!input) return fallback;
   const parsed = dayjs(input);
-  if (!parsed.isValid()) return dayjs().utc().startOf("day");
-  return parsed.utc().startOf("day");
+  if (!parsed.isValid()) return fallback;
+  return parsed.startOf("day");
 };
 
 const DAY_MAP = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
@@ -81,7 +83,9 @@ const listTeacherClasses = async (req, res) => {
     if (!teacherId) {
       return res.status(401).json({ success: false, message: "Không xác định được giảng viên" });
     }
+    console.log("[Attendance] listTeacherClasses user", teacherId);
     const rows = await getClassesByTeacher(teacherId);
+    console.log("[Attendance] classes found", rows?.length);
     const data = rows.map((row) => ({
       id: row.class_id,
       code: row.class_id,
@@ -93,10 +97,10 @@ const listTeacherClasses = async (req, res) => {
       status: row.status,
       studentCount: Number(row.student_count || 0),
     }));
-    return res.json({ success: true, data });
+    return jsonResponse(res, { success: true, data });
   } catch (error) {
     console.error("attendance list classes error:", error);
-    return res.status(500).json({ success: false, message: "Không thể tải danh sách lớp" });
+    return res.status(500).json({ success: false, message: "Không thể tải danh sách lớp", detail: error?.message });
   }
 };
 
@@ -104,10 +108,13 @@ const listClassSlots = async (req, res) => {
   try {
     const teacherId = req.user?.userId;
     const { classId } = req.params;
-    const date = toDateOnlyUtc(req.query?.date);
+    const date = toDateOnly(req.query?.date);
+    console.log("[Attendance] listClassSlots", { classId, date: date.format("YYYY-MM-DD") });
     await ensureTeacherOwnsClass(teacherId, classId);
     const dayKey = getDayKeyFromDate(date);
+    console.log("[Attendance] dayKey", dayKey);
     const slots = await getClassSlotsByDay(classId, dayKey);
+    console.log("[Attendance] slots length", slots.length);
     const data = slots.map((slot) => ({
       timetableId: slot.id,
       slotId: slot.slot_id,
@@ -116,7 +123,7 @@ const listClassSlots = async (req, res) => {
       subject: slot.subject_name,
       teacherName: slot.teacher_name,
     }));
-    return res.json({ success: true, data });
+    return jsonResponse(res, { success: true, data });
   } catch (error) {
     if (error.status === 404) return res.status(404).json({ success: false, message: "Không tìm thấy lớp" });
     if (error.status === 403) return res.status(403).json({ success: false, message: "Bạn không có quyền với lớp này" });
@@ -140,7 +147,7 @@ const createOrGetSession = async (req, res) => {
       return res.status(400).json({ success: false, message: "Hình thức không hợp lệ" });
     }
     await ensureTeacherOwnsClass(teacherId, classId);
-    const targetDay = toDateOnlyUtc(date);
+    const targetDay = toDateOnly(date);
     const dayKey = targetDay.format("YYYY-MM-DD");
     const existing = await findLatestSession({ classId, slotId: slot, day: targetDay.toDate() });
     const now = dayjs().utc();
@@ -151,7 +158,7 @@ const createOrGetSession = async (req, res) => {
         existing.status = "expired";
       }
       if (existing.status === "active" && existing.type === type) {
-        return res.json({ success: true, data: serializeSession(existing), reused: true });
+        return jsonResponse(res, { success: true, data: serializeSession(existing), reused: true });
       }
     }
 
@@ -171,7 +178,7 @@ const createOrGetSession = async (req, res) => {
       expires_at: expiresAt,
     });
 
-    return res.status(201).json({ success: true, data: serializeSession(session) });
+    return jsonResponse(res, { success: true, data: serializeSession(session) }, 201);
   } catch (error) {
     if (error.status === 404) return res.status(404).json({ success: false, message: "Không tìm thấy lớp" });
     if (error.status === 403) return res.status(403).json({ success: false, message: "Bạn không có quyền với lớp này" });
@@ -205,7 +212,7 @@ const resetSessionCode = async (req, res) => {
       status: "active",
     });
 
-    return res.json({ success: true, data: serializeSession(updated) });
+    return jsonResponse(res, { success: true, data: serializeSession(updated) });
   } catch (error) {
     if (error.status === 404) return res.status(404).json({ success: false, message: "Không tìm thấy lớp" });
     if (error.status === 403) return res.status(403).json({ success: false, message: "Bạn không có quyền với lớp này" });
@@ -224,7 +231,7 @@ const getSessionDetail = async (req, res) => {
     if (!session) return res.status(404).json({ success: false, message: "Không tìm thấy buổi điểm danh" });
     await ensureTeacherOwnsClass(teacherId, session.session_class.class_id);
     const totalStudents = await countClassStudents(session.session_class.class_id);
-    return res.json({
+    return jsonResponse(res, {
       success: true,
       data: {
         ...serializeSession(session),
@@ -271,7 +278,7 @@ const getSessionStudents = async (req, res) => {
 
     const present = data.filter((item) => item.status === "present").length;
     const excused = data.filter((item) => item.status === "excused").length;
-    return res.json({
+    return jsonResponse(res, {
       success: true,
       data,
       summary: {
@@ -339,7 +346,7 @@ const updateManualAttendance = async (req, res) => {
       };
     });
 
-    return res.json({ success: true, data });
+    return jsonResponse(res, { success: true, data });
   } catch (error) {
     if (error.status === 404) return res.status(404).json({ success: false, message: "Không tìm thấy lớp" });
     if (error.status === 403) return res.status(403).json({ success: false, message: "Bạn không có quyền với lớp này" });
