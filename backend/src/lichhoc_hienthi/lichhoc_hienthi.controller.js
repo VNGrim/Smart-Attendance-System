@@ -18,9 +18,10 @@ exports.getStudentInfo = async (req, res) => {
 exports.getStudentSchedule = async (req, res) => {
   try {
     const { studentId } = req.params;
+    const { week } = req.query;
     if (!studentId) return res.status(400).json({ success: false, message: "Thiếu studentId" });
 
-    const rows = await Model.getStudentSchedule(studentId);
+    const rows = await Model.getStudentSchedule(studentId, week);
 
     // Map về cấu trúc thuận tiện cho UI lịch: theo slot -> day (theo slot_id của DB)
     const days = ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"];

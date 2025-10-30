@@ -19,6 +19,89 @@ type ClassItem = {
   status: "Đang hoạt động" | "Tạm nghỉ" | "Kết thúc";
 };
 
+type AddStudentModalProps = {
+  open: boolean;
+  classItem: ClassItem | null;
+  candidates: StudentRow[];
+  search: string;
+  onSearchChange: (value: string) => void;
+  selectedId: string;
+  onSelect: (studentId: string) => void;
+  onClose: () => void;
+  onSubmit: () => void;
+  loading: boolean;
+};
+
+const AddStudentModal = ({
+  open,
+  classItem,
+  candidates,
+  search,
+  onSearchChange,
+  selectedId,
+  onSelect,
+  onClose,
+  onSubmit,
+  loading,
+}: AddStudentModalProps) => {
+  return (
+    <div
+      className="modal"
+      role="dialog"
+      aria-modal={open}
+      aria-hidden={!open}
+      style={{ display: open ? "flex" : "none" }}
+      onClick={onClose}
+    >
+      <div className="modal-content add-student-modal" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-head">
+          <div className="title">Thêm sinh viên vào {classItem ? `${classItem.code}` : "lớp"}</div>
+          <button className="icon-btn" onClick={onClose}>✖</button>
+        </div>
+        <div className="modal-body add-student-body">
+          <div className="field-stack">
+            <label className="label">Tìm sinh viên</label>
+            <input
+              className="input"
+              placeholder="Nhập MSSV hoặc tên..."
+              value={search}
+              onChange={(e) => onSearchChange(e.target.value)}
+            />
+          </div>
+          <div className="candidate-list">
+            {candidates.length ? (
+              candidates.map((candidate) => (
+                <label key={candidate.studentId} className={`candidate-item ${candidate.studentId === selectedId ? "selected" : ""}`}>
+                  <input
+                    type="radio"
+                    name="candidate"
+                    value={candidate.studentId}
+                    checked={candidate.studentId === selectedId}
+                    onChange={() => onSelect(candidate.studentId)}
+                  />
+                  <div>
+                    <div className="candidate-name">{candidate.fullName}</div>
+                    <div className="candidate-meta">{candidate.studentId} • {candidate.email || "Không có email"}</div>
+                  </div>
+                </label>
+              ))
+            ) : (
+              <div className="candidate-empty">Không tìm thấy sinh viên phù hợp</div>
+            )}
+          </div>
+        </div>
+        <div className="modal-foot">
+          <div className="foot-left">Chọn sinh viên và nhấn "Thêm"</div>
+          <div className="foot-right">
+            <button className="qr-btn ghost" onClick={onClose} disabled={loading}>Hủy</button>
+            <button className="qr-btn" onClick={onSubmit} disabled={loading || !selectedId}>➕ {loading ? "Đang thêm..." : "Thêm"}</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 const extractCohortDigits = (cohort: string) => {
   if (!cohort) return null;
   const match = cohort.toUpperCase().match(/(\d{2,})$/);
@@ -49,7 +132,21 @@ const mergeExistingClasses = (classes: ClassItem[] | undefined | null, edit: Cla
   return [...base.filter((item) => item.code !== edit.code), edit];
 };
 
-type StudentRow = { mssv: string; name: string; status: string; email: string };
+type StudentRow = {
+  studentId: string;
+  fullName: string;
+  email: string;
+  status: string;
+  course?: string;
+};
+
+const mapStudentFromApi = (input: any): StudentRow => ({
+  studentId: input?.studentId ?? input?.student_id ?? "",
+  fullName: input?.fullName ?? input?.full_name ?? "",
+  email: input?.email ?? "",
+  status: input?.status ?? "",
+  course: input?.course ?? input?.class ?? "",
+});
 
 type ClassFormValues = {
   name: string;
@@ -506,6 +603,11 @@ export default function AdminClassesPage() {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [drawer, setDrawer] = useState<ClassItem | null>(null);
   const [drawerStudents, setDrawerStudents] = useState<StudentRow[]>([]);
+  const [drawerLoading, setDrawerLoading] = useState(false);
+  const [drawerError, setDrawerError] = useState<string | null>(null);
+  const [studentSearch, setStudentSearch] = useState("");
+  const [studentAdding, setStudentAdding] = useState(false);
+  const [studentOptions, setStudentOptions] = useState<StudentRow[]>([]);
   const [modalOpen, setModalOpen] = useState(false);
   const [edit, setEdit] = useState<ClassItem | null>(null);
   const [statusMenuOpen, setStatusMenuOpen] = useState(false);
@@ -604,10 +706,121 @@ export default function AdminClassesPage() {
     }
   }, []);
 
+  const fetchClassStudents = useCallback(async (classCode: string) => {
+    if (!classCode) return;
+    try {
+      setDrawerLoading(true);
+      setDrawerError(null);
+      const resp = await fetch(`${API_BASE}/${encodeURIComponent(classCode)}/students`, { credentials: "include" });
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+      const data = await resp.json();
+      const members = Array.isArray(data?.data?.members)
+        ? data.data.members.map((item: any) => mapStudentFromApi(item))
+        : [];
+      setDrawerStudents(members);
+      const total = typeof data?.data?.total === "number" ? data.data.total : members.length;
+      setList((prev) => prev.map((item) => (item.code === classCode ? { ...item, students: total } : item)));
+    } catch (error) {
+      console.error("fetch class students error", error);
+      setDrawerStudents([]);
+      setDrawerError("Không thể tải danh sách sinh viên");
+    }
+    setDrawerLoading(false);
+  }, []);
+
+  const fetchStudentCandidates = useCallback(async (classCode: string, term: string) => {
+    if (!classCode) return;
+    try {
+      const params = new URLSearchParams();
+      if (term.trim()) params.set("query", term.trim());
+      const query = params.toString();
+      const resp = await fetch(`${API_BASE}/${encodeURIComponent(classCode)}/students/search${query ? `?${query}` : ""}`, {
+        credentials: "include",
+      });
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+      const data = await resp.json();
+      const candidates = Array.isArray(data?.data?.candidates)
+        ? data.data.candidates.map((item: any) => mapStudentFromApi(item))
+        : [];
+      setStudentOptions(candidates);
+    } catch (error) {
+      console.error("fetch student candidates error", error);
+      setStudentOptions([]);
+    }
+  }, []);
+
+  const [addStudentOpen, setAddStudentOpen] = useState(false);
+  const [addStudentTarget, setAddStudentTarget] = useState<ClassItem | null>(null);
+  const [selectedCandidateId, setSelectedCandidateId] = useState("");
+
+  const handleOpenAddStudent = useCallback((cls: ClassItem | null) => {
+    if (!cls) return;
+    setAddStudentTarget(cls);
+    setAddStudentOpen(true);
+    setStudentSearch("");
+    setSelectedCandidateId("");
+    setStudentOptions([]);
+    fetchStudentCandidates(cls.code, "");
+  }, [fetchStudentCandidates]);
+
+  const handleCloseAddStudent = useCallback(() => {
+    setAddStudentOpen(false);
+    setAddStudentTarget(null);
+    setStudentSearch("");
+    setSelectedCandidateId("");
+    setStudentOptions([]);
+  }, []);
+
+  const handleAddStudent = useCallback(async () => {
+    if (!addStudentTarget || !selectedCandidateId) {
+      alert("Vui lòng chọn sinh viên");
+      return;
+    }
+    try {
+      setStudentAdding(true);
+      const resp = await fetch(`${API_BASE}/${encodeURIComponent(addStudentTarget.code)}/students`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ studentId: selectedCandidateId }),
+      });
+      const data = await resp.json().catch(() => null);
+      if (!resp.ok) {
+        throw new Error(data?.message || `HTTP ${resp.status}`);
+      }
+      alert("Đã thêm sinh viên vào lớp");
+      handleCloseAddStudent();
+      setSelectedCandidateId("");
+      await fetchClassStudents(addStudentTarget.code);
+      fetchStudentCandidates(addStudentTarget.code, "");
+    } catch (error: any) {
+      console.error("add student error", error);
+      alert(error?.message || "Không thể thêm sinh viên");
+    } finally {
+      setStudentAdding(false);
+    }
+  }, [addStudentTarget, selectedCandidateId, fetchClassStudents, fetchStudentCandidates, handleCloseAddStudent]);
+
   useEffect(() => {
     fetchOptions();
     fetchClassList();
   }, [fetchOptions, fetchClassList]);
+
+  useEffect(() => {
+    if (!addStudentOpen || !addStudentTarget) return;
+    const timer = setTimeout(() => {
+      fetchStudentCandidates(addStudentTarget.code, studentSearch);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [addStudentOpen, addStudentTarget, studentSearch, fetchStudentCandidates]);
+
+  useEffect(() => {
+    if (!drawer) {
+      setDrawerStudents([]);
+      setDrawerError(null);
+      setDrawerLoading(false);
+    }
+  }, [drawer]);
 
   const toggleDark = () => {
     const next = !dark;
@@ -968,10 +1181,10 @@ export default function AdminClassesPage() {
           </div>
           <div className="tbody">
             {filtered.map((c) => (
-              <div className="trow" key={c.id} onClick={() => { setDrawer(c); setDrawerStudents([
-                { mssv: "SE12345", name: "Nguyễn Minh Hào", status: "Hoạt động", email: "hao@fpt.edu.vn" },
-                { mssv: "SE12346", name: "Trần Thị Huyền", status: "Hoạt động", email: "huyen@fpt.edu.vn" },
-              ]); }}>
+              <div className="trow" key={c.id} onClick={() => {
+                setDrawer(c);
+                fetchClassStudents(c.code).catch(() => {});
+              }}>
                 <div><input type="checkbox" checked={selected.has(c.id)} onChange={(e)=>{e.stopPropagation(); toggleSelect(c.id);}} /></div>
                 <div>{c.code}</div>
                 <div>{c.name}</div>
@@ -980,7 +1193,7 @@ export default function AdminClassesPage() {
                 <div>{c.students}</div>
                 <div><span className={`status ${c.status}`.replace(/\s/g,"-")}>{c.status}</span></div>
                 <div className="actions">
-                  <button className="icon-btn" title="Xem" onClick={(e)=>{e.stopPropagation(); setDrawer(c);}}>👁</button>
+                  <button className="icon-btn" title="Xem" onClick={(e)=>{e.stopPropagation(); setDrawer(c); fetchClassStudents(c.code).catch(()=>{});}}>👁</button>
                   <button className="icon-btn" title="Sửa" onClick={(e)=>{e.stopPropagation(); onOpenEdit(c);}}>✏️</button>
                   <button className="icon-btn" title="Xóa" onClick={(e)=>{e.stopPropagation(); if(confirm("Xóa lớp?")) setList(prev=>prev.filter(x=>x.id!==c.id));}}>🗑</button>
                 </div>
@@ -1013,7 +1226,7 @@ export default function AdminClassesPage() {
                 <div className="actions-row">
                   <button className="qr-btn" onClick={()=>{ setDrawer(null); onOpenEdit(drawer); }}>✏️ Chỉnh sửa</button>
                   <button className="qr-btn" onClick={()=>alert("Đổi giảng viên")}>👨‍🏫 Đổi giảng viên</button>
-                  <button className="qr-btn" onClick={()=>alert("Thêm sinh viên")}>➕ Thêm sinh viên</button>
+                  <button className="qr-btn" onClick={()=>handleOpenAddStudent(drawer)}>➕ Thêm sinh viên</button>
                   <button className="qr-btn" onClick={()=>{ if(confirm("Xóa lớp?")){ setList(prev=>prev.filter(x=>x.id!==drawer.id)); setDrawer(null);} }}>🗑 Xóa lớp</button>
                 </div>
               </div>
@@ -1027,12 +1240,21 @@ export default function AdminClassesPage() {
                     <div>Email</div>
                   </div>
                   <div className="tbody">
-                    {drawerStudents.map(s => (
-                      <div className="trow mini" key={s.mssv}>
-                        <div>{s.mssv}</div>
-                        <div>{s.name}</div>
+                    {drawerLoading && (
+                      <div className="empty-state mini">Đang tải sinh viên...</div>
+                    )}
+                    {!drawerLoading && drawerError && (
+                      <div className="empty-state mini" style={{ color: "#ef4444" }}>{drawerError}</div>
+                    )}
+                    {!drawerLoading && !drawerError && drawerStudents.length === 0 && (
+                      <div className="empty-state mini">Chưa có sinh viên trong lớp</div>
+                    )}
+                    {!drawerLoading && !drawerError && drawerStudents.map((s) => (
+                      <div className="trow mini" key={s.studentId}>
+                        <div>{s.studentId}</div>
+                        <div>{s.fullName}</div>
                         <div>{s.status}</div>
-                        <div>{s.email}</div>
+                        <div>{s.email || "--"}</div>
                       </div>
                     ))}
                   </div>
@@ -1051,6 +1273,19 @@ export default function AdminClassesPage() {
         onClose={() => setModalOpen(false)}
         onSubmit={handleModalSubmit}
         onRequestCode={requestNextCode}
+      />
+
+      <AddStudentModal
+        open={addStudentOpen}
+        classItem={addStudentTarget}
+        candidates={studentOptions}
+        search={studentSearch}
+        onSearchChange={setStudentSearch}
+        selectedId={selectedCandidateId}
+        onSelect={setSelectedCandidateId}
+        onClose={handleCloseAddStudent}
+        onSubmit={handleAddStudent}
+        loading={studentAdding}
       />
     </Shell>
   );
