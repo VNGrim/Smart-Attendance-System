@@ -2,28 +2,41 @@ const express = require('express');
 const prisma = require('../config/prisma');
 const cookieParser = require('cookie-parser');
 const jwt = require('jsonwebtoken');
-const { JWT_SECRET, JWT_EXPIRES_IN } = require('../middleware/auth');
-// const bcrypt = require('bcryptjs'); // TODO: migrate to hashed passwords later
+const bcrypt = require('bcryptjs');
+const { auth } = require('../middleware/auth');
 
 const router = express.Router();
 router.use(cookieParser());
 router.use(express.json());
 
-function signAccessToken(user) {
-  return jwt.sign({ userId: user.user_code, role: user.role, fullName: user.full_name || user.user_code }, JWT_SECRET, { expiresIn: JWT_EXPIRES_IN });
-}
+const JWT_SECRET = process.env.JWT_SECRET || 'secret';
+const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '1h';
 
-// Login (tạm thời so sánh plaintext như hệ thống hiện tại; sẽ chuyển sang bcrypt sau)
+function signAccessToken(user) {
+  return jwt.sign(
+    { userId: user.user_code, role: user.role, fullName: user.full_name || user.user_code },
+    JWT_SECRET,
+    { expiresIn: JWT_EXPIRES_IN }
+  );
+}
+// 🔹 Login
 router.post('/login', async (req, res) => {
   const { userId, password } = req.body;
-  if (!userId || !password) return res.status(400).json({ success: false, message: 'Thiếu userId hoặc password' });
+  if (!userId || !password)
+    return res.status(400).json({ success: false, message: 'Thiếu userId hoặc password' });
 
   try {
-    const rows = await prisma.$queryRaw`SELECT * FROM accounts WHERE user_code = ${userId} AND password = ${password}`;
+    const rows = await prisma.$queryRaw`SELECT * FROM accounts WHERE user_code = ${userId}`;
     const account = rows?.[0];
-    if (!account) return res.status(401).json({ success: false, message: 'Sai thông tin đăng nhập' });
+    if (!account)
+      return res.status(401).json({ success: false, message: 'Sai thông tin đăng nhập' });
 
-    // Lấy tên hiển thị nếu có
+    // So sánh bcrypt
+    const isMatch = await bcrypt.compare(password, account.password);
+    if (!isMatch)
+      return res.status(401).json({ success: false, message: 'Sai mật khẩu' });
+
+    // Lấy tên hiển thị
     let fullName = account.user_code;
     if (account.role === 'student') {
       const s = await prisma.$queryRaw`SELECT full_name FROM students WHERE student_id = ${userId}`;
@@ -33,14 +46,19 @@ router.post('/login', async (req, res) => {
       fullName = t?.[0]?.full_name || fullName;
     }
 
-    const token = jwt.sign({ userId: account.user_code, role: account.role, fullName }, JWT_SECRET, { expiresIn: JWT_EXPIRES_IN });
+    // Tạo token JWT
+    const token = jwt.sign(
+      { user_code: account.user_code, role: account.role, fullName },
+      JWT_SECRET,
+      { expiresIn: JWT_EXPIRES_IN }
+    );
 
     const isSecure = req.secure || req.headers['x-forwarded-proto'] === 'https';
     res.cookie('access_token', token, {
       httpOnly: true,
       sameSite: isSecure ? 'none' : 'lax',
       secure: isSecure,
-      maxAge: 1000 * 60 * 60, // 1h (browser cap; JWT ttl theo JWT_EXPIRES_IN)
+      maxAge: 1000 * 60 * 60, // 1h
       path: '/',
     });
 
@@ -51,24 +69,49 @@ router.post('/login', async (req, res) => {
   }
 });
 
-// Logout
+// 🔹 Logout
 router.post('/logout', (req, res) => {
   res.clearCookie('access_token', { path: '/' });
   return res.json({ success: true });
 });
 
-// Refresh (đơn giản: phát lại từ cookie hiện tại nếu còn hợp lệ, thực tế nên dùng refresh token riêng)
-router.post('/refresh', (req, res) => {
-  const token = req.cookies?.access_token;
-  if (!token) return res.status(401).json({ success: false, message: 'No token' });
+// 🔹 Change Password
+router.post('/change-password', auth, async (req, res) => {
+  const userCode = req.user?.user_code;
+  const { oldPassword, newPassword, confirmPassword } = req.body || {};
+
+  if (!oldPassword || !newPassword || !confirmPassword) {
+    return res.status(400).json({ success: false, message: 'Thiếu mật khẩu cũ hoặc mật khẩu mới/nhập lại' });
+  }
+
   try {
-    const payload = jwt.verify(token, JWT_SECRET);
-    const next = signAccessToken({ user_code: payload.userId, role: payload.role, full_name: payload.fullName });
-    res.cookie('access_token', next, { httpOnly: true, sameSite: 'lax', secure: false, maxAge: 1000 * 60 * 60, path: '/' });
-    return res.json({ success: true });
+    const acc = await prisma.accounts.findUnique({ where: { user_code: userCode } });
+    if (!acc) return res.status(404).json({ success: false, message: 'Không tìm thấy tài khoản' });
+
+    const ok = await bcrypt.compare(oldPassword, acc.password);
+    if (!ok) return res.status(400).json({ success: false, message: 'Mật khẩu cũ không đúng' });
+
+    if (oldPassword === newPassword) {
+      return res.status(400).json({ success: false, message: 'Mật khẩu mới phải khác mật khẩu cũ' });
+    }
+
+    if (newPassword.length < 6) {
+      return res.status(400).json({ success: false, message: 'Mật khẩu mới phải từ 6 ký tự trở lên' });
+    }
+
+    if (newPassword !== confirmPassword) {
+      return res.status(400).json({ success: false, message: 'Mật khẩu xác nhận không khớp với mật khẩu mới' });
+    }
+
+    const hashed = await bcrypt.hash(newPassword, 10);
+    await prisma.accounts.update({ where: { id: acc.id }, data: { password: hashed } });
+
+    return res.json({ success: true, message: 'Đổi mật khẩu thành công' });
   } catch (err) {
-    return res.status(401).json({ success: false, message: 'Invalid token' });
+    console.error('Change password error:', err);
+    return res.status(500).json({ success: false, message: 'Lỗi hệ thống' });
   }
 });
 
+// ✅ Export router
 module.exports = router;

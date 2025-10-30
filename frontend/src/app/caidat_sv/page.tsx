@@ -1,12 +1,61 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useState, PropsWithChildren, Dispatch, SetStateAction } from "react";
 
 interface StudentInfo {
   student_id: string;
   full_name: string;
   course: string;
+}
+
+type ShellProps = {
+  collapsed: boolean;
+  setCollapsed: Dispatch<SetStateAction<boolean>>;
+  student: StudentInfo | null;
+};
+
+function Shell({ children, collapsed, setCollapsed, student }: PropsWithChildren<ShellProps>) {
+  return (
+    <div className={`layout ${collapsed ? 'collapsed' : ''}`}>
+      <aside className="sidebar">
+        <div className="side-header">
+          <button className="collapse-btn" onClick={() => setCollapsed(v => !v)} title={collapsed ? 'Mở rộng' : 'Thu gọn'}>
+            {collapsed ? '⮞' : '⮜'}
+          </button>
+          {!collapsed && (
+            <div className="side-name">
+              Chào mừng,<br />
+              {student?.full_name || "Sinh viên"}
+            </div>
+          )}
+        </div>
+        <nav className="side-nav">
+          <Link href="/tongquan_sv" className="side-link">🏠 {!collapsed && "Trang tổng quan"}</Link>
+          <Link href="/thongbao_sv" className="side-link">🔔 {!collapsed && "Thông báo"}</Link>
+          <Link href="/lichhoc_sv" className="side-link">📅 {!collapsed && "Lịch học"}</Link>
+          <Link href="/lichsu_sv" className="side-link">🕘 {!collapsed && "Lịch sử"}</Link>
+          <div className="side-link active">⚙️ {!collapsed && "Cài đặt"}</div>
+        </nav>
+      </aside>
+      <header className="topbar">
+        <div className="welcome">
+          <div className="hello">Xin chào, {student?.full_name || "Sinh viên"} 👋</div>
+          <div className="date">Hôm nay: {new Date().toLocaleDateString('vi-VN', { weekday: 'long', day: '2-digit', month: '2-digit', year: 'numeric' })}</div>
+        </div>
+        <div className="controls">
+          <button className="qr-btn">📷 Quét QR</button>
+          <button className="qr-btn" onClick={() => { 
+            if (confirm('Bạn có chắc muốn đăng xuất?')) {
+              localStorage.removeItem('sas_user'); 
+              window.location.href = '/login'; 
+            }
+          }}>🚪 Đăng xuất</button>
+        </div>
+      </header>
+      <main className="main">{children}</main>
+    </div>
+  );
 }
 
 export default function CaiDatPage() {
@@ -47,46 +96,21 @@ export default function CaiDatPage() {
     if (studentId) fetchInfo();
   }, [studentId]);
 
-  const Shell = ({ children }: { children: React.ReactNode }) => (
-    <div className={`layout ${collapsed ? 'collapsed' : ''}`}>
-      <aside className="sidebar">
-        <div className="side-header">
-          <button className="collapse-btn" onClick={() => setCollapsed(v => !v)} title={collapsed ? 'Mở rộng' : 'Thu gọn'}>
-            {collapsed ? '⮞' : '⮜'}
-          </button>
-          {!collapsed && (
-            <div className="side-name">
-              Chào mừng,<br />
-              {student?.full_name || "Sinh viên"}
-            </div>
-          )}
-        </div>
-        <nav className="side-nav">
-          <Link href="/tongquan_sv" className="side-link">🏠 {!collapsed && "Trang tổng quan"}</Link>
-          <Link href="/thongbao_sv" className="side-link">🔔 {!collapsed && "Thông báo"}</Link>
-          <Link href="/lichhoc_sv" className="side-link">📅 {!collapsed && "Lịch học"}</Link>
-          <Link href="/lichsu_sv" className="side-link">🕘 {!collapsed && "Lịch sử"}</Link>
-          <div className="side-link active">⚙️ {!collapsed && "Cài đặt"}</div>
-        </nav>
-      </aside>
-      <header className="topbar">
-        <div className="welcome">
-          <div className="hello">Xin chào, {student?.full_name || "Sinh viên"} 👋</div>
-          <div className="date">Hôm nay: {new Date().toLocaleDateString('vi-VN', { weekday: 'long', day: '2-digit', month: '2-digit', year: 'numeric' })}</div>
-        </div>
-        <div className="controls">
-          <button className="qr-btn">📷 Quét QR</button>
-          <button className="qr-btn" onClick={() => { 
-            if (confirm('Bạn có chắc muốn đăng xuất?')) {
-              localStorage.removeItem('sas_user'); 
-              window.location.href = '/login'; 
-            }
-          }}>🚪 Đăng xuất</button>
-        </div>
-      </header>
-      <main className="main">{children}</main>
-    </div>
-  );
+  // Load and apply saved settings (theme, notifications, language)
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem('sas_settings');
+      if (saved) {
+        const s = JSON.parse(saved);
+        if (typeof s.notifEnabled === 'boolean') setNotifEnabled(s.notifEnabled);
+        if (typeof s.themeDark === 'boolean') {
+          setThemeDark(!!s.themeDark);
+          document.documentElement.style.colorScheme = s.themeDark ? 'dark' : 'light';
+        }
+        if (typeof s.lang === 'string') setLang(s.lang);
+      }
+    } catch {}
+  }, []);
 
   const handleSave = async () => {
     const settings = { notifEnabled, themeDark, lang };
@@ -102,19 +126,60 @@ export default function CaiDatPage() {
     alert("Đã đăng xuất tất cả thiết bị.");
   };
 
-  const handleChangePassword = async () => {
-    if (!oldPw || !newPw || newPw !== confirmPw) {
-      alert("Vui lòng nhập đúng thông tin mật khẩu");
-      return;
+const handleChangePassword = async () => {
+  // 1️⃣ Kiểm tra dữ liệu đầu vào
+  if (!oldPw || !newPw || !confirmPw) {
+    alert("⚠️ Vui lòng nhập đầy đủ mật khẩu cũ, mật khẩu mới và xác nhận mật khẩu.");
+    return;
+  }
+
+  // 2️⃣ Kiểm tra độ dài mật khẩu mới
+  if (newPw.length < 6) {
+    alert("⚠️ Mật khẩu mới phải từ 6 ký tự trở lên.");
+    return;
+  }
+
+  // 3️⃣ Mật khẩu mới phải khác mật khẩu cũ
+  if (oldPw === newPw) {
+    alert("⚠️ Mật khẩu mới phải khác mật khẩu cũ.");
+    return;
+  }
+
+  // 4️⃣ Mật khẩu xác nhận khớp
+  if (newPw !== confirmPw) {
+    alert("⚠️ Mật khẩu xác nhận không khớp với mật khẩu mới.");
+    return;
+  }
+
+  try {
+    const base = process.env.NEXT_PUBLIC_API_BASE || "http://localhost:8080";
+    const res = await fetch(`${base}/api/auth/change-password`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({ oldPassword: oldPw, newPassword: newPw, confirmPassword: confirmPw }),
+    });
+
+    const data = await res.json();
+
+    if (res.ok && data.success) {
+      alert("✅ Đổi mật khẩu thành công!");
+      setPwModal(false);
+      setOldPw("");
+      setNewPw("");
+      setConfirmPw("");
+    } else {
+      // Hiển thị lỗi chính xác từ backend (mật khẩu cũ sai, v.v.)
+      alert(`❌ Lỗi: ${data.message || "Không thể đổi mật khẩu"}`);
     }
-    // TODO: gọi API đổi mật khẩu
-    alert("Đổi mật khẩu thành công.");
-    setPwModal(false);
-    setOldPw(""); setNewPw(""); setConfirmPw("");
-  };
+  } catch (err) {
+    console.error("Error changing password:", err);
+    alert("❌ Lỗi kết nối tới máy chủ!");
+  }
+};
 
   return (
-    <Shell>
+    <Shell collapsed={collapsed} setCollapsed={setCollapsed} student={student}>
       <div className="container">
         {/* Left: Thông tin cá nhân */}
         <div className="card">
@@ -185,7 +250,17 @@ export default function CaiDatPage() {
                 <div className="title">Đăng xuất tất cả thiết bị</div>
                 <div className="desc">Buộc đăng xuất trên các thiết bị đã đăng nhập</div>
               </div>
-              <button className="btn btn-outline" onClick={handleLogoutAll}>Thực hiện</button>
+              <button
+                className="btn btn-outline"
+                onClick={() => {
+                  setOldPw("");
+                  setNewPw("");
+                  setConfirmPw("");
+                  setPwModal(true);
+                }}
+              >
+                Mở
+              </button>
             </div>
 
             <div>
@@ -199,10 +274,36 @@ export default function CaiDatPage() {
             <div>
               <div className="label">Giao diện</div>
               <div className="theme-toggle">
-                <div className={`theme-opt ${!themeDark ? 'active' : ''}`} onClick={() => setThemeDark(false)}>
+                <div
+                  className={`theme-opt ${!themeDark ? 'active' : ''}`}
+                  onClick={() => {
+                    setThemeDark(false);
+                    try {
+                      const saved = localStorage.getItem('sas_settings');
+                      const prev = saved ? JSON.parse(saved) : {};
+                      const merged = { ...prev, themeDark: false };
+                      localStorage.setItem('sas_settings', JSON.stringify(merged));
+                      document.documentElement.style.colorScheme = 'light';
+                      window.dispatchEvent(new CustomEvent('sas_settings_changed' as any, { detail: merged }));
+                    } catch {}
+                  }}
+                >
                   <span className="theme-ic">🌙</span> Sáng
                 </div>
-                <div className={`theme-opt ${themeDark ? 'active' : ''}`} onClick={() => setThemeDark(true)}>
+                <div
+                  className={`theme-opt ${themeDark ? 'active' : ''}`}
+                  onClick={() => {
+                    setThemeDark(true);
+                    try {
+                      const saved = localStorage.getItem('sas_settings');
+                      const prev = saved ? JSON.parse(saved) : {};
+                      const merged = { ...prev, themeDark: true };
+                      localStorage.setItem('sas_settings', JSON.stringify(merged));
+                      document.documentElement.style.colorScheme = 'dark';
+                      window.dispatchEvent(new CustomEvent('sas_settings_changed' as any, { detail: merged }));
+                    } catch {}
+                  }}
+                >
                   <span className="theme-ic">🌑</span> Tối
                 </div>
               </div>
@@ -222,31 +323,47 @@ export default function CaiDatPage() {
       </div>
 
       {/* Modal đổi mật khẩu */}
-      <div className={`modal ${pwModal ? 'active' : ''}`} onClick={() => setPwModal(false)}>
-        <div className="modal-card" onClick={(e) => e.stopPropagation()}>
-          <div className="modal-title">Đổi mật khẩu</div>
-          <div className="form">
-            <div>
-              <div className="label">Mật khẩu cũ</div>
-              <input className="input" type="password" value={oldPw} onChange={(e) => setOldPw(e.target.value)} />
-            </div>
-            <div className="row">
-              <div>
-                <div className="label">Mật khẩu mới</div>
-                <input className="input" type="password" value={newPw} onChange={(e) => setNewPw(e.target.value)} />
-              </div>
-              <div>
-                <div className="label">Nhập lại mật khẩu mới</div>
-                <input className="input" type="password" value={confirmPw} onChange={(e) => setConfirmPw(e.target.value)} />
-              </div>
-            </div>
-            <div className="modal-actions">
-              <button className="btn btn-outline" onClick={() => setPwModal(false)}>Hủy</button>
-              <button className="btn btn-primary" onClick={handleChangePassword}>Lưu</button>
-            </div>
-          </div>
+<div className={`modal ${pwModal ? 'active' : ''}`} onClick={() => setPwModal(false)}>
+  <div className="modal-card" onClick={(e) => e.stopPropagation()}>
+    <div className="modal-title">Đổi mật khẩu</div>
+    <form className="form" onSubmit={(e) => { e.preventDefault(); handleChangePassword(); }}>
+      <div>
+        <div className="label">Mật khẩu cũ</div>
+        <input
+          className="input"
+          type="password"
+          value={oldPw}
+          onChange={(e) => setOldPw(e.target.value)}
+        />
+      </div>
+      <div className="row">
+        <div>
+          <div className="label">Mật khẩu mới</div>
+          <input
+            className="input"
+            type="password"
+            value={newPw}
+            onChange={(e) => setNewPw(e.target.value)}
+          />
+        </div>
+        <div>
+          <div className="label">Nhập lại mật khẩu mới</div>
+          <input
+            className="input"
+            type="password"
+            value={confirmPw}
+            onChange={(e) => setConfirmPw(e.target.value)}
+          />
         </div>
       </div>
+      <div className="modal-actions">
+        <button type="button" className="btn btn-outline" onClick={() => setPwModal(false)}>Hủy</button>
+        <button type="submit" className="btn btn-primary">Lưu</button>
+      </div>
+    </form>
+  </div>
+</div>
+
     </Shell>
   );
 }
