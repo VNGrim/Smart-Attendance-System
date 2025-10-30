@@ -51,6 +51,7 @@ model students {
   created_at   DateTime?      @default(now()) @db.Timestamp(0)
   updated_at   DateTime       @default(now()) @updatedAt @db.Timestamp(0)
   accounts     accounts?      @relation(fields: [account_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "students_ibfk_1")
+  attendance_records attendance_records[]
 
   @@index([account_id], map: "account_id")
 }
@@ -91,6 +92,7 @@ model classes {
   created_at   DateTime @default(now()) @db.Timestamp(0)
   updated_at   DateTime @default(now()) @updatedAt @db.Timestamp(0)
   teacher      teachers? @relation("TeacherClasses", fields: [teacher_id], references: [teacher_id], onDelete: SetNull, onUpdate: NoAction)
+  attendance_sessions attendance_sessions[]
 
   @@index([teacher_id], map: "classes_teacher_idx")
   @@index([cohort], map: "classes_cohort_idx")
@@ -103,6 +105,7 @@ model time_slots {
   timetable  timetable[]
   teacherAvailability teacher_availability[]
   roomAvailability    room_availability[]
+  attendance_sessions attendance_sessions[]
 
   @@index([slot_id], map: "time_slots_slot_idx")
 }
@@ -152,6 +155,41 @@ model teacher_availability {
   @@index([slot_id], map: "teacher_availability_slot_idx")
 }
 
+model attendance_sessions {
+  id         Int            @id @default(autoincrement())
+  class_id   String         @db.VarChar(20)
+  slot_id    Int
+  day        DateTime       @db.Date
+  code       String         @db.VarChar(16)
+  expires_at DateTime       @db.Timestamp(0)
+  type       SessionType
+  status     SessionStatus  @default(active)
+  attempts   Int            @default(0)
+  created_at DateTime       @default(now()) @db.Timestamp(0)
+  updated_at DateTime       @default(now()) @updatedAt @db.Timestamp(0)
+
+  session_class classes     @relation(fields: [class_id], references: [class_id], onDelete: Cascade, map: "attendance_sessions_class_fk")
+  session_slot  time_slots  @relation(fields: [slot_id], references: [slot_id], onDelete: Cascade, map: "attendance_sessions_slot_fk")
+  records       attendance_records[]
+
+  @@index([class_id, day, slot_id], map: "attendance_sessions_class_day_slot_idx")
+}
+
+model attendance_records {
+  id         Int               @id @default(autoincrement())
+  session_id Int
+  student_id String            @db.VarChar(20)
+  status     AttendanceStatus  @default(present)
+  marked_at  DateTime          @default(now()) @db.Timestamp(0)
+  note       String?           @db.VarChar(255)
+
+  session attendance_sessions  @relation(fields: [session_id], references: [id], onDelete: Cascade, map: "attendance_records_session_fk")
+  student students             @relation(fields: [student_id], references: [student_id], onDelete: Cascade, map: "attendance_records_student_fk")
+
+  @@unique([session_id, student_id], map: "attendance_records_session_student_unique")
+  @@index([student_id], map: "attendance_records_student_idx")
+}
+
 model room_availability {
   id         Int                   @id @default(autoincrement())
   room_code  String                @db.VarChar(50)
@@ -198,6 +236,24 @@ enum accounts_role {
   student
   teacher
   admin
+}
+
+enum SessionType {
+  qr
+  code
+  manual
+}
+
+enum SessionStatus {
+  active
+  expired
+  closed
+}
+
+enum AttendanceStatus {
+  present
+  absent
+  excused
 }
 
 enum student_status {

@@ -30,6 +30,10 @@ app.use("/api/teacher/notifications", thongbaoGVRoutes);
 const lopRoutes = require("./src/lop_gv/lop_gv.routes");
 app.use("/api/lop", lopRoutes);
 
+// Lecturer attendance routes
+const attendanceRoutes = require("./src/diemdanh_gv");
+app.use("/api/attendances", attendanceRoutes);
+
 // Auth & User routes (JWT + cookie)
 const authRoutes = require("./src/routes/auth.routes");
 const userRoutes = require("./src/routes/user.routes");
