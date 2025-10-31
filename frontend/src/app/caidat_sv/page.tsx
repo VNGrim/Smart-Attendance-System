@@ -7,6 +7,13 @@ interface StudentInfo {
   student_id: string;
   full_name: string;
   course: string;
+  classes: string;
+  major?: string;
+  advisor_name?: string;
+  email?: string;
+  phone?: string;
+  avatar_url?: string;
+  status?: 'active' | 'locked';
 }
 
 type ShellProps = {
@@ -46,10 +53,10 @@ function Shell({ children, collapsed, setCollapsed, student, themeDark }: PropsW
         </div>
         <div className="controls">
           <button className="qr-btn">📷 Quét QR</button>
-          <button className="qr-btn" onClick={() => { 
+          <button className="qr-btn" onClick={() => {
             if (confirm('Bạn có chắc muốn đăng xuất?')) {
-              localStorage.removeItem('sas_user'); 
-              window.location.href = '/login'; 
+              localStorage.removeItem('sas_user');
+              window.location.href = '/login';
             }
           }}>🚪 Đăng xuất</button>
         </div>
@@ -72,6 +79,7 @@ export default function CaiDatPage() {
   const [newPw, setNewPw] = useState("");
   const [confirmPw, setConfirmPw] = useState("");
 
+  // Lấy studentId từ localStorage
   const studentId = (() => {
     if (typeof window === "undefined") return "";
     try {
@@ -83,82 +91,132 @@ export default function CaiDatPage() {
     } catch { return ""; }
   })();
 
-  // Fetch student info
+  // Load student info
   useEffect(() => {
     async function fetchInfo() {
+      if (!studentId) return;
       try {
         const base = process.env.NEXT_PUBLIC_API_BASE || "http://localhost:8080";
         const res = await fetch(`${base}/api/thongbao/students/${studentId}`);
         const data = await res.json();
+        console.log("📥 Fetched student data:", data);
         if (data?.success) {
-          setStudent({ student_id: data.data.student_id, full_name: data.data.full_name, course: data.data.course });
+          setStudent(data.data);
+          console.log("👤 Student info:", data.data);
+          console.log("🖼️ Avatar URL from DB:", data.data.avatar_url);
+          
+          // Xử lý URL ảnh đúng cách
+          const avatarUrl = data.data.avatar_url || "/avatar.png";
+          if (avatarUrl === "/avatar.png" || avatarUrl.startsWith('http')) {
+            setPhotoUrl(avatarUrl);
+          } else {
+            const timestamp = new Date().getTime();
+            setPhotoUrl(`${base}${avatarUrl}?t=${timestamp}`);
+          }
+          console.log("🎨 Final photo URL:", avatarUrl === "/avatar.png" || avatarUrl.startsWith('http') ? avatarUrl : `${base}${avatarUrl}?t=${new Date().getTime()}`);
         }
-      } catch {}
-    }
-    if (studentId) fetchInfo();
-  }, [studentId]);
-
-  // Load settings
-  useEffect(() => {
-  try {
-    const saved = localStorage.getItem('sas_settings');
-    if (saved) {
-      const s = JSON.parse(saved);
-      setThemeDark(s.themeDark ?? true);
-
-      // Áp dụng ngay cho <html>
-      if (s.themeDark) {
-        document.documentElement.classList.add('dark-theme');
-        document.documentElement.classList.remove('light-theme');
-      } else {
-        document.documentElement.classList.add('light-theme');
-        document.documentElement.classList.remove('dark-theme');
+      } catch (err) {
+        console.error("❌ Error fetching student info:", err);
       }
     }
-  } catch {}
-}, []);
+    fetchInfo();
+  }, [studentId]);
 
+  // Load settings từ localStorage
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem('sas_settings');
+      if (saved) {
+        const s = JSON.parse(saved);
+        if (typeof s.notifEnabled === 'boolean') setNotifEnabled(s.notifEnabled);
+        if (typeof s.themeDark === 'boolean') {
+          setThemeDark(s.themeDark);
+          document.documentElement.classList.add(s.themeDark ? 'dark-theme' : 'light-theme');
+        }
+        if (typeof s.lang === 'string') setLang(s.lang);
+      }
+    } catch { }
+  }, []);
 
- const setTheme = (dark: boolean) => {
-  setThemeDark(dark);
+  const setTheme = (dark: boolean) => {
+    setThemeDark(dark);
+    const saved = localStorage.getItem('sas_settings');
+    const prev = saved ? JSON.parse(saved) : {};
+    const merged = { ...prev, themeDark: dark };
+    localStorage.setItem('sas_settings', JSON.stringify(merged));
+    document.documentElement.classList.remove(dark ? 'light-theme' : 'dark-theme');
+    document.documentElement.classList.add(dark ? 'dark-theme' : 'light-theme');
+  };
 
-  // Lưu vào localStorage
-  const saved = localStorage.getItem('sas_settings');
-  const prev = saved ? JSON.parse(saved) : {};
-  const merged = { ...prev, themeDark: dark };
-  localStorage.setItem('sas_settings', JSON.stringify(merged));
+  const handleSaveSettings = () => {
+    const settings = { notifEnabled, themeDark, lang };
+    localStorage.setItem('sas_settings', JSON.stringify(settings));
+    window.dispatchEvent(new CustomEvent('sas_settings_changed', { detail: settings }));
+    alert("Đã lưu thay đổi.");
+  };
 
-  // Áp dụng class cho toàn bộ <html>
-  if (dark) {
-    document.documentElement.classList.add('dark-theme');
-    document.documentElement.classList.remove('light-theme');
-  } else {
-    document.documentElement.classList.add('light-theme');
-    document.documentElement.classList.remove('dark-theme');
+const handleAvatarChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const file = e.target.files?.[0];
+  if (!file || !student) {
+    alert("❌ Chưa có file hoặc thông tin sinh viên!");
+    return;
   }
-  // Thông báo cho các component khác (nếu cần)
-  window.dispatchEvent(new CustomEvent('sas_settings_changed', { detail: merged }));
+
+  console.log("📤 Uploading avatar:", file.name, "for student:", student.student_id);
+
+  const formData = new FormData();
+  formData.append("avatar", file); // phải trùng với multer.single("avatar")
+  formData.append("student_id", student.student_id); // thêm đúng trường backend cần
+
+  try {
+    console.log("🔄 Sending request to:", "http://localhost:8080/api/students/update-avatar");
+    const res = await fetch("http://localhost:8080/api/students/update-avatar", {
+      method: "POST",
+      body: formData,
+    });
+
+    console.log("📥 Response status:", res.status, res.statusText);
+
+    let data;
+    try {
+      data = await res.json();
+      console.log("📦 Response data:", data);
+    } catch (parseError) {
+      console.error("❌ JSON parse error:", parseError);
+      const text = await res.text();
+      console.error("📄 Response text:", text);
+      alert("❌ Lỗi: Phản hồi từ máy chủ không hợp lệ (không phải JSON).");
+      return;
+    }
+
+    if (!data || data.success === false) {
+      alert(`❌ Upload avatar thất bại: ${data.message || "Không rõ lỗi"}`);
+      return;
+    }
+
+    // ✅ Cập nhật ảnh hiển thị + lưu vào state
+    // Thêm timestamp để buộc browser reload ảnh mới
+    const base = process.env.NEXT_PUBLIC_API_BASE || "http://localhost:8080";
+    const timestamp = new Date().getTime();
+    const newAvatarUrl = `${base}${data.avatar_url}?t=${timestamp}`;
+    console.log("✅ New avatar URL:", newAvatarUrl);
+    setPhotoUrl(newAvatarUrl);
+
+    // ✅ Cập nhật student state để hiển thị đúng ảnh
+    setStudent((prev) => prev ? { ...prev, avatar_url: data.avatar_url } : prev);
+
+    alert("✅ Cập nhật avatar thành công!");
+  } catch (err) {
+    console.error("❌ Upload error:", err);
+    alert("❌ Lỗi kết nối máy chủ hoặc upload thất bại.");
+  }
 };
 
 
-  const handleSave = async () => {
-    const settings = { notifEnabled, themeDark, lang };
-    try {
-      localStorage.setItem('sas_settings', JSON.stringify(settings));
-      window.dispatchEvent(new CustomEvent('sas_settings_changed', { detail: settings }));
-      alert("Đã lưu thay đổi.");
-    } catch {}
-  };
-
-  const handleLogoutAll = async () => {
-    alert("Đã đăng xuất tất cả thiết bị.");
-  };
-
   const handleChangePassword = async () => {
-    if (!oldPw || !newPw || !confirmPw) return alert("⚠️ Vui lòng nhập đầy đủ mật khẩu cũ, mật khẩu mới và xác nhận mật khẩu.");
-    if (newPw.length < 6) return alert("⚠️ Mật khẩu mới phải từ 6 ký tự trở lên.");
-    if (oldPw === newPw) return alert("⚠️ Mật khẩu mới phải khác mật khẩu cũ.");
-    if (newPw !== confirmPw) return alert("⚠️ Mật khẩu xác nhận không khớp với mật khẩu mới.");
+    if (!oldPw || !newPw || !confirmPw) return alert("Vui lòng nhập đầy đủ mật khẩu.");
+    if (newPw.length < 6) return alert("Mật khẩu mới phải >=6 ký tự");
+    if (newPw !== confirmPw) return alert("Xác nhận mật khẩu không khớp");
 
     try {
       const base = process.env.NEXT_PUBLIC_API_BASE || "http://localhost:8080";
@@ -168,7 +226,6 @@ export default function CaiDatPage() {
         credentials: "include",
         body: JSON.stringify({ oldPassword: oldPw, newPassword: newPw, confirmPassword: confirmPw }),
       });
-
       const data = await res.json();
       if (res.ok && data.success) {
         alert("✅ Đổi mật khẩu thành công!");
@@ -176,26 +233,40 @@ export default function CaiDatPage() {
         setOldPw(""); setNewPw(""); setConfirmPw("");
       } else alert(`❌ Lỗi: ${data.message || "Không thể đổi mật khẩu"}`);
     } catch {
-      alert("❌ Lỗi kết nối tới máy chủ!");
+      alert("❌ Lỗi kết nối máy chủ!");
     }
   };
+
+  const handleLogoutAll = () => alert("Đã đăng xuất tất cả thiết bị.");
 
   return (
     <Shell collapsed={collapsed} setCollapsed={setCollapsed} student={student} themeDark={themeDark}>
       <div className="container">
+
         {/* Thông tin cá nhân */}
         <div className="card">
           <div className="section-title">👤 Thông tin cá nhân</div>
           <div className="hero">
             <div className="avatar-wrap">
-              <img src={photoUrl} className="avatar-lg" alt="avatar" />
-              <div className="avatar-edit">📷</div>
+              <img 
+                src={photoUrl} 
+                className="avatar-lg" 
+                alt="avatar"
+                onError={(e) => {
+                  console.error("Lỗi load ảnh:", photoUrl);
+                  e.currentTarget.src = "/avatar.png";
+                }}
+              />
+              <label className="avatar-edit">📷
+                <input type="file" accept="image/*" style={{ display: 'none' }} onChange={handleAvatarChange} />
+              </label>
             </div>
             <div>
-              <div className="name">{student?.full_name || 'Nguyen Van A'}</div>
-              <div className="tag">Sinh viên Đại học FPT Quy Nhơn</div>
+              <div className="name">{student?.full_name || ''}</div>
+              <div className="tag">{student?.course || ''}</div>
             </div>
           </div>
+
           <div className="form">
             <div className="info-grid">
               <div>
@@ -208,17 +279,10 @@ export default function CaiDatPage() {
               </div>
               <div className="full">
                 <div className="label">Khóa học</div>
-                <input className="input" value={student?.course || ''} readOnly />
+                <input className="input" value={student?.course || ''} disabled />
               </div>
             </div>
-            <label className="btn btn-outline" style={{ cursor: 'pointer' }}>
-              Thay đổi ảnh
-              <input type="file" accept="image/*" style={{ display: 'none' }} onChange={(e) => {
-                const file = e.target.files?.[0];
-                if (file) setPhotoUrl(URL.createObjectURL(file));
-              }} />
-            </label>
-            <button className="btn btn-primary" onClick={handleSave}>Lưu thay đổi</button>
+            <button className="btn btn-primary" onClick={handleSaveSettings}>Lưu thay đổi</button>
           </div>
         </div>
 
@@ -252,22 +316,9 @@ export default function CaiDatPage() {
 
             {/* Theme toggle */}
             <div className="Giao diện">
-              <div
-                className={`theme-opt ${!themeDark ? 'active' : ''}`}
-                onClick={() => setTheme(false)}
-              >
-                🌞 Sáng
-              </div>
-              <div
-                className={`theme-opt ${themeDark ? 'active' : ''}`}
-                onClick={() => setTheme(true)}
-              >
-                🌑 Tối
-              </div>
+              <div className={`theme-opt ${!themeDark ? 'active' : ''}`} onClick={() => setTheme(false)}>🌞 Sáng</div>
+              <div className={`theme-opt ${themeDark ? 'active' : ''}`} onClick={() => setTheme(true)}>🌑 Tối</div>
             </div>
-
-
-            
 
             {/* Language */}
             <div className="label">Ngôn ngữ</div>

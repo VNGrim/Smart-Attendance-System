@@ -100,13 +100,18 @@ class ThongBaoController {
         });
       }
 
+      console.log("📦 Student from DB:", student);
+
       // Format dữ liệu trả về
       const formattedStudent = {
         student_id: student.student_id,
         full_name: student.full_name,
         course: student.course,
-        classes: student.classes ? student.classes.split(',').map(cls => cls.trim()) : []
+        classes: student.classes ? student.classes.split(',').map(cls => cls.trim()) : [],
+        avatar_url: student.avatar_url || "/avatar.png" // ✅ Thêm avatar_url
       };
+      
+      console.log("📤 Sending student data:", formattedStudent);
       
       res.json({
         success: true,
@@ -150,7 +155,8 @@ class ThongBaoController {
         student_id: student.student_id,
         full_name: student.full_name,
         course: student.course,
-        classes: student.classes ? student.classes.split(',').map(cls => cls.trim()) : []
+        classes: student.classes ? student.classes.split(',').map(cls => cls.trim()) : [],
+        avatar_url: student.avatar_url || "/avatar.png" // ✅ Thêm avatar_url
       };
       
       res.json({

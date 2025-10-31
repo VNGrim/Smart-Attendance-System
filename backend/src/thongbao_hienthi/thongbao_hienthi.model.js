@@ -63,7 +63,7 @@ class ThongBaoModel {
   static async getStudentInfo(studentId) {
     try {
       const students = await prisma.$queryRaw`
-        SELECT student_id, full_name, course, classes 
+        SELECT student_id, full_name, course, classes, avatar_url
         FROM students 
         WHERE student_id = ${studentId}
       `;
@@ -77,7 +77,7 @@ class ThongBaoModel {
   static async getStudentByAccount(userCode) {
     try {
       const students = await prisma.$queryRaw`
-        SELECT s.student_id, s.full_name, s.course, s.classes 
+        SELECT s.student_id, s.full_name, s.course, s.classes, s.avatar_url
         FROM students s 
         JOIN accounts a ON s.account_id = a.id 
         WHERE a.user_code = ${userCode}

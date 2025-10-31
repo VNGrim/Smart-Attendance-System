@@ -263,3 +263,13 @@ enum student_status {
   active
   locked
 }
+
+
+model File {
+  id        Int      @id @default(autoincrement())
+  filename  String
+  original  String
+  mimetype  String
+  size      Int
+  createdAt DateTime @default(now())
+}
