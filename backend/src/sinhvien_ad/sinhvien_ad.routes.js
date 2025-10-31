@@ -1,4 +1,5 @@
 const express = require('express');
+const bcrypt = require('bcryptjs');
 const prisma = require('../config/prisma');
 const { auth } = require('../middleware/auth');
 const { requireRole } = require('../middleware/roles');
@@ -280,6 +281,7 @@ router.post('/', async (req, res) => {
     }
 
     const passwordToUse = typeof password === 'string' && password.trim() ? password.trim() : 'sinhvienfpt';
+    const hashedPassword = await bcrypt.hash(passwordToUse, 10);
     const classesValue = Array.isArray(classes)
       ? classes.filter(Boolean).join(', ')
       : (className && typeof className === 'string') ? className.trim() : '';
@@ -290,7 +292,7 @@ router.post('/', async (req, res) => {
       const account = await tx.accounts.create({
         data: {
           user_code: studentId,
-          password: passwordToUse,
+          password: hashedPassword,
           role: 'student',
         },
       });
