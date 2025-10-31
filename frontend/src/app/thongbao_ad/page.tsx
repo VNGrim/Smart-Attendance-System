@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useState, useEffect, useMemo, useRef } from "react";
+import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { apiFetch, apiFetchJson } from "../../lib/authClient";
 import { useRouter } from "next/navigation";
 
@@ -68,7 +68,7 @@ function AnnouncementModal({ open, edit, saving, onClose, onSubmit }: Announceme
   const [lecturerError, setLecturerError] = useState<string | null>(null);
   const [lecturerSearch, setLecturerSearch] = useState("");
 
-  const fetchLecturers = async (options: { search?: string; ids?: string[] } = {}) => {
+  const fetchLecturers = useCallback(async (options: { search?: string; ids?: string[] } = {}) => {
     const rawSearch = typeof options.search === "string" ? options.search : "";
     const trimmedSearch = rawSearch.trim();
     const ids = Array.isArray(options.ids) ? options.ids.filter((item) => item && item.trim().length) : undefined;
@@ -101,7 +101,7 @@ function AnnouncementModal({ open, edit, saving, onClose, onSubmit }: Announceme
     } finally {
       setLecturerLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     if (!open) return;
