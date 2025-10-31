@@ -34,7 +34,7 @@ CREATE TABLE `attendance_records` (
   KEY `attendance_records_student_idx` (`student_id`),
   CONSTRAINT `attendance_records_session_fk` FOREIGN KEY (`session_id`) REFERENCES `attendance_sessions` (`id`) ON DELETE CASCADE ON UPDATE CASCADE,
   CONSTRAINT `attendance_records_student_fk` FOREIGN KEY (`student_id`) REFERENCES `students` (`student_id`) ON DELETE CASCADE ON UPDATE CASCADE
-) ENGINE=InnoDB AUTO_INCREMENT=5 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=6 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -43,7 +43,7 @@ CREATE TABLE `attendance_records` (
 
 LOCK TABLES `attendance_records` WRITE;
 /*!40000 ALTER TABLE `attendance_records` DISABLE KEYS */;
-INSERT INTO `attendance_records` VALUES (1,7,'SE190001','present','2025-10-29 23:35:25',NULL),(2,10,'SE190001','present','2025-10-30 00:23:56',NULL),(3,12,'SE190001','present','2025-10-30 01:11:33',NULL),(4,13,'SE190001','present','2025-10-30 01:12:37',NULL);
+INSERT INTO `attendance_records` VALUES (1,7,'SE190001','present','2025-10-29 23:35:25',NULL),(2,10,'SE190001','present','2025-10-30 00:23:56',NULL),(3,12,'SE190001','present','2025-10-30 01:11:33',NULL),(4,13,'SE190001','present','2025-10-30 01:12:37',NULL),(5,16,'SE190001','present','2025-10-30 01:38:03',NULL);
 /*!40000 ALTER TABLE `attendance_records` ENABLE KEYS */;
 UNLOCK TABLES;
 /*!40103 SET TIME_ZONE=@OLD_TIME_ZONE */;
@@ -56,4 +56,4 @@ UNLOCK TABLES;
 /*!40101 SET COLLATION_CONNECTION=@OLD_COLLATION_CONNECTION */;
 /*!40111 SET SQL_NOTES=@OLD_SQL_NOTES */;
 
--- Dump completed on 2025-10-30 15:21:10
+-- Dump completed on 2025-10-31 16:37:45

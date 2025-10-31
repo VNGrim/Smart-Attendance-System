@@ -38,7 +38,7 @@ CREATE TABLE `accounts` (
 
 LOCK TABLES `accounts` WRITE;
 /*!40000 ALTER TABLE `accounts` DISABLE KEYS */;
-INSERT INTO `accounts` VALUES (1,'admin','admin123','admin'),(2,'SE190001','sinhvienfpt','student'),(3,'SE180001','sinhvienfpt','student'),(4,'GV001','giangvienfpt','teacher');
+INSERT INTO `accounts` VALUES (1,'admin','$2a$10$KtbykiZxRgL9SL6uyZEo7Os1..Z79yYBeQIBs.j/jULNjYtsnmuIu','admin'),(2,'SE190001','$2a$10$8mcGKZNR1Bw9zenGnAUKG.jJlKan/N3IYcx3Y.4ka.MYrivAaLzlS','student'),(3,'SE180001','$2a$10$ya3M3d1uz34UH3mYV7YvFuI0nBGv1.X2rjH8rIe/RPqhHaftlOaMK','student'),(4,'GV001','$2a$10$TrY/qgt.7DUXb/gc1CnpGux0ZDlFsk4LyONxX3Tb/tl5W.3vx0y3C','teacher');
 /*!40000 ALTER TABLE `accounts` ENABLE KEYS */;
 UNLOCK TABLES;
 /*!40103 SET TIME_ZONE=@OLD_TIME_ZONE */;
@@ -51,4 +51,4 @@ UNLOCK TABLES;
 /*!40101 SET COLLATION_CONNECTION=@OLD_COLLATION_CONNECTION */;
 /*!40111 SET SQL_NOTES=@OLD_SQL_NOTES */;
 
--- Dump completed on 2025-10-30 15:21:08
+-- Dump completed on 2025-10-31 16:37:44

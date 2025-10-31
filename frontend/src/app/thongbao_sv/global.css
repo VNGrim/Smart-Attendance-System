@@ -238,6 +238,10 @@ body::before {
 
 .notif-arrow { font-size: 14px; color: var(--text-secondary); font-weight: 700; align-self: center; transition: transform 0.2s ease; }
 .notification-item:hover .notif-arrow { transform: translateX(4px); color: var(--accent-blue); }
+.notif-actions { display: flex; align-items: center; gap: 8px; justify-content: flex-end; margin-top: 8px; }
+.reply-btn { background: rgba(59,130,246,0.14); border: 1px solid rgba(59,130,246,0.28); color: #1d4ed8; padding: 6px 12px; border-radius: 9999px; font-weight: 700; cursor: pointer; transition: all 0.2s ease; }
+.reply-btn:hover { background: rgba(59,130,246,0.24); transform: translateY(-1px); }
+.reply-btn:active { transform: translateY(0); }
 
 /* Loading state */
 .loading {

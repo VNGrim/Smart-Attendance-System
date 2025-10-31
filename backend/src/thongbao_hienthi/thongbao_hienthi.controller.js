@@ -1,11 +1,72 @@
 const ThongBaoModel = require('./thongbao_hienthi.model');
 
+const normalizeBoolean = (value) => {
+  if (value == null) return null;
+  if (typeof value === 'boolean') return value;
+  if (typeof value === 'number') return value !== 0;
+  if (typeof value === 'string') {
+    const trimmed = value.trim().toLowerCase();
+    if (trimmed === 'true' || trimmed === '1' || trimmed === 'yes') return true;
+    if (trimmed === 'false' || trimmed === '0' || trimmed === 'no') return false;
+    try {
+      const parsed = JSON.parse(value);
+      if (typeof parsed === 'boolean') return parsed;
+      return normalizeBoolean(parsed);
+    } catch {
+      if (trimmed.includes('allowreply:true') || trimmed.includes('allow_reply":true')) {
+        return true;
+      }
+      if (trimmed.includes('allowreply:false') || trimmed.includes('allow_reply":false')) {
+        return false;
+      }
+      return null;
+    }
+  }
+  if (typeof value === 'object') {
+    if (Object.prototype.hasOwnProperty.call(value, 'allowReply')) {
+      return normalizeBoolean(value.allowReply);
+    }
+    if (Object.prototype.hasOwnProperty.call(value, 'allow_reply')) {
+      return normalizeBoolean(value.allow_reply);
+    }
+    if (Object.prototype.hasOwnProperty.call(value, 'settings')) {
+      const fromSettings = normalizeBoolean(value.settings);
+      if (fromSettings != null) return fromSettings;
+    }
+    const entries = Array.isArray(value) ? value : Object.values(value);
+    for (const item of entries) {
+      const result = normalizeBoolean(item);
+      if (result != null) return result;
+    }
+  }
+  return null;
+};
+
+const resolveAllowReply = (record) => {
+  const fromHistory = normalizeBoolean(record?.history);
+  if (fromHistory != null) return fromHistory;
+  if (record && Object.prototype.hasOwnProperty.call(record, 'allow_reply')) {
+    return normalizeBoolean(record.allow_reply) ?? false;
+  }
+  return false;
+};
+
+const normalizeTarget = (value) => {
+  if (!value || typeof value !== 'string') return 'Toàn trường';
+  return value.trim() || 'Toàn trường';
+};
+
+const normalizeSender = (value) => {
+  if (!value || typeof value !== 'string') return 'Admin';
+  return value.trim() || 'Admin';
+};
+
 class ThongBaoController {
   // API lấy danh sách thông báo
   static async getAllAnnouncements(req, res) {
     try {
       const announcements = await ThongBaoModel.getAllAnnouncements();
-      
+
       // Format dữ liệu trả về
       const formattedAnnouncements = announcements.map(announcement => ({
         id: announcement.id,
@@ -13,9 +74,12 @@ class ThongBaoController {
         content: announcement.content,
         created_at: announcement.created_at,
         date: announcement.created_at.toISOString().split('T')[0], // Format YYYY-MM-DD
-        type: "general" // Mặc định type là general
+        type: announcement.type ?? "general",
+        sender: normalizeSender(announcement.sender),
+        target: normalizeTarget(announcement.target),
+        allowReply: resolveAllowReply(announcement)
       }));
-      
+
       res.json({
         success: true,
         data: formattedAnnouncements,
@@ -35,7 +99,7 @@ class ThongBaoController {
   static async getAnnouncementById(req, res) {
     try {
       const { id } = req.params;
-      
+
       // Validate ID
       if (!id || isNaN(id)) {
         return res.status(400).json({
@@ -45,7 +109,7 @@ class ThongBaoController {
       }
 
       const announcement = await ThongBaoModel.getAnnouncementById(id);
-      
+
       if (!announcement) {
         return res.status(404).json({
           success: false,
@@ -60,9 +124,12 @@ class ThongBaoController {
         content: announcement.content,
         created_at: announcement.created_at,
         date: announcement.created_at.toISOString().split('T')[0], // Format YYYY-MM-DD
-        type: "general"
+        type: announcement.type ?? "general",
+        sender: normalizeSender(announcement.sender),
+        target: normalizeTarget(announcement.target),
+        allowReply: resolveAllowReply(announcement)
       };
-      
+
       res.json({
         success: true,
         data: formattedAnnouncement,

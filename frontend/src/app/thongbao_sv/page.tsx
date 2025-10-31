@@ -11,6 +11,9 @@ interface Announcement {
   created_at: string;
   date: string;
   type: string;
+  sender?: string;
+  target?: string;
+  allowReply?: boolean;
 }
 
 interface StudentInfo {
@@ -114,6 +117,21 @@ const [themeDark, setThemeDark] = useState(true);
     }
   };
 
+  const canStudentReply = (announcement: Announcement) => {
+    if (!announcement.allowReply) return false;
+    const sender = announcement.sender?.toLowerCase() ?? "";
+    const target = announcement.target?.toLowerCase() ?? "";
+    const fromAdmin = sender.includes("admin");
+    const fromLecturer = sender.includes("giảng viên") || sender.includes("teacher") || sender.includes("lecturer");
+    const toStudents = target.includes("sinh viên") || target.includes("student");
+    return (fromAdmin || fromLecturer) && toStudents;
+  };
+
+  const handleReplyClick = (event: React.MouseEvent<HTMLButtonElement>, announcement: Announcement) => {
+    event.stopPropagation();
+    // TODO: implement reply flow (compose message to sender)
+  };
+
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
     return date.toLocaleDateString('vi-VN', {
@@ -151,7 +169,6 @@ const [themeDark, setThemeDark] = useState(true);
           <div className="date">Hôm nay: {todayStr}</div>
         </div>
         <div className="controls">
-          <button className="qr-btn">📷 Quét QR</button>
           <button className="qr-btn" onClick={() => { 
           if (confirm('Bạn có chắc muốn đăng xuất?')) {
             localStorage.removeItem('sas_user'); 
@@ -228,7 +245,15 @@ const [themeDark, setThemeDark] = useState(true);
                 </div>
                 <div>
                   <div className="notif-time">{formatDate(announcement.created_at)}</div>
-                  <div className="notif-arrow" style={{ textAlign: "right", marginTop: 8 }}>View</div>
+                  <div className="notif-actions">
+                    <span className="notif-arrow">View</span>
+                    {canStudentReply(announcement) && (
+                      <button
+                        className="reply-btn"
+                        onClick={(event) => handleReplyClick(event, announcement)}
+                      >↩ Reply</button>
+                    )}
+                  </div>
                 </div>
               </li>
             ))}
