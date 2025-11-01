@@ -14,6 +14,7 @@ interface Announcement {
   sender?: string;
   target?: string;
   allowReply?: boolean;
+  replyUntil?: string | null;
 }
 
 interface StudentInfo {
@@ -30,6 +31,10 @@ export default function ThongBaoPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedAnnouncement, setSelectedAnnouncement] = useState<Announcement | null>(null);
+  const [replyTarget, setReplyTarget] = useState<Announcement | null>(null);
+  const [replyMessage, setReplyMessage] = useState("");
+  const [replyError, setReplyError] = useState<string | null>(null);
+  const [sendingReply, setSendingReply] = useState(false);
 const [themeDark, setThemeDark] = useState(true);
   const todayStr = useMemo(() => {
     const now = new Date();
@@ -119,6 +124,10 @@ const [themeDark, setThemeDark] = useState(true);
 
   const canStudentReply = (announcement: Announcement) => {
     if (!announcement.allowReply) return false;
+    if (announcement.replyUntil) {
+      const deadline = new Date(announcement.replyUntil).getTime();
+      if (!Number.isNaN(deadline) && deadline < Date.now()) return false;
+    }
     const sender = announcement.sender?.toLowerCase() ?? "";
     const target = announcement.target?.toLowerCase() ?? "";
     const fromAdmin = sender.includes("admin");
@@ -129,7 +138,56 @@ const [themeDark, setThemeDark] = useState(true);
 
   const handleReplyClick = (event: React.MouseEvent<HTMLButtonElement>, announcement: Announcement) => {
     event.stopPropagation();
-    // TODO: implement reply flow (compose message to sender)
+    if (!canStudentReply(announcement)) return;
+    setReplyTarget(announcement);
+    setReplyMessage("");
+    setReplyError(null);
+    setSendingReply(false);
+  };
+
+  const closeReplyModal = () => {
+    setReplyTarget(null);
+    setReplyMessage("");
+    setReplyError(null);
+    setSendingReply(false);
+  };
+
+  const submitReply = async () => {
+    if (!replyTarget) return;
+    const trimmed = replyMessage.trim();
+    if (!trimmed) {
+      setReplyError("Vui lòng nhập nội dung phản hồi");
+      return;
+    }
+
+    try {
+      setSendingReply(true);
+      await apiFetchJson(`/api/thongbao/announcements/${replyTarget.id}/replies`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message: trimmed }),
+      });
+      alert("Đã gửi phản hồi thành công");
+      closeReplyModal();
+    } catch (err) {
+      console.error("send reply error", err);
+      setReplyError(err instanceof Error ? err.message : "Gửi phản hồi thất bại");
+    } finally {
+      setSendingReply(false);
+    }
+  };
+
+  const formatReplyDeadline = (value?: string | null) => {
+    if (!value) return null;
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return null;
+    return date.toLocaleString('vi-VN', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
   };
 
   const formatDate = (dateString: string) => {
@@ -270,7 +328,62 @@ const [themeDark, setThemeDark] = useState(true);
             </div>
             <div className="modal-body">
               <div className="modal-date">Ngày đăng: {formatDate(selectedAnnouncement.created_at)}</div>
+              {canStudentReply(selectedAnnouncement) && (
+                <div className="modal-date" style={{ color: '#0369a1' }}>
+                  {selectedAnnouncement.replyUntil
+                    ? `Hạn phản hồi: ${formatReplyDeadline(selectedAnnouncement.replyUntil)}`
+                    : 'Thông báo cho phép phản hồi'}
+                </div>
+              )}
               <div className="modal-content-text">{selectedAnnouncement.content}</div>
+            </div>
+            {canStudentReply(selectedAnnouncement) && (
+              <div className="modal-footer" style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                <button
+                  className="reply-btn"
+                  onClick={() => handleReplyClick({ stopPropagation: () => {} } as any, selectedAnnouncement)}
+                >↩ Trả lời</button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {replyTarget && (
+        <div className="modal-overlay" onClick={closeReplyModal}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h2>Trả lời thông báo</h2>
+              <button className="close-btn" onClick={closeReplyModal}>×</button>
+            </div>
+            <div className="modal-body">
+              <div className="modal-date">Tiêu đề: {replyTarget.title}</div>
+              <div className="modal-date">Người gửi: {replyTarget.sender ?? 'Không xác định'}</div>
+              {replyTarget.replyUntil && (
+                <div className="modal-date" style={{ color: '#0369a1' }}>
+                  Hạn phản hồi: {formatReplyDeadline(replyTarget.replyUntil)}
+                </div>
+              )}
+              <textarea
+                className="reply-textarea"
+                rows={5}
+                placeholder="Nhập phản hồi của bạn..."
+                value={replyMessage}
+                onChange={(e) => {
+                  setReplyMessage(e.target.value);
+                  if (replyError) setReplyError(null);
+                }}
+                style={{ marginTop: 12 }}
+              />
+              {replyError && (
+                <div className="reply-error" style={{ color: '#dc2626', marginTop: 8 }}>{replyError}</div>
+              )}
+            </div>
+            <div className="modal-footer" style={{ display: 'flex', justifyContent: 'flex-end', gap: 12 }}>
+              <button className="qr-btn" onClick={closeReplyModal}>Huỷ</button>
+              <button className="reply-btn" onClick={submitReply} disabled={sendingReply}>
+                {sendingReply ? 'Đang gửi...' : 'Gửi phản hồi'}
+              </button>
             </div>
           </div>
         </div>

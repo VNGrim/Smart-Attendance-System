@@ -14,6 +14,8 @@ class ThongBaoGVModel {
           category,
           type,
           status,
+          allow_reply,
+          reply_until,
           created_at,
           updated_at
         FROM announcements
@@ -39,6 +41,8 @@ class ThongBaoGVModel {
           category,
           type,
           status,
+          allow_reply,
+          reply_until,
           created_at,
           updated_at
         FROM announcements

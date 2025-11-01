@@ -29,6 +29,8 @@ model announcements {
   code         String?   @unique @default(uuid()) @db.VarChar(64)
   history      Json?
   recipients   Json?
+  allow_reply  Boolean   @default(false)
+  reply_until  DateTime? @db.Timestamp(0)
   scheduled_at DateTime? @db.Timestamp(0)
   send_time    DateTime? @db.Timestamp(0)
   sender       String    @default("Admin") @db.VarChar(100)

@@ -3,9 +3,19 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import { apiFetchJson } from "../../lib/authClient";
 
 type TabKey = "inbox" | "send";
-type InboxItem = { id: string; title: string; from: string; date: string; content: string; attachments?: string[] };
+type InboxItem = {
+  id: number;
+  title: string;
+  from: string;
+  date: string;
+  content: string;
+  allowReply?: boolean;
+  replyUntil?: string | null;
+  attachments?: string[];
+};
 type Announcement = {
   id: number;
   title: string;
@@ -17,19 +27,26 @@ type Announcement = {
   type: string;
   status: string;
   category: string;
+  allowReply?: boolean;
+  replyUntil?: string | null;
 };
 
 export default function LecturerNotificationsPage() {
   const router = useRouter();
   const [collapsed, setCollapsed] = useState(false);
   const [dark, setDark] = useState(false);
-  const [notifCount, setNotifCount] = useState(2);
+  const [notifCount, setNotifCount] = useState(0);
   const [tab, setTab] = useState<TabKey>("inbox");
 
   const [inbox, setInbox] = useState<InboxItem[]>([]);
   const [detail, setDetail] = useState<InboxItem | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const [replyTarget, setReplyTarget] = useState<InboxItem | null>(null);
+  const [replyMessage, setReplyMessage] = useState("");
+  const [replyError, setReplyError] = useState<string | null>(null);
+  const [sendingReply, setSendingReply] = useState(false);
 
   const [classes] = useState(["CN201 - .NET", "CN202 - CSDL", "CN203 - CTDL"]);
   const [toClass, setToClass] = useState("CN201 - .NET");
@@ -55,30 +72,45 @@ export default function LecturerNotificationsPage() {
       setLoading(true);
       setError(null);
       try {
-        const response = await fetch('http://localhost:8080/api/teacher/notifications/announcements');
-        const result = await response.json();
-        
-        if (result.success && result.data) {
-          // Map API data to InboxItem format
-          const mappedData: InboxItem[] = result.data.map((item: Announcement) => ({
-            id: `i${item.id}`,
+        const result = await apiFetchJson<{ success: boolean; data?: Announcement[]; message?: string }>(
+          "/api/teacher/notifications/announcements"
+        );
+
+        if (result.success && Array.isArray(result.data)) {
+          const mappedData: InboxItem[] = result.data.map((item) => ({
+            id: item.id,
             title: item.title,
             from: item.sender,
-            date: item.dateFormatted || new Date(item.date).toLocaleDateString('vi-VN'),
+            date: item.dateFormatted || new Date(item.date).toLocaleDateString("vi-VN"),
             content: item.content,
+            allowReply: item.allowReply,
+            replyUntil: item.replyUntil ?? null,
           }));
           setInbox(mappedData);
           setNotifCount(mappedData.length);
         } else {
-          setError(result.message || 'Không thể tải thông báo');
+          setError(result.message || "Không thể tải thông báo");
         }
       } catch (err) {
-        console.error('Error fetching announcements:', err);
-        setError('Lỗi kết nối đến server');
-        // Fallback to mock data if API fails
+        console.error("Error fetching announcements:", err);
+        setError(err instanceof Error ? err.message : "Lỗi kết nối đến server");
         setInbox([
-          { id: "i1", title: "Thông báo họp giáo viên thứ 4", from: "Phòng đào tạo", date: "25/10/2025", content: "Kính mời quý thầy cô tham dự họp vào thứ 4 lúc 14:00 tại phòng A1." },
-          { id: "i2", title: "Lịch bảo trì hệ thống LMS", from: "Admin hệ thống", date: "23/10/2025", content: "Hệ thống LMS sẽ bảo trì từ 22:00 đến 23:30, mong thầy cô thông cảm." },
+          {
+            id: 1,
+            title: "Thông báo họp giáo viên thứ 4",
+            from: "Phòng đào tạo",
+            date: "25/10/2025",
+            content: "Kính mời quý thầy cô tham dự họp vào thứ 4 lúc 14:00 tại phòng A1.",
+            allowReply: false,
+          },
+          {
+            id: 2,
+            title: "Lịch bảo trì hệ thống LMS",
+            from: "Admin hệ thống",
+            date: "23/10/2025",
+            content: "Hệ thống LMS sẽ bảo trì từ 22:00 đến 23:30, mong thầy cô thông cảm.",
+            allowReply: false,
+          },
         ]);
       } finally {
         setLoading(false);
@@ -87,6 +119,64 @@ export default function LecturerNotificationsPage() {
 
     fetchAnnouncements();
   }, []);
+
+  const canReply = (item?: { allowReply?: boolean; replyUntil?: string | null }) => {
+    if (!item?.allowReply) return false;
+    if (!item.replyUntil) return true;
+    const deadline = new Date(item.replyUntil).getTime();
+    return !Number.isNaN(deadline) && deadline >= Date.now();
+  };
+
+  const openReplyModal = (item: InboxItem) => {
+    setReplyTarget(item);
+    setReplyMessage("");
+    setReplyError(null);
+  };
+
+  const closeReplyModal = () => {
+    setReplyTarget(null);
+    setReplyMessage("");
+    setReplyError(null);
+    setSendingReply(false);
+  };
+
+  const submitReply = async () => {
+    if (!replyTarget) return;
+    const trimmed = replyMessage.trim();
+    if (!trimmed) {
+      setReplyError("Vui lòng nhập nội dung phản hồi");
+      return;
+    }
+
+    try {
+      setSendingReply(true);
+      await apiFetchJson(`/api/thongbao/announcements/${replyTarget.id}/replies`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message: trimmed }),
+      });
+      alert("Đã gửi phản hồi thành công");
+      closeReplyModal();
+    } catch (err) {
+      console.error("submit reply error", err);
+      setReplyError(err instanceof Error ? err.message : "Gửi phản hồi thất bại");
+    } finally {
+      setSendingReply(false);
+    }
+  };
+
+  const formatReplyDeadline = (value?: string | null) => {
+    if (!value) return null;
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return null;
+    return date.toLocaleString("vi-VN", {
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  };
 
   const toggleDark = () => {
     const next = !dark;
@@ -208,6 +298,11 @@ export default function LecturerNotificationsPage() {
             </div>
             <div className="modal-body">
               <div className="meta">{detail.from} • {detail.date}</div>
+              {canReply(detail) && (
+                <div style={{ marginTop: 6, color: '#0369a1', fontSize: 13 }}>
+                  {detail.replyUntil ? `Hạn phản hồi: ${formatReplyDeadline(detail.replyUntil)}` : "Thông báo cho phép phản hồi"}
+                </div>
+              )}
               <div style={{marginTop:8}}>{detail.content}</div>
               {detail.attachments && detail.attachments.length>0 && (
                 <div style={{marginTop:8}}>
@@ -215,8 +310,55 @@ export default function LecturerNotificationsPage() {
                 </div>
               )}
             </div>
-            <div className="modal-foot">
+            <div className="modal-foot" style={{ display: 'flex', gap: 12, justifyContent: 'flex-end' }}>
+              {canReply(detail) && (
+                <button className="btn-primary" onClick={()=>detail && openReplyModal(detail)}>↩ Trả lời</button>
+              )}
               <button className="qr-btn" onClick={()=>setDetail(null)}>Đóng</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {replyTarget && (
+        <div className="modal" onClick={closeReplyModal}>
+          <div className="modal-content" style={{ maxWidth: 480 }} onClick={(e)=>e.stopPropagation()}>
+            <div className="modal-head">
+              <div className="title">Trả lời thông báo</div>
+              <button className="icon-btn" onClick={closeReplyModal}>✖</button>
+            </div>
+            <div className="modal-body">
+              <div className="meta">{replyTarget.title}</div>
+              <div style={{ marginTop: 4, fontSize: 13, color: '#475569' }}>Gửi tới: {replyTarget.from}</div>
+              {replyTarget.replyUntil && (
+                <div style={{ marginTop: 4, fontSize: 12, color: '#0369a1' }}>
+                  Hạn phản hồi: {formatReplyDeadline(replyTarget.replyUntil)}
+                </div>
+              )}
+              <textarea
+                className="input"
+                rows={5}
+                placeholder="Nhập phản hồi của bạn..."
+                value={replyMessage}
+                onChange={(e) => {
+                  setReplyMessage(e.target.value);
+                  if (replyError) setReplyError(null);
+                }}
+                style={{ marginTop: 12 }}
+              />
+              {replyError && (
+                <div style={{ marginTop: 8, color: '#dc2626', fontSize: 13 }}>{replyError}</div>
+              )}
+            </div>
+            <div className="modal-foot" style={{ display: 'flex', justifyContent: 'flex-end', gap: 12 }}>
+              <button className="qr-btn" onClick={closeReplyModal}>Huỷ</button>
+              <button
+                className="btn-primary"
+                onClick={submitReply}
+                disabled={sendingReply}
+              >
+                {sendingReply ? "Đang gửi..." : "Gửi phản hồi"}
+              </button>
             </div>
           </div>
         </div>

@@ -36,6 +36,8 @@ class ThongBaoModel {
           status,
           send_time,
           scheduled_at,
+          allow_reply,
+          reply_until,
           recipients,
           history,
           created_at,
@@ -52,7 +54,11 @@ class ThongBaoModel {
   // Lấy chi tiết thông báo theo ID
   static async getAnnouncementById(id) {
     try {
-      const announcements = await prisma.$queryRaw`
+      const numericId = Number(id);
+      if (Number.isNaN(numericId)) {
+        throw new Error('Invalid announcement id');
+      }
+      const rows = await prisma.$queryRaw`
         SELECT
           id,
           COALESCE(code, CONCAT('ANN-', id)) AS code,
@@ -65,14 +71,22 @@ class ThongBaoModel {
           status,
           send_time,
           scheduled_at,
+          allow_reply,
+          reply_until,
           recipients,
           history,
           created_at,
           updated_at
         FROM announcements
-        WHERE id = ${id}
+        WHERE id = CAST(${numericId} AS INTEGER)
       `;
-      return announcements[0] || null;
+
+      const record = rows[0];
+      if (!record) {
+        return null;
+      }
+
+      return record;
     } catch (error) {
       throw new Error(`Lỗi khi lấy chi tiết thông báo: ${error.message}`);
     }
@@ -124,9 +138,9 @@ class ThongBaoModel {
       message: reply.message,
       createdAt: reply.createdAt ?? new Date().toISOString(),
       authorId: reply.authorId ?? null,
-      authorName: reply.authorName ?? 'Sinh viên',
+      authorName: reply.authorName ?? 'Người dùng',
       authorEmail: reply.authorEmail ?? null,
-      source: reply.source ?? 'student',
+      source: reply.source ?? 'unknown',
       metadata: reply.metadata ?? null,
     };
 
@@ -141,6 +155,10 @@ class ThongBaoModel {
     });
 
     return replyRecord;
+  }
+
+  static normalizeHistory(history) {
+    return normalizeHistoryValue(history);
   }
 }
 
