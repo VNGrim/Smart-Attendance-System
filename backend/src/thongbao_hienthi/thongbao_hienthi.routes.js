@@ -1,5 +1,6 @@
 const express = require('express');
 const ThongBaoController = require('./thongbao_hienthi.controller');
+const { auth } = require('../middleware/auth');
 
 const router = express.Router();
 
@@ -8,6 +9,9 @@ router.get('/announcements', ThongBaoController.getAllAnnouncements);
 
 // API lấy chi tiết thông báo theo ID
 router.get('/announcements/:id', ThongBaoController.getAnnouncementById);
+
+// API gửi phản hồi cho thông báo
+router.post('/announcements/:id/replies', auth, ThongBaoController.addReply);
 
 // API lấy thông tin sinh viên theo student_id
 router.get('/students/:studentId', ThongBaoController.getStudentInfo);

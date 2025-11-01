@@ -48,6 +48,8 @@ function mapAnnouncement(record) {
     scheduledAt: record.scheduled_at ? record.scheduled_at.toISOString() : null,
     recipients: normalizeArray(record.recipients),
     history: normalizeArray(record.history),
+    allowReply: Boolean(record.allow_reply),
+    replyUntil: record.reply_until ? record.reply_until.toISOString() : null,
     createdAt: record.created_at ? record.created_at.toISOString() : null,
     updatedAt: record.updated_at ? record.updated_at.toISOString() : null,
   };
@@ -170,9 +172,27 @@ router.get('/:id', async (req, res) => {
   }
 });
 
-router.post('/', async (req, res) => {
+router.put('/:id', async (req, res) => {
   try {
-    console.log('admin announcement create request body:', req.body);
+    const { id } = req.params;
+    if (!id) {
+      return res.status(400).json({ success: false, message: 'Thiếu mã thông báo' });
+    }
+
+    const numericId = Number(id);
+    const record = await prisma.announcements.findFirst({
+      where: {
+        OR: [
+          { code: id },
+          ...(Number.isNaN(numericId) ? [] : [{ id: numericId }]),
+        ],
+      },
+    });
+
+    if (!record) {
+      return res.status(404).json({ success: false, message: 'Không tìm thấy thông báo' });
+    }
+
     const {
       title,
       content,
@@ -185,6 +205,8 @@ router.post('/', async (req, res) => {
       scheduledAt,
       recipients,
       history,
+      allowReply,
+      replyUntil,
     } = req.body ?? {};
 
     if (!title || !content) {
@@ -212,6 +234,65 @@ router.post('/', async (req, res) => {
       scheduled_at: normalizedStatus.toLowerCase().includes('lịch') ? scheduleDate : null,
       recipients: normalizeArrayInput(recipients),
       history: normalizeArrayInput(history),
+      allow_reply: Boolean(allowReply),
+      reply_until: parseNullableDate(replyUntil),
+    };
+
+    const updated = await prisma.announcements.update({ where: { id: record.id }, data: payload });
+
+    return res.json({ success: true, announcement: mapAnnouncement(updated) });
+  } catch (err) {
+    console.error('admin announcement update error:', err);
+    return res.status(500).json({ success: false, message: 'Lỗi hệ thống' });
+  }
+});
+
+router.post('/', async (req, res) => {
+  try {
+    console.log('admin announcement create request body:', req.body);
+    const {
+      title,
+      content,
+      sender,
+      target,
+      category,
+      type,
+      status,
+      sendTime,
+      scheduledAt,
+      recipients,
+      history,
+      allowReply,
+      replyUntil,
+    } = req.body ?? {};
+
+    if (!title || !content) {
+      return res.status(400).json({ success: false, message: 'Tiêu đề và nội dung là bắt buộc' });
+    }
+
+    const normalizedCategory = typeof category === 'string' && category.trim() ? category.trim() : 'general';
+    const normalizedStatus = typeof status === 'string' && status.trim() ? status.trim() : 'Nháp';
+    const normalizedType = typeof type === 'string' && type.trim() ? type.trim() : 'Khác';
+    const normalizedSender = typeof sender === 'string' && sender.trim() ? sender.trim() : 'Admin';
+    const normalizedTarget = typeof target === 'string' && target.trim() ? target.trim() : 'Toàn trường';
+
+    const sendDate = parseNullableDate(sendTime);
+    const scheduleDate = parseNullableDate(scheduledAt);
+
+    const payload = {
+      title: String(title),
+      content: String(content),
+      sender: normalizedSender,
+      target: normalizedTarget,
+      category: normalizedCategory,
+      type: normalizedType,
+      status: normalizedStatus,
+      send_time: normalizedStatus.toLowerCase().includes('gửi') ? sendDate ?? new Date() : null,
+      scheduled_at: normalizedStatus.toLowerCase().includes('lịch') ? scheduleDate : null,
+      recipients: normalizeArrayInput(recipients),
+      history: normalizeArrayInput(history),
+      allow_reply: Boolean(allowReply),
+      reply_until: parseNullableDate(replyUntil),
     };
 
     const created = await prisma.announcements.create({ data: payload });

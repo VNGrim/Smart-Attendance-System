@@ -54,6 +54,15 @@ const DEFAULT_COMPOSITION_PERCENT: CompositionBreakdown = {
 
 const DEFAULT_TOTAL_USERS = 2473;
 
+const NUMBER_FORMATTER = new Intl.NumberFormat("en-US");
+
+const formatNumber = (value: number | null | undefined) => {
+  if (typeof value !== "number" || Number.isNaN(value)) {
+    return "0";
+  }
+  return NUMBER_FORMATTER.format(value);
+};
+
 export default function AdminOverviewPage() {
   const router = useRouter();
   const [collapsed, setCollapsed] = useState(false);
@@ -360,8 +369,8 @@ export default function AdminOverviewPage() {
       <section className="cards">
         <div className="card stat-card gradient-blue" onClick={() => onCardClick("students")}>
           <div className="card-top">👨‍🎓 Sinh viên</div>
-          <div className="card-num">{(studentCount ?? stats.students.value).toLocaleString()}</div>
-          <div className="card-sub">{typeof studentDelta === 'number' ? `${studentDelta >= 0 ? '+' : ''}${studentDelta.toLocaleString()} so với tháng trước` : stats.students.delta}</div>
+          <div className="card-num">{formatNumber(studentCount ?? stats.students.value)}</div>
+          <div className="card-sub">{typeof studentDelta === 'number' ? `${studentDelta >= 0 ? '+' : ''}${formatNumber(Math.abs(studentDelta))} so với tháng trước` : stats.students.delta}</div>
           <div className="spark" aria-hidden>
             <svg width="120" height="36" viewBox="0 0 120 36">
               <polyline fill="none" stroke="rgba(255,255,255,.9)" strokeWidth="2" points="0,28 20,30 40,18 60,22 80,10 100,14 120,8" />
@@ -370,16 +379,16 @@ export default function AdminOverviewPage() {
         </div>
         <div className="card stat-card" onClick={() => onCardClick("lecturers")}>
           <div className="card-top">👩‍🏫 Giảng viên</div>
-          <div className="card-num">{(lecturerCount ?? stats.lecturers.value).toLocaleString()}</div>
-          <div className="card-sub">{typeof lecturerDelta === 'number' ? `${lecturerDelta >= 0 ? '+' : ''}${lecturerDelta.toLocaleString()} so với tháng trước` : ''}</div>
+          <div className="card-num">{formatNumber(lecturerCount ?? stats.lecturers.value)}</div>
+          <div className="card-sub">{typeof lecturerDelta === 'number' ? `${lecturerDelta >= 0 ? '+' : ''}${formatNumber(Math.abs(lecturerDelta))} so với tháng trước` : ''}</div>
         </div>
         <div className="card stat-card" onClick={() => onCardClick("classes")}> 
           <div className="card-top">🏫 Lớp học</div>
-          <div className="card-num">{(classCount ?? stats.classes.value).toLocaleString()}</div>
+          <div className="card-num">{formatNumber(classCount ?? stats.classes.value)}</div>
         </div>
         <div className="card stat-card" onClick={() => onCardClick("sessionsToday")}>
           <div className="card-top">📅 Buổi học hôm nay</div>
-          <div className="card-num">{(sessionsTodayCount ?? stats.sessionsToday.value).toLocaleString()}</div>
+          <div className="card-num">{formatNumber(sessionsTodayCount ?? stats.sessionsToday.value)}</div>
         </div>
       </section>
 
@@ -450,7 +459,7 @@ export default function AdminOverviewPage() {
               </svg>
               <div className="donut-center">
                 <div className="donut-total">Tổng</div>
-                <div className="donut-number">{totalUsers.toLocaleString()} người</div>
+                <div className="donut-number">{formatNumber(totalUsers)} người</div>
               </div>
             </div>
             <div className="legend">
@@ -466,7 +475,7 @@ export default function AdminOverviewPage() {
                         <span className="legend-percent">{percent}%</span>
                       </div>
                       {typeof count === 'number' && (
-                        <div className="legend-count">{count.toLocaleString()} người</div>
+                        <div className="legend-count">{formatNumber(count)} người</div>
                       )}
                     </div>
                   </div>

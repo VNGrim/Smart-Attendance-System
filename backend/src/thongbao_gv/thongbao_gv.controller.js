@@ -24,7 +24,9 @@ class ThongBaoGVController {
         }) : '',
         type: announcement.type || 'Khác',
         status: announcement.status || 'Đã gửi',
-        category: announcement.category || 'general'
+        category: announcement.category || 'general',
+        allowReply: Boolean(announcement.allow_reply),
+        replyUntil: announcement.reply_until ? new Date(announcement.reply_until).toISOString() : null,
       }));
       
       res.json({
@@ -82,7 +84,9 @@ class ThongBaoGVController {
         }) : '',
         type: announcement.type || 'Khác',
         status: announcement.status || 'Đã gửi',
-        category: announcement.category || 'general'
+        category: announcement.category || 'general',
+        allowReply: Boolean(announcement.allow_reply),
+        replyUntil: announcement.reply_until ? new Date(announcement.reply_until).toISOString() : null,
       };
       
       res.json({

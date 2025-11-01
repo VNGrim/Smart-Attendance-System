@@ -51,6 +51,14 @@ const resolveAllowReply = (record) => {
   return false;
 };
 
+const normalizeReplyUntil = (record) => {
+  const source = record?.reply_until;
+  if (!source) return null;
+  const date = source instanceof Date ? source : new Date(String(source));
+  if (Number.isNaN(date.getTime())) return null;
+  return date.toISOString();
+};
+
 const normalizeTarget = (value) => {
   if (!value || typeof value !== 'string') return 'Toàn trường';
   return value.trim() || 'Toàn trường';
@@ -77,7 +85,9 @@ class ThongBaoController {
         type: announcement.type ?? "general",
         sender: normalizeSender(announcement.sender),
         target: normalizeTarget(announcement.target),
-        allowReply: resolveAllowReply(announcement)
+        allowReply: resolveAllowReply(announcement),
+        replyUntil: normalizeReplyUntil(announcement),
+        history: ThongBaoModel.normalizeHistory(announcement.history),
       }));
 
       res.json({
@@ -108,7 +118,9 @@ class ThongBaoController {
         });
       }
 
-      const announcement = await ThongBaoModel.getAnnouncementById(id);
+      const numericId = Number(id);
+
+      const announcement = await ThongBaoModel.getAnnouncementById(numericId);
 
       if (!announcement) {
         return res.status(404).json({
@@ -127,7 +139,9 @@ class ThongBaoController {
         type: announcement.type ?? "general",
         sender: normalizeSender(announcement.sender),
         target: normalizeTarget(announcement.target),
-        allowReply: resolveAllowReply(announcement)
+        allowReply: resolveAllowReply(announcement),
+        replyUntil: normalizeReplyUntil(announcement),
+        history: ThongBaoModel.normalizeHistory(announcement.history),
       };
 
       res.json({
@@ -237,6 +251,78 @@ class ThongBaoController {
         success: false,
         message: "Lỗi hệ thống. Không thể lấy thông tin sinh viên.",
         error: error.message
+      });
+    }
+  }
+
+  // API gửi phản hồi cho thông báo
+  static async addReply(req, res) {
+    try {
+      const { id } = req.params;
+      const { message } = req.body ?? {};
+
+      const announcementId = Number(id);
+      if (!id || Number.isNaN(announcementId)) {
+        return res.status(400).json({
+          success: false,
+          message: "ID thông báo không hợp lệ",
+        });
+      }
+
+      const trimmedMessage = typeof message === 'string' ? message.trim() : '';
+      if (!trimmedMessage) {
+        return res.status(400).json({
+          success: false,
+          message: "Nội dung phản hồi không được để trống",
+        });
+      }
+
+      const announcement = await ThongBaoModel.getAnnouncementById(announcementId);
+      if (!announcement) {
+        return res.status(404).json({
+          success: false,
+          message: "Không tìm thấy thông báo",
+        });
+      }
+
+      if (!resolveAllowReply(announcement)) {
+        return res.status(403).json({
+          success: false,
+          message: "Thông báo này không cho phép phản hồi",
+        });
+      }
+
+      const replyDeadline = normalizeReplyUntil(announcement);
+      if (replyDeadline && new Date(replyDeadline).getTime() < Date.now()) {
+        return res.status(403).json({
+          success: false,
+          message: "Thời hạn phản hồi đã kết thúc",
+        });
+      }
+
+      const actor = req.user ?? {};
+      const record = await ThongBaoModel.addReply(announcementId, {
+        message: trimmedMessage,
+        authorId: actor.user_code ?? actor.userCode ?? actor.id ?? null,
+        authorName: actor.fullName ?? actor.name ?? 'Người dùng',
+        authorEmail: actor.email ?? null,
+        source: actor.role ?? 'unknown',
+        metadata: {
+          role: actor.role ?? null,
+        },
+      });
+
+      return res.status(201).json({
+        success: true,
+        data: record,
+        message: "Gửi phản hồi thành công",
+      });
+    } catch (error) {
+      console.error('Error in addReply:', error);
+      return res.status(500).json({
+        success: false,
+        message: "Lỗi hệ thống. Không thể gửi phản hồi.",
+        error: error.message,
       });
     }
   }
