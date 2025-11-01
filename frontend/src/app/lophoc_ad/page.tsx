@@ -181,51 +181,6 @@ const DEFAULT_CLASS_OPTIONS: ClassOptions = {
   subjects: SUBJECT_NAME_MAP,
 };
 
-const FALLBACK_CLASSES: ClassItem[] = [
-  {
-    id: "SE19B1",
-    code: "SE19B1",
-    name: SUBJECT_NAME_MAP.PRF192,
-    subjectCode: "PRF192",
-    subjectName: SUBJECT_NAME_MAP.PRF192,
-    cohort: "K19",
-    major: "CNTT",
-    teacherId: null,
-    teacher: "Nguyễn Văn A",
-    teacherEmail: "a@uni.edu",
-    students: 32,
-    status: "Đang hoạt động",
-  },
-  {
-    id: "SE19B2",
-    code: "SE19B2",
-    name: SUBJECT_NAME_MAP.CEA201,
-    subjectCode: "CEA201",
-    subjectName: SUBJECT_NAME_MAP.CEA201,
-    cohort: "K19",
-    major: "CNTT",
-    teacherId: null,
-    teacher: "Trần Thị B",
-    teacherEmail: "b@uni.edu",
-    students: 29,
-    status: "Đang hoạt động",
-  },
-  {
-    id: "SE20B1",
-    code: "SE20B1",
-    name: SUBJECT_NAME_MAP.CSI106,
-    subjectCode: "CSI106",
-    subjectName: SUBJECT_NAME_MAP.CSI106,
-    cohort: "K20",
-    major: "CNTT",
-    teacherId: null,
-    teacher: "Nguyễn Văn A",
-    teacherEmail: "a@uni.edu",
-    students: 25,
-    status: "Kết thúc",
-  },
-];
-
 const API_BASE = "http://localhost:8080/api/admin/classes";
 
 const ACTIVE_LABEL: ClassItem["status"] = "Đang hoạt động";
@@ -596,7 +551,7 @@ export default function AdminClassesPage() {
     cohorts: [],
     subjects: SUBJECT_NAME_MAP,
   }));
-  const [list, setList] = useState<ClassItem[]>(() => FALLBACK_CLASSES.filter((item) => item.status === ACTIVE_LABEL));
+  const [list, setList] = useState<ClassItem[]>([]);
   const [loadingClasses, setLoadingClasses] = useState(false);
   const [sortKey, setSortKey] = useState<keyof ClassItem>("name");
   const [sortAsc, setSortAsc] = useState(true);
@@ -697,9 +652,8 @@ export default function AdminClassesPage() {
       }
     } catch (error) {
       console.error("fetch classes error", error);
-      const fallback = FALLBACK_CLASSES.filter((item: ClassItem) => item.status === ACTIVE_LABEL);
-      setList(fallback);
-      setEmptyMessage(fallback.length ? "" : "Đang không có lớp học hoạt động");
+      setList([]);
+      setEmptyMessage("Không thể tải danh sách lớp học");
       setFallbackMode(true);
     } finally {
       setLoadingClasses(false);
