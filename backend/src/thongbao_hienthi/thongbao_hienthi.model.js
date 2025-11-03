@@ -45,7 +45,11 @@ class ThongBaoModel {
         FROM announcements
         ORDER BY created_at DESC
       `;
-      return announcements;
+      return announcements.map((record) => ({
+        ...record,
+        recipients: ThongBaoModel.normalizeRecipients(record.recipients),
+        history: ThongBaoModel.normalizeHistory(record.history),
+      }));
     } catch (error) {
       throw new Error(`Lỗi khi lấy danh sách thông báo: ${error.message}`);
     }
@@ -86,7 +90,11 @@ class ThongBaoModel {
         return null;
       }
 
-      return record;
+      return {
+        ...record,
+        recipients: ThongBaoModel.normalizeRecipients(record.recipients),
+        history: ThongBaoModel.normalizeHistory(record.history),
+      };
     } catch (error) {
       throw new Error(`Lỗi khi lấy chi tiết thông báo: ${error.message}`);
     }
@@ -122,43 +130,129 @@ class ThongBaoModel {
   }
 
   static async addReply(announcementId, reply) {
-    const announcement = await prisma.announcements.findUnique({
-      where: { id: announcementId },
-      select: { history: true },
-    });
-
-    if (!announcement) {
-      return null;
-    }
-
-    const historyList = normalizeHistoryValue(announcement.history);
-    const replyRecord = {
-      type: 'reply',
-      id: reply.id ?? `reply-${Date.now().toString(36)}`,
-      message: reply.message,
-      createdAt: reply.createdAt ?? new Date().toISOString(),
-      authorId: reply.authorId ?? null,
-      authorName: reply.authorName ?? 'Người dùng',
-      authorEmail: reply.authorEmail ?? null,
-      source: reply.source ?? 'unknown',
-      metadata: reply.metadata ?? null,
-    };
-
-    historyList.push(replyRecord);
-
-    await prisma.announcements.update({
-      where: { id: announcementId },
+    const created = await prisma.announcement_replies.create({
       data: {
-        history: historyList,
-        updated_at: new Date(),
+        announcement_id: announcementId,
+        author_type: reply.authorType,
+        author_code: reply.authorCode ?? null,
+        author_name: reply.authorName ?? null,
+        author_class: reply.authorClass ?? null,
+        author_subject: reply.authorSubject ?? null,
+        content: reply.message,
+        metadata: reply.metadata ?? null,
       },
     });
 
-    return replyRecord;
+    return ThongBaoModel.formatReplyRow(created);
+  }
+
+  static async getRepliesByAnnouncement(announcementId, options = {}) {
+    const where = {
+      announcement_id: announcementId,
+    };
+
+    if (options.authorCode) {
+      where.author_code = options.authorCode;
+    }
+
+    if (options.authorType) {
+      where.author_type = options.authorType;
+    }
+
+    if (options.onlyUnread) {
+      where.read_at = null;
+    }
+
+    const rows = await prisma.announcement_replies.findMany({
+      where,
+      orderBy: { created_at: 'desc' },
+    });
+
+    return rows.map((row) => ThongBaoModel.formatReplyRow(row));
+  }
+
+  static async markRepliesAsRead(announcementId, replyIds = null) {
+    const where = {
+      announcement_id: announcementId,
+    };
+
+    if (Array.isArray(replyIds) && replyIds.length) {
+      where.id = { in: replyIds };
+    }
+
+    const result = await prisma.announcement_replies.updateMany({
+      where,
+      data: { read_at: new Date() },
+    });
+
+    return result.count;
+  }
+
+  static async getTeacherByAccount(userCode) {
+    try {
+      const teachers = await prisma.$queryRaw`
+        SELECT t.teacher_id, t.full_name, t.subject, t.classes
+        FROM teachers t
+        JOIN accounts a ON t.account_id = a.id
+        WHERE a.user_code = ${userCode}
+      `;
+      return teachers[0] || null;
+    } catch (error) {
+      throw new Error(`Lỗi khi lấy thông tin giảng viên từ account: ${error.message}`);
+    }
   }
 
   static normalizeHistory(history) {
     return normalizeHistoryValue(history);
+  }
+
+  static normalizeRecipients(value) {
+    if (!value) return [];
+    if (Array.isArray(value)) {
+      return value
+        .map((item) => (item == null ? null : String(item).trim()))
+        .filter(Boolean);
+    }
+    if (typeof value === 'string') {
+      try {
+        const parsed = JSON.parse(value);
+        if (Array.isArray(parsed)) {
+          return parsed
+            .map((item) => (item == null ? null : String(item).trim()))
+            .filter(Boolean);
+        }
+      } catch {
+        return value
+          .split(/[;,]/)
+          .map((item) => item.trim())
+          .filter(Boolean);
+      }
+    }
+    if (typeof value === 'object') {
+      return Object.values(value)
+        .map((item) => (item == null ? null : String(item).trim()))
+        .filter(Boolean);
+    }
+    return [];
+  }
+
+  static formatReplyRow(row) {
+    if (!row) return null;
+    return {
+      id: row.id,
+      announcementId: row.announcement_id,
+      content: row.content,
+      createdAt: row.created_at,
+      readAt: row.read_at,
+      author: {
+        type: row.author_type,
+        code: row.author_code,
+        name: row.author_name,
+        class: row.author_class,
+        subject: row.author_subject,
+      },
+      metadata: row.metadata ?? null,
+    };
   }
 }
 

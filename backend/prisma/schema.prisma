@@ -38,8 +38,28 @@ model announcements {
   target       String    @default("Toàn trường") @db.VarChar(255)
   type         String    @default("Khác") @db.VarChar(50)
   updated_at   DateTime  @default(now()) @updatedAt @db.Timestamp(0)
+  replies      announcement_replies[]
 
   @@index([created_at])
+}
+
+model announcement_replies {
+  id              Int            @id @default(autoincrement())
+  announcement_id Int
+  author_type     String         @db.VarChar(20)
+  author_code     String?        @db.VarChar(50)
+  author_name     String?        @db.VarChar(150)
+  author_class    String?        @db.VarChar(100)
+  author_subject  String?        @db.VarChar(150)
+  content         String         @db.Text
+  created_at      DateTime       @default(now()) @db.Timestamp(0)
+  read_at         DateTime?      @db.Timestamp(0)
+  metadata        Json?
+  announcement    announcements  @relation(fields: [announcement_id], references: [id], onDelete: Cascade, map: "announcement_replies_announcement_fk")
+
+  @@index([announcement_id], map: "announcement_replies_announcement_idx")
+  @@index([author_code], map: "announcement_replies_author_idx")
+  @@index([read_at], map: "announcement_replies_read_idx")
 }
 
 model students {
