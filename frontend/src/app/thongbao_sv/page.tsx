@@ -17,6 +17,68 @@ interface Announcement {
   replyUntil?: string | null;
 }
 
+const toBoolean = (value: unknown): boolean => {
+  if (typeof value === "boolean") return value;
+  if (typeof value === "number") return value !== 0;
+  if (typeof value === "string") {
+    const trimmed = value.trim().toLowerCase();
+    if (["true", "1", "yes", "y", "on"].includes(trimmed)) return true;
+    if (["false", "0", "no", "n", "off"].includes(trimmed)) return false;
+  }
+  if (value && typeof value === "object" && "allowReply" in (value as Record<string, unknown>)) {
+    return toBoolean((value as Record<string, unknown>).allowReply);
+  }
+  return Boolean(value);
+};
+
+const normalizeDateString = (value: unknown): string | null => {
+  if (!value) return null;
+  if (typeof value === "string") {
+    const date = new Date(value);
+    if (!Number.isNaN(date.getTime())) return date.toISOString();
+    const asNumber = Number(value);
+    if (!Number.isNaN(asNumber)) {
+      const fromNumber = new Date(asNumber);
+      if (!Number.isNaN(fromNumber.getTime())) return fromNumber.toISOString();
+    }
+    return value;
+  }
+  if (value instanceof Date) return value.toISOString();
+  if (typeof value === "number") {
+    const date = new Date(value);
+    if (!Number.isNaN(date.getTime())) return date.toISOString();
+  }
+  return null;
+};
+
+const normalizeAnnouncement = (input: unknown): Announcement => {
+  const raw = (input ?? {}) as Record<string, unknown>;
+  const idSource = raw?.id ?? raw?.announcementId ?? raw?.announcement_id;
+  const createdSource = raw?.created_at ?? raw?.createdAt ?? raw?.date;
+  const replyUntilSource = raw?.replyUntil ?? raw?.reply_until ?? null;
+  const allowSource = raw?.allowReply ?? raw?.allow_reply ?? raw?.allowreply ?? raw?.allow;
+  const historySource = raw?.history;
+  const allowFromHistory =
+    historySource && typeof historySource === "object"
+      ? toBoolean((historySource as Record<string, unknown>).allowReply ?? (historySource as Record<string, unknown>).allow_reply)
+      : undefined;
+
+  const allowValueRaw = allowSource ?? allowFromHistory ?? (replyUntilSource ? true : undefined);
+
+  return {
+    id: Number(idSource ?? 0),
+    title: String(raw?.title ?? ""),
+    content: String(raw?.content ?? ""),
+    created_at: normalizeDateString(createdSource) ?? new Date().toISOString(),
+    date: String(raw?.date ?? normalizeDateString(createdSource) ?? ""),
+    type: String(raw?.type ?? ""),
+    sender: raw?.sender ? String(raw.sender) : raw?.from ? String(raw.from) : undefined,
+    target: raw?.target ? String(raw.target) : undefined,
+    allowReply: allowValueRaw != null ? toBoolean(allowValueRaw) : false,
+    replyUntil: normalizeDateString(replyUntilSource),
+  };
+};
+
 interface StudentInfo {
   student_id: string;
   full_name: string;
@@ -86,7 +148,10 @@ export default function ThongBaoPage() {
       const announcementsData = await apiFetchJson<AnnouncementsResponse>("/api/thongbao/announcements");
 
       if (announcementsData.success) {
-        setAnnouncements(announcementsData.data);
+        const normalizedList = Array.isArray(announcementsData.data)
+          ? announcementsData.data.map((item) => normalizeAnnouncement(item))
+          : [];
+        setAnnouncements(normalizedList);
       } else {
         throw new Error(announcementsData.message);
       }
@@ -134,7 +199,7 @@ export default function ThongBaoPage() {
       const data = await apiFetchJson<AnnouncementDetailResponse>(`/api/thongbao/announcements/${announcement.id}`);
 
       if (data.success) {
-        setSelectedAnnouncement(data.data);
+        setSelectedAnnouncement(normalizeAnnouncement(data.data ?? {}));
       }
     } catch (err) {
       console.error('Error fetching announcement details:', err);
@@ -147,12 +212,7 @@ export default function ThongBaoPage() {
       const deadline = new Date(announcement.replyUntil).getTime();
       if (!Number.isNaN(deadline) && deadline < Date.now()) return false;
     }
-    const sender = announcement.sender?.toLowerCase() ?? "";
-    const target = announcement.target?.toLowerCase() ?? "";
-    const fromAdmin = sender.includes("admin");
-    const fromLecturer = sender.includes("giảng viên") || sender.includes("teacher") || sender.includes("lecturer");
-    const toStudents = target.includes("sinh viên") || target.includes("student");
-    return (fromAdmin || fromLecturer) && toStudents;
+    return true;
   };
 
   const startReply = (announcement: Announcement) => {
@@ -327,12 +387,13 @@ export default function ThongBaoPage() {
                 <div>
                   <div className="notif-time">{formatDate(announcement.created_at)}</div>
                   <div className="notif-actions">
-                    <span className="notif-arrow">View</span>
+                    <span className="notif-arrow">Chi tiết</span>
                     {canStudentReply(announcement) && (
                       <button
                         className="reply-btn"
+                        title={announcement.replyUntil ? `Cho phép phản hồi tới ${formatReplyDeadline(announcement.replyUntil)}` : "Cho phép phản hồi"}
                         onClick={(event) => handleReplyClick(event, announcement)}
-                      >↩ Reply</button>
+                      >↩ Phản hồi</button>
                     )}
                   </div>
                 </div>

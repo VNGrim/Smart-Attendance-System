@@ -278,6 +278,22 @@ export default function LecturerNotificationsPage() {
               <div key={i.id} className="card-inbox" onClick={()=>setDetail(i)}>
                 <div className="title">🔔 {i.title}</div>
                 <div className="meta">{i.from} • {i.date}</div>
+                {canReply(i) && (
+                  <div className="meta" style={{ fontSize: 12, color: '#0369a1' }}>
+                    {i.replyUntil ? `Cho phép phản hồi tới ${formatReplyDeadline(i.replyUntil)}` : 'Cho phép phản hồi'}
+                  </div>
+                )}
+                {canReply(i) && (
+                  <div style={{ marginTop: 8 }}>
+                    <button
+                      className="qr-btn"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        openReplyModal(i);
+                      }}
+                    >↩ Phản hồi</button>
+                  </div>
+                )}
               </div>
             ))
           )}
@@ -355,9 +371,13 @@ export default function LecturerNotificationsPage() {
             <div className="modal-body">
               <div className="meta">{replyTarget.title}</div>
               <div style={{ marginTop: 4, fontSize: 13, color: '#475569' }}>Gửi tới: {replyTarget.from}</div>
-              {replyTarget.replyUntil && (
+              {replyTarget.replyUntil ? (
                 <div style={{ marginTop: 4, fontSize: 12, color: '#0369a1' }}>
                   Hạn phản hồi: {formatReplyDeadline(replyTarget.replyUntil)}
+                </div>
+              ) : (
+                <div style={{ marginTop: 4, fontSize: 12, color: '#0369a1' }}>
+                  Thông báo cho phép phản hồi
                 </div>
               )}
               <textarea
