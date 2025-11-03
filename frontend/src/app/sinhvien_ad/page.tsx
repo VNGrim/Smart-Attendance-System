@@ -2,9 +2,26 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
+
 import { useRouter } from "next/navigation";
 import AddStudentModal from "./AddStudentModal";
 import { Student, StudentOptions, mapBackendStudent } from "./studentUtils";
+
+type StudentsListResponse = {
+  students?: unknown;
+};
+
+type StudentOptionsResponse = {
+  data?: {
+    classes?: StudentOptions["classes"];
+    cohorts?: StudentOptions["cohorts"];
+    majors?: StudentOptions["majors"];
+    advisors?: StudentOptions["advisors"];
+  };
+};
+
+type HandleNoteChange = (studentId: string, value: string) => void;
+type HandleStudentCreated = (student: Student) => void;
 
 export default function AdminStudentsPage() {
   const router = useRouter();
@@ -23,8 +40,7 @@ export default function AdminStudentsPage() {
     majors: [],
     advisors: [],
   });
-
-  const FALLBACK_OPTIONS: StudentOptions = useMemo(() => ({
+  const FALLBACK_OPTIONS = useMemo<StudentOptions>(() => ({
     classes: [],
     cohorts: ["K18", "K19", "K20", "K21"],
     majors: [],
@@ -50,14 +66,13 @@ export default function AdminStudentsPage() {
           signal: controller.signal,
         });
         if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-        const data = await resp.json();
+        const data: StudentsListResponse = await resp.json();
         if (!isMounted) return;
-        const students = Array.isArray(data?.students)
-          ? (data.students as any[]).map(mapBackendStudent)
-          : [];
+        const rawStudents = Array.isArray(data?.students) ? data.students : [];
+        const students = rawStudents.map((item) => mapBackendStudent(item as Record<string, unknown>));
         setList(students);
-      } catch (err: any) {
-        if (err.name === "AbortError") return;
+      } catch (err: unknown) {
+        if (err instanceof DOMException && err.name === "AbortError") return;
         console.error("fetch students error", err);
         if (isMounted) setError("Không thể tải danh sách sinh viên. Vui lòng thử lại.");
       } finally {
@@ -88,19 +103,19 @@ export default function AdminStudentsPage() {
           credentials: "include",
         });
         if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-        const data = await resp.json();
+        const data: StudentOptionsResponse = await resp.json();
         const nextOptions = {
           classes: Array.isArray(data?.data?.classes) ? data.data.classes : [],
           cohorts: Array.isArray(data?.data?.cohorts) ? data.data.cohorts : [],
           majors: Array.isArray(data?.data?.majors) ? data.data.majors : [],
           advisors: Array.isArray(data?.data?.advisors) ? data.data.advisors : [],
-        };
+        } satisfies StudentOptions;
         if (!nextOptions.cohorts.length) {
           setOptions(FALLBACK_OPTIONS);
         } else {
-          setOptions(nextOptions as StudentOptions);
+          setOptions(nextOptions);
         }
-      } catch (err) {
+      } catch (err: unknown) {
         console.error("fetch student options error", err);
         setOptions(FALLBACK_OPTIONS);
       }
@@ -114,15 +129,21 @@ export default function AdminStudentsPage() {
   };
 
   const filtered = useMemo(() => {
-    const data = [...list];
-    data.sort((a: any, b: any) => {
-      const va = (a[sortKey] || "").toString().toLowerCase();
-      const vb = (b[sortKey] || "").toString().toLowerCase();
-      if (va < vb) return sortAsc ? -1 : 1;
-      if (va > vb) return sortAsc ? 1 : -1;
-      return 0;
+    const valueOf = (student: Student, key: keyof Student) => {
+      const raw = student[key];
+      if (raw == null) return "";
+      if (typeof raw === "string") return raw.toLowerCase();
+      return String(raw).toLowerCase();
+    };
+
+    const sorted = [...list].sort((a, b) => {
+      const va = valueOf(a, sortKey);
+      const vb = valueOf(b, sortKey);
+      const comparison = va.localeCompare(vb, "vi");
+      return sortAsc ? comparison : -comparison;
     });
-    return data;
+
+    return sorted;
   }, [list, sortKey, sortAsc]);
 
   const selectedCount = selected.size;
@@ -204,10 +225,18 @@ export default function AdminStudentsPage() {
               <span className="chip-title">Xuất danh sách</span>
               <span className="chip-sub">Tải về dạng CSV</span>
             </button>
+            {selectedCount > 0 && (
+              <button className="chip danger" onClick={bulkDelete}>
+                <span className="chip-icon">🗑</span>
+                <span className="chip-title">Xóa {selectedCount}</span>
+                <span className="chip-sub">Sinh viên đã chọn</span>
+              </button>
+            )}
           </div>
           <div className="right">
             {loading && <span>Đang tải...</span>}
             {!loading && error && <span className="error-text">{error}</span>}
+            {!loading && !error && selectedCount > 0 && <span>{selectedCount} sinh viên đã chọn</span>}
           </div>
         </div>
 
@@ -233,7 +262,11 @@ export default function AdminStudentsPage() {
     setModalOpen(true);
   }, []);
 
-  const handleStudentCreated = useCallback((student: Student) => {
+  const handleNoteChange: HandleNoteChange = useCallback((studentId, value) => {
+    setList((prev) => prev.map((student) => (student.id === studentId ? { ...student, note: value } : student)));
+  }, []);
+
+  const handleStudentCreated: HandleStudentCreated = useCallback((student) => {
     setList((prev) => {
       const withoutDup = prev.filter((s) => s.id !== student.id);
       return [student, ...withoutDup];
@@ -313,11 +346,6 @@ export default function AdminStudentsPage() {
                   <span className="pill">Cơ sở dữ liệu 7.8</span>
                   <span className="pill">Lập trình Web 8.8</span>
                 </div>
-                <div className="section-title">Lịch học sắp tới</div>
-                <div className="list small">
-                  <div>Thứ 2 08:00 - Lập trình Web - P201</div>
-                  <div>Thứ 4 10:00 - CSDL - P304</div>
-                </div>
               </div>
             </div>
           </div>
@@ -334,4 +362,3 @@ export default function AdminStudentsPage() {
     </Shell>
   );
 }
-

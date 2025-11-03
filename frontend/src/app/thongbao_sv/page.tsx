@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import { apiFetchJson } from "../../lib/authClient";
 
 interface Announcement {
@@ -24,6 +24,21 @@ interface StudentInfo {
   classes: string[];
 }
 
+interface ApiSuccessResponse<T> {
+  success: boolean;
+  data: T;
+  message?: string;
+}
+
+type AnnouncementsResponse = ApiSuccessResponse<Announcement[]>;
+type AnnouncementDetailResponse = ApiSuccessResponse<Announcement>;
+type StudentInfoResponse = ApiSuccessResponse<StudentInfo>;
+
+type SasSettings = { themeDark?: boolean };
+type SettingsEventDetail = { themeDark: boolean };
+
+const SETTINGS_CHANGED_EVENT = "sas_settings_changed";
+
 export default function ThongBaoPage() {
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
   const [collapsed, setCollapsed] = useState(false);
@@ -35,7 +50,7 @@ export default function ThongBaoPage() {
   const [replyMessage, setReplyMessage] = useState("");
   const [replyError, setReplyError] = useState<string | null>(null);
   const [sendingReply, setSendingReply] = useState(false);
-const [themeDark, setThemeDark] = useState(true);
+  const [themeDark, setThemeDark] = useState(true);
   const todayStr = useMemo(() => {
     const now = new Date();
     const weekday = ["Chủ nhật","Thứ Hai","Thứ Ba","Thứ Tư","Thứ Năm","Thứ Sáu","Thứ Bảy"][now.getDay()];
@@ -56,39 +71,19 @@ const [themeDark, setThemeDark] = useState(true);
     } catch { return ""; }
   })();
 
-  useEffect(() => {
-    if (studentId) fetchData();
-    const saved = localStorage.getItem('sas_settings');
-    if (saved) {
-      try {
-    const saved = localStorage.getItem('sas_settings');
-    if (saved) {
-      const s = JSON.parse(saved);
-      setThemeDark(s.themeDark ?? true);
-      document.documentElement.classList.toggle('dark-theme', s.themeDark);
-      document.documentElement.classList.toggle('light-theme', !s.themeDark);
-    }
-  } catch {}
-    }
-    const handler = (e: any) => {
-    const s = e.detail;
-    if (!s) return;
-    setThemeDark(s.themeDark);
-    document.documentElement.classList.toggle('dark-theme', s.themeDark);
-    document.documentElement.classList.toggle('light-theme', !s.themeDark);
-  };
-  window.addEventListener('sas_settings_changed', handler);
+  const applyTheme = useCallback((darkMode: boolean) => {
+    setThemeDark(darkMode);
+    document.documentElement.classList.toggle("dark-theme", darkMode);
+    document.documentElement.classList.toggle("light-theme", !darkMode);
+  }, []);
 
-  return () => window.removeEventListener('sas_settings_changed', handler);
-}, []);
-
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
 
       // Fetch announcements
-      const announcementsData = await apiFetchJson('/api/thongbao/announcements');
+      const announcementsData = await apiFetchJson<AnnouncementsResponse>("/api/thongbao/announcements");
 
       if (announcementsData.success) {
         setAnnouncements(announcementsData.data);
@@ -97,7 +92,7 @@ const [themeDark, setThemeDark] = useState(true);
       }
 
       // Fetch student info
-      const studentData = await apiFetchJson(`/api/thongbao/students/${studentId}`);
+      const studentData = await apiFetchJson<StudentInfoResponse>(`/api/thongbao/students/${studentId}`);
 
       if (studentData.success) {
         setStudentInfo(studentData.data);
@@ -108,11 +103,35 @@ const [themeDark, setThemeDark] = useState(true);
     } finally {
       setLoading(false);
     }
-  };
+  }, [studentId]);
+
+  useEffect(() => {
+    if (!studentId) return;
+    fetchData().catch(() => {});
+  }, [fetchData, studentId]);
+
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem("sas_settings");
+      if (saved) {
+        const s: SasSettings = JSON.parse(saved);
+        applyTheme(s.themeDark ?? true);
+      }
+    } catch {}
+
+    const handler = (event: Event) => {
+      const detail = (event as CustomEvent<SettingsEventDetail>).detail;
+      if (!detail) return;
+      applyTheme(detail.themeDark);
+    };
+
+    window.addEventListener(SETTINGS_CHANGED_EVENT, handler);
+    return () => window.removeEventListener(SETTINGS_CHANGED_EVENT, handler);
+  }, [applyTheme]);
 
   const handleAnnouncementClick = async (announcement: Announcement) => {
     try {
-      const data = await apiFetchJson(`/api/thongbao/announcements/${announcement.id}`);
+      const data = await apiFetchJson<AnnouncementDetailResponse>(`/api/thongbao/announcements/${announcement.id}`);
 
       if (data.success) {
         setSelectedAnnouncement(data.data);
@@ -136,13 +155,17 @@ const [themeDark, setThemeDark] = useState(true);
     return (fromAdmin || fromLecturer) && toStudents;
   };
 
-  const handleReplyClick = (event: React.MouseEvent<HTMLButtonElement>, announcement: Announcement) => {
-    event.stopPropagation();
+  const startReply = (announcement: Announcement) => {
     if (!canStudentReply(announcement)) return;
     setReplyTarget(announcement);
     setReplyMessage("");
     setReplyError(null);
     setSendingReply(false);
+  };
+
+  const handleReplyClick = (event: React.MouseEvent<HTMLButtonElement>, announcement: Announcement) => {
+    event.stopPropagation();
+    startReply(announcement);
   };
 
   const closeReplyModal = () => {
@@ -341,7 +364,7 @@ const [themeDark, setThemeDark] = useState(true);
               <div className="modal-footer" style={{ display: 'flex', justifyContent: 'flex-end' }}>
                 <button
                   className="reply-btn"
-                  onClick={() => handleReplyClick({ stopPropagation: () => {} } as any, selectedAnnouncement)}
+                  onClick={() => startReply(selectedAnnouncement)}
                 >↩ Trả lời</button>
               </div>
             )}

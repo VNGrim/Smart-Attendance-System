@@ -1,8 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useEffect, useState, useCallback } from "react";
 import { apiFetchJson } from "../../lib/authClient";
 
 type TabKey = "inbox" | "send";
@@ -31,8 +30,21 @@ type Announcement = {
   replyUntil?: string | null;
 };
 
+interface ApiResponse<T> {
+  success: boolean;
+  data?: T;
+  message?: string;
+}
+
+type AnnouncementsResponse = ApiResponse<Announcement[]>;
+type ReplyPayload = { message: string };
+
+type SasSettings = { themeDark?: boolean };
+type SettingsEventDetail = { themeDark: boolean };
+
+const SETTINGS_CHANGED_EVENT = "sas_settings_changed";
+
 export default function LecturerNotificationsPage() {
-  const router = useRouter();
   const [collapsed, setCollapsed] = useState(false);
   const [dark, setDark] = useState(false);
   const [notifCount, setNotifCount] = useState(0);
@@ -54,71 +66,81 @@ export default function LecturerNotificationsPage() {
   const [content, setContent] = useState("");
   const [file, setFile] = useState<File | null>(null);
 
+  const applyTheme = useCallback((darkMode: boolean) => {
+    setDark(darkMode);
+    document.documentElement.style.colorScheme = darkMode ? "dark" : "light";
+  }, []);
+
   useEffect(() => {
-    // Load settings
     try {
       const saved = localStorage.getItem("sas_settings");
       if (saved) {
-        const s = JSON.parse(saved);
-        setDark(!!s.themeDark);
-        document.documentElement.style.colorScheme = s.themeDark ? "dark" : "light";
+        const s: SasSettings = JSON.parse(saved);
+        applyTheme(s.themeDark ?? false);
       }
     } catch {}
-  }, []);
+  }, [applyTheme]);
 
-  // Fetch announcements from backend
   useEffect(() => {
-    const fetchAnnouncements = async () => {
-      setLoading(true);
-      setError(null);
-      try {
-        const result = await apiFetchJson<{ success: boolean; data?: Announcement[]; message?: string }>(
-          "/api/teacher/notifications/announcements"
-        );
-
-        if (result.success && Array.isArray(result.data)) {
-          const mappedData: InboxItem[] = result.data.map((item) => ({
-            id: item.id,
-            title: item.title,
-            from: item.sender,
-            date: item.dateFormatted || new Date(item.date).toLocaleDateString("vi-VN"),
-            content: item.content,
-            allowReply: item.allowReply,
-            replyUntil: item.replyUntil ?? null,
-          }));
-          setInbox(mappedData);
-          setNotifCount(mappedData.length);
-        } else {
-          setError(result.message || "Không thể tải thông báo");
-        }
-      } catch (err) {
-        console.error("Error fetching announcements:", err);
-        setError(err instanceof Error ? err.message : "Lỗi kết nối đến server");
-        setInbox([
-          {
-            id: 1,
-            title: "Thông báo họp giáo viên thứ 4",
-            from: "Phòng đào tạo",
-            date: "25/10/2025",
-            content: "Kính mời quý thầy cô tham dự họp vào thứ 4 lúc 14:00 tại phòng A1.",
-            allowReply: false,
-          },
-          {
-            id: 2,
-            title: "Lịch bảo trì hệ thống LMS",
-            from: "Admin hệ thống",
-            date: "23/10/2025",
-            content: "Hệ thống LMS sẽ bảo trì từ 22:00 đến 23:30, mong thầy cô thông cảm.",
-            allowReply: false,
-          },
-        ]);
-      } finally {
-        setLoading(false);
-      }
+    const handler = (event: Event) => {
+      const detail = (event as CustomEvent<SettingsEventDetail>).detail;
+      if (!detail) return;
+      applyTheme(detail.themeDark);
     };
+    window.addEventListener(SETTINGS_CHANGED_EVENT, handler);
+    return () => window.removeEventListener(SETTINGS_CHANGED_EVENT, handler);
+  }, [applyTheme]);
 
-    fetchAnnouncements();
+  const fetchAnnouncements = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const result = await apiFetchJson<AnnouncementsResponse>("/api/teacher/notifications/announcements");
+
+      if (result.success && Array.isArray(result.data)) {
+        const mappedData: InboxItem[] = result.data.map((item) => ({
+          id: item.id,
+          title: item.title,
+          from: item.sender,
+          date: item.dateFormatted || new Date(item.date).toLocaleDateString("vi-VN"),
+          content: item.content,
+          allowReply: item.allowReply,
+          replyUntil: item.replyUntil ?? null,
+        }));
+        setInbox(mappedData);
+        setNotifCount(mappedData.length);
+      } else {
+        setError(result.message || "Không thể tải thông báo");
+      }
+    } catch (err) {
+      console.error("Error fetching announcements:", err);
+      setError(err instanceof Error ? err.message : "Lỗi kết nối đến server");
+      setInbox([
+        {
+          id: 1,
+          title: "Thông báo họp giáo viên thứ 4",
+          from: "Phòng đào tạo",
+          date: "25/10/2025",
+          content: "Kính mời quý thầy cô tham dự họp vào thứ 4 lúc 14:00 tại phòng A1.",
+          allowReply: false,
+        },
+        {
+          id: 2,
+          title: "Lịch bảo trì hệ thống LMS",
+          from: "Admin hệ thống",
+          date: "23/10/2025",
+          content: "Hệ thống LMS sẽ bảo trì từ 22:00 đến 23:30, mong thầy cô thông cảm.",
+          allowReply: false,
+        },
+      ]);
+    } finally {
+      setLoading(false);
+    }
   }, []);
+
+  useEffect(() => {
+    fetchAnnouncements().catch(() => {});
+  }, [fetchAnnouncements]);
 
   const canReply = (item?: { allowReply?: boolean; replyUntil?: string | null }) => {
     if (!item?.allowReply) return false;
@@ -150,10 +172,10 @@ export default function LecturerNotificationsPage() {
 
     try {
       setSendingReply(true);
-      await apiFetchJson(`/api/thongbao/announcements/${replyTarget.id}/replies`, {
+      await apiFetchJson<ApiResponse<unknown>>(`/api/thongbao/announcements/${replyTarget.id}/replies`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: trimmed }),
+        body: JSON.stringify({ message: trimmed } satisfies ReplyPayload),
       });
       alert("Đã gửi phản hồi thành công");
       closeReplyModal();
@@ -183,11 +205,11 @@ export default function LecturerNotificationsPage() {
     setDark(next);
     try {
       const saved = localStorage.getItem("sas_settings");
-      const prev = saved ? JSON.parse(saved) : {};
-      const merged = { ...prev, themeDark: next };
+      const prev: SasSettings = saved ? JSON.parse(saved) : {};
+      const merged: SasSettings = { ...prev, themeDark: next };
       localStorage.setItem("sas_settings", JSON.stringify(merged));
       document.documentElement.style.colorScheme = next ? "dark" : "light";
-      window.dispatchEvent(new CustomEvent("sas_settings_changed" as any, { detail: merged }));
+      window.dispatchEvent(new CustomEvent<SettingsEventDetail>(SETTINGS_CHANGED_EVENT, { detail: { themeDark: next } }));
     } catch {}
   };
 
@@ -277,6 +299,9 @@ export default function LecturerNotificationsPage() {
         <textarea className="input" rows={6} value={content} onChange={(e)=>setContent(e.target.value)} placeholder="Nhập nội dung..." />
         <label className="label">File đính kèm</label>
         <input className="input" type="file" onChange={(e)=>setFile(e.target.files?.[0] || null)} />
+        {file && (
+          <div style={{ marginTop: 8, fontSize: 13, color: "#475569" }}>Đã chọn: {file.name}</div>
+        )}
         <div className="actions">
           <button className="btn-primary" onClick={()=>{ if(!title||!content){ alert('Vui lòng nhập tiêu đề và nội dung'); return;} alert(`Thông báo đã được gửi đến lớp ${toClass}`); setTitle(''); setContent(''); setFile(null); }}>📤 Gửi thông báo</button>
         </div>

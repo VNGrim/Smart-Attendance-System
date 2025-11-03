@@ -13,6 +13,21 @@ type AddStudentModalProps = {
   onSaved: (student: Student) => void;
 };
 
+type NextIdResponse = {
+  data?: {
+    nextId?: string;
+  };
+};
+
+type LookupResponse = {
+  student?: unknown;
+};
+
+type CreateStudentResponse = {
+  student?: unknown;
+  message?: string;
+};
+
 const findMajor = (options: StudentOptions, value?: string | null) => {
   if (!value) return options.majors[0] || "";
   const match = options.majors.find((major) => major === value);
@@ -105,12 +120,12 @@ const AddStudentModal = ({ open, onClose, options, student, onSaved }: AddStuden
           signal: controller.signal,
         });
         if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-        const data = await resp.json();
+        const data: NextIdResponse = await resp.json();
         if (!cancelled && data?.data?.nextId && !mssvTouchedRef.current) {
           setMssv(data.data.nextId);
         }
-      } catch (err) {
-        if ((err as any)?.name === "AbortError") return;
+      } catch (err: unknown) {
+        if (err instanceof DOMException && err.name === "AbortError") return;
         console.error("fetch next student id error", err);
       }
     };
@@ -131,9 +146,9 @@ const AddStudentModal = ({ open, onClose, options, student, onSaved }: AddStuden
         credentials: "include",
       });
       if (!resp.ok) return;
-      const data = await resp.json();
+      const data: LookupResponse = await resp.json();
       if (data?.student) {
-        const mapped = mapBackendStudent(data.student);
+        const mapped = mapBackendStudent(data.student as Record<string, unknown>);
         setName(mapped.name);
         setEmail(mapped.email || "");
         setCohort(findCohort(options, mapped.cohort));
@@ -178,18 +193,19 @@ const AddStudentModal = ({ open, onClose, options, student, onSaved }: AddStuden
         body: JSON.stringify(payload),
       });
       if (!resp.ok) {
-        const data = await resp.json().catch(() => null);
+        const data = await resp.json().catch(() => null) as CreateStudentResponse | null;
         throw new Error(data?.message || `HTTP ${resp.status}`);
       }
-      const data = await resp.json();
+      const data: CreateStudentResponse = await resp.json();
       if (data?.student) {
-        onSaved(mapBackendStudent(data.student));
+        onSaved(mapBackendStudent(data.student as Record<string, unknown>));
       } else {
         throw new Error("Phản hồi không hợp lệ từ máy chủ");
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error("create student error", err);
-      setError(err.message || "Không thể lưu sinh viên");
+      const message = err instanceof Error && err.message ? err.message : "Không thể lưu sinh viên";
+      setError(message);
     } finally {
       setSaving(false);
     }
@@ -240,7 +256,7 @@ const AddStudentModal = ({ open, onClose, options, student, onSaved }: AddStuden
                 <input className="input" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="email@domain.com" />
                 <div className="field-label-row">
                   <label className="label">Mật khẩu</label>
-                  <span className="field-hint">Mặc định: "{DEFAULT_PASSWORD}"</span>
+                  <span className="field-hint">Mặc định: &quot;{DEFAULT_PASSWORD}&quot;</span>
                 </div>
                 <div className="password-row">
                   <input

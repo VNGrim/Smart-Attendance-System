@@ -10,6 +10,11 @@ type Grade = { id: string; name: string; attendance: number; assignment: number;
 
 type TabKey = "students" | "materials" | "grades";
 
+type SasSettings = { themeDark?: boolean };
+type SettingsEventDetail = { themeDark: boolean };
+
+const SETTINGS_CHANGED_EVENT = "sas_settings_changed";
+
 export default function LecturerClassesPage() {
   const [collapsed, setCollapsed] = useState(false);
   const [dark, setDark] = useState(false);
@@ -38,11 +43,21 @@ export default function LecturerClassesPage() {
     try {
       const saved = localStorage.getItem("sas_settings");
       if (saved) {
-        const s = JSON.parse(saved);
-        setDark(!!s.themeDark);
-        document.documentElement.style.colorScheme = s.themeDark ? "dark" : "light";
+        const settings: SasSettings = JSON.parse(saved);
+        const themeDark = settings.themeDark ?? false;
+        setDark(themeDark);
+        document.documentElement.style.colorScheme = themeDark ? "dark" : "light";
       }
     } catch {}
+
+    const handler = (event: Event) => {
+      const detail = (event as CustomEvent<SettingsEventDetail>).detail;
+      if (!detail) return;
+      setDark(detail.themeDark);
+      document.documentElement.style.colorScheme = detail.themeDark ? "dark" : "light";
+    };
+    window.addEventListener(SETTINGS_CHANGED_EVENT, handler);
+    return () => window.removeEventListener(SETTINGS_CHANGED_EVENT, handler);
   }, []);
 
   useEffect(() => {
@@ -63,7 +78,7 @@ export default function LecturerClassesPage() {
     setStudents(ss);
     setMaterials(mm);
     setGrades(gg);
-  }, [activeClass?.id]);
+  }, [activeClass]);
 
   const toggleDark = () => {
     const next = !dark;
@@ -74,7 +89,7 @@ export default function LecturerClassesPage() {
       const merged = { ...prev, themeDark: next };
       localStorage.setItem("sas_settings", JSON.stringify(merged));
       document.documentElement.style.colorScheme = next ? "dark" : "light";
-      window.dispatchEvent(new CustomEvent("sas_settings_changed" as any, { detail: merged }));
+      window.dispatchEvent(new CustomEvent<SettingsEventDetail>(SETTINGS_CHANGED_EVENT, { detail: { themeDark: next } }));
     } catch {}
   };
 
@@ -165,10 +180,11 @@ export default function LecturerClassesPage() {
               </div>
 
               {tab === 'students' && (
-                <div className="panel">
+                <div className="div">
                   <div className="row-actions">
                     <input className="input" placeholder="Tìm kiếm sinh viên" value={search} onChange={(e)=>setSearch(e.target.value)} />
                     <button className="btn-outline" onClick={()=>alert('Lịch sử điểm danh (demo)')}>Lịch sử điểm danh</button>
+                    <button className="btn-outline" onClick={exportStudentsCsv}>📤 Xuất CSV</button>
                     
                   </div>
                   <div className="table-wrap">

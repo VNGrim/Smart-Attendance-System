@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { apiFetch, apiFetchJson } from "../../lib/authClient";
+import { apiFetchJson } from "../../lib/authClient";
 
 type Role = "Admin" | "Giảng viên" | "Sinh viên";
 type RoleKey = "admin" | "teacher" | "student";
@@ -56,6 +56,11 @@ type AccountsSummary = {
   byRole: Record<RoleKey, number>;
   byStatus: Record<StatusKey, number>;
 };
+
+type SasSettings = { themeDark?: boolean };
+type SettingsEventDetail = { themeDark: boolean };
+
+const SETTINGS_CHANGED_EVENT = "sas_settings_changed";
 
 const ROLE_LABEL_MAP: Record<RoleKey, Role> = {
   admin: "Admin",
@@ -228,11 +233,21 @@ export default function AdminAccountsPage() {
     try {
       const saved = localStorage.getItem("sas_settings");
       if (saved) {
-        const s = JSON.parse(saved);
-        setDark(!!s.themeDark);
-        document.documentElement.style.colorScheme = s.themeDark ? "dark" : "light";
+        const settings: SasSettings = JSON.parse(saved);
+        const themeDark = settings.themeDark ?? false;
+        setDark(themeDark);
+        document.documentElement.style.colorScheme = themeDark ? "dark" : "light";
       }
     } catch {}
+
+    const handler = (event: Event) => {
+      const detail = (event as CustomEvent<SettingsEventDetail>).detail;
+      if (!detail) return;
+      setDark(detail.themeDark);
+      document.documentElement.style.colorScheme = detail.themeDark ? "dark" : "light";
+    };
+    window.addEventListener(SETTINGS_CHANGED_EVENT, handler);
+    return () => window.removeEventListener(SETTINGS_CHANGED_EVENT, handler);
   }, []);
 
   const toggleDark = () => {
@@ -240,11 +255,11 @@ export default function AdminAccountsPage() {
     setDark(next);
     try {
       const saved = localStorage.getItem("sas_settings");
-      const prev = saved ? JSON.parse(saved) : {};
-      const merged = { ...prev, themeDark: next };
+      const prev: SasSettings = saved ? JSON.parse(saved) : {};
+      const merged: SasSettings = { ...prev, themeDark: next };
       localStorage.setItem("sas_settings", JSON.stringify(merged));
       document.documentElement.style.colorScheme = next ? "dark" : "light";
-      window.dispatchEvent(new CustomEvent("sas_settings_changed" as any, { detail: merged }));
+      window.dispatchEvent(new CustomEvent<SettingsEventDetail>(SETTINGS_CHANGED_EVENT, { detail: { themeDark: next } }));
     } catch {}
   };
 
@@ -433,6 +448,8 @@ export default function AdminAccountsPage() {
               <option>Sinh viên</option>
             </select>
           </div>
+          <button className="icon-btn" onClick={toggleDark} title="Chuyển giao diện">{dark ? "🌙" : "🌞"}</button>
+          <button className="icon-btn notif" title="Thông báo">🔔{notifCount > 0 && <span className="badge">{notifCount}</span>}</button>
           <button className="btn-primary" onClick={onOpenCreate}>+ Tạo tài khoản mới</button>
           <button className="qr-btn" onClick={async ()=>{ 
             if (confirm('Bạn có chắc muốn đăng xuất?')) {
@@ -482,6 +499,15 @@ export default function AdminAccountsPage() {
             <div>Hành động</div>
           </div>
           <div className="tbody">
+            {loading && (
+              <div className="trow" style={{ justifyContent: "center", color: "#64748b" }}>⏳ Đang tải dữ liệu...</div>
+            )}
+            {!loading && error && (
+              <div className="trow" style={{ justifyContent: "center", color: "#dc2626" }}>⚠️ {error}</div>
+            )}
+            {!loading && !error && pageData.length === 0 && (
+              <div className="trow" style={{ justifyContent: "center", color: "#64748b" }}>📭 Không có tài khoản phù hợp</div>
+            )}
             {pageData.map((a) => (
               <div className="trow" key={a.id}>
                 <div><input type="checkbox" checked={selected.has(a.id)} onChange={(e)=>{e.stopPropagation(); toggleSelect(a.id);}} /></div>

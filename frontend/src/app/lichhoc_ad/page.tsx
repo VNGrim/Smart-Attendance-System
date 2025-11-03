@@ -9,9 +9,20 @@ import {
   useMemo,
   useState,
   type FormEvent,
+  type ChangeEvent,
 } from "react";
 import { useRouter } from "next/navigation";
 import { Toaster, toast } from "react-hot-toast";
+import {
+  addWeeks,
+  eachWeekOfInterval,
+  endOfWeek,
+  format,
+  isValid,
+  parse,
+  startOfWeek,
+  subWeeks,
+} from "date-fns";
 
 const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 const SLOT_IDS = [1, 2, 3, 4];
@@ -21,11 +32,6 @@ const SLOT_DEFAULT_TIMES: Record<number, { start: string; end: string }> = {
   3: { start: "12:30", end: "14:45" },
   4: { start: "15:00", end: "17:15" },
 };
-const WEEK_OPTIONS = [
-  { label: "29/09 - 05/10", value: "29/09 - 05/10" },
-  { label: "06/10 - 12/10", value: "06/10 - 12/10" },
-  { label: "13/10 - 19/10", value: "13/10 - 19/10" },
-];
 const API_ROOT = "http://localhost:8080/api/lichhoc/admin";
 const API_SCHEDULE = `${API_ROOT}/schedule`;
 const API_OPTIONS = `${API_ROOT}/options`;
@@ -100,6 +106,45 @@ type AutoPlanItem = {
   room_name?: string | null;
 };
 
+const WEEK_START_OPTS = { weekStartsOn: 1 as const, firstWeekContainsDate: 4 as const };
+
+const normalizeToWeekStart = (date: Date) => startOfWeek(date, WEEK_START_OPTS);
+
+const weekKeyFromDate = (date: Date) => format(normalizeToWeekStart(date), "RRRR-'W'II");
+
+const weekLabelFromDate = (date: Date) => {
+  const start = normalizeToWeekStart(date);
+  const end = endOfWeek(start, WEEK_START_OPTS);
+  return `${format(start, "dd/MM")} - ${format(end, "dd/MM")}`;
+};
+
+type WeekOption = {
+  value: string;
+  label: string;
+  startDate: Date;
+};
+
+const parseWeekKey = (key: string): Date | null => {
+  if (!key) return null;
+  const parsed = parse(key, "RRRR-'W'II", new Date(), WEEK_START_OPTS);
+  if (!isValid(parsed)) return null;
+  return normalizeToWeekStart(parsed);
+};
+
+const generateWeekOptions = (isoYear: number): WeekOption[] => {
+  const yearStart = normalizeToWeekStart(new Date(Date.UTC(isoYear, 0, 1)));
+  const yearEnd = endOfWeek(new Date(Date.UTC(isoYear, 11, 31)), WEEK_START_OPTS);
+
+  const weeks = eachWeekOfInterval({ start: yearStart, end: yearEnd }, WEEK_START_OPTS);
+  return weeks.map((start) => ({
+    value: weekKeyFromDate(start),
+    label: weekLabelFromDate(start),
+    startDate: start,
+  }));
+};
+
+const CURRENT_DATE = new Date();
+
 function getSubjectColor(name: string) {
   const colors = [
     "card-blue",
@@ -127,14 +172,14 @@ function getSubjectIcon(name: string) {
   return "📚";
 }
 
-const DEFAULT_WEEK = WEEK_OPTIONS[0].value;
-
 export default function AdminSchedulePage() {
   const router = useRouter();
   const [collapsed, setCollapsed] = useState(false);
   const [search, setSearch] = useState("");
-  const [year, setYear] = useState("2025");
-  const [week, setWeek] = useState(DEFAULT_WEEK);
+  const [weekKey, setWeekKey] = useState(() => weekKeyFromDate(CURRENT_DATE));
+  const weekDate = useMemo(() => parseWeekKey(weekKey) ?? normalizeToWeekStart(CURRENT_DATE), [weekKey]);
+  const weekLabel = useMemo(() => weekLabelFromDate(weekDate), [weekDate]);
+  const dateInputValue = useMemo(() => format(weekDate, "yyyy-MM-dd"), [weekDate]);
   const [options, setOptions] = useState<ScheduleOptions | null>(null);
   const [grid, setGrid] = useState<Record<number, Record<string, ScheduleCell | null>>>({});
   const [flat, setFlat] = useState<FlatRow[]>([]);
@@ -159,6 +204,67 @@ export default function AdminSchedulePage() {
     message: string;
     onConfirm: () => Promise<void> | void;
   }>(null);
+
+  const isoYear = useMemo(() => Number(format(weekDate, "RRRR")), [weekDate]);
+
+  const weekOptions = useMemo<WeekOption[]>(() => {
+    const years = [isoYear - 1, isoYear, isoYear + 1];
+    const entries = years.flatMap((value) => generateWeekOptions(value));
+    const unique = new Map<string, WeekOption>();
+    entries.forEach((item) => unique.set(item.value, item));
+
+    const normalizedCurrent = normalizeToWeekStart(weekDate);
+    const normalizedKey = weekKeyFromDate(normalizedCurrent);
+    if (!unique.has(normalizedKey)) {
+      unique.set(normalizedKey, {
+        value: normalizedKey,
+        label: weekLabelFromDate(normalizedCurrent),
+        startDate: normalizedCurrent,
+      });
+    }
+
+    return Array.from(unique.values()).sort((a, b) => a.value.localeCompare(b.value));
+  }, [isoYear, weekDate]);
+
+  const previousWeekForCopy = useMemo(() => weekKeyFromDate(subWeeks(weekDate, 1)), [weekDate]);
+  const previousWeekLabel = useMemo(() => weekLabelFromDate(subWeeks(weekDate, 1)), [weekDate]);
+  const nextWeekKey = useMemo(() => weekKeyFromDate(addWeeks(weekDate, 1)), [weekDate]);
+  const nextWeekLabel = useMemo(() => weekLabelFromDate(addWeeks(weekDate, 1)), [weekDate]);
+  const previousWeekOption = useMemo(
+    () => weekOptions.find((opt) => opt.value === previousWeekForCopy) ?? null,
+    [weekOptions, previousWeekForCopy]
+  );
+  const nextWeekOption = useMemo(
+    () => weekOptions.find((opt) => opt.value === nextWeekKey) ?? null,
+    [weekOptions, nextWeekKey]
+  );
+
+  const handleWeekSelect = useCallback((event: ChangeEvent<HTMLSelectElement>) => {
+    const value = event.target.value;
+    const parsed = parseWeekKey(value);
+    if (parsed) {
+      setWeekKey(weekKeyFromDate(parsed));
+    }
+  }, []);
+
+  const handleDateInputChange = useCallback((event: ChangeEvent<HTMLInputElement>) => {
+    const value = event.target.value;
+    if (!value) return;
+    const parsed = parse(value, "yyyy-MM-dd", new Date());
+    if (!isValid(parsed)) return;
+    setWeekKey(weekKeyFromDate(parsed));
+  }, []);
+
+  const stepWeek = useCallback(
+    (delta: number) => {
+      setWeekKey((prev) => weekKeyFromDate(addWeeks(parseWeekKey(prev) ?? weekDate, delta)));
+    },
+    [weekDate]
+  );
+
+  const goToCurrentWeek = useCallback(() => {
+    setWeekKey(weekKeyFromDate(new Date()));
+  }, []);
   const closeConfirm = useCallback(() => setPendingConfirm(null), []);
   const executeConfirm = useCallback(async () => {
     if (!pendingConfirm) return;
@@ -214,7 +320,7 @@ export default function AdminSchedulePage() {
     }
   }, [hydrateGrid]);
 
-  const reload = useCallback(() => loadSchedule(week), [loadSchedule, week]);
+  const reload = useCallback(() => loadSchedule(weekKey), [loadSchedule, weekKey]);
 
   useEffect(() => {
     let mounted = true;
@@ -233,7 +339,7 @@ export default function AdminSchedulePage() {
     }
 
     fetchOptions().catch(() => {});
-    loadSchedule(week).catch(() => {});
+    loadSchedule(weekKey).catch(() => {});
 
     try {
       const saved = localStorage.getItem("sas_settings");
@@ -254,7 +360,7 @@ export default function AdminSchedulePage() {
       mounted = false;
       window.removeEventListener("sas_settings_changed" as any, handler);
     };
-  }, [loadSchedule, week]);
+  }, [loadSchedule, weekKey]);
 
   const slotTimeById = useMemo(() => {
     const map: Record<number, { start: string; end: string }> = {};
@@ -288,11 +394,7 @@ export default function AdminSchedulePage() {
     return next;
   }, [grid, search]);
 
-  const previousWeek = useMemo(() => {
-    const index = WEEK_OPTIONS.findIndex((opt) => opt.value === week);
-    if (index > 0) return WEEK_OPTIONS[index - 1].value;
-    return null;
-  }, [week]);
+  
 
   const openCreateModal = useCallback(() => {
     const firstClass = options?.classes?.[0];
@@ -326,7 +428,7 @@ export default function AdminSchedulePage() {
         try {
           setActionLoading(true);
           const params = new URLSearchParams();
-          params.set("week", week);
+          params.set("week", weekKey);
           const resp = await fetch(`${API_DELETE_WEEK}?${params.toString()}`, {
             method: "DELETE",
             credentials: "include",
@@ -343,15 +445,19 @@ export default function AdminSchedulePage() {
         }
       },
     });
-  }, [week, reload]);
+  }, [weekKey, weekLabel, reload]);
 
   const handleCopyWeek = useCallback(async () => {
-    if (!previousWeek) {
+    if (!previousWeekOption) {
       toast.error("Không tìm thấy tuần trước để sao chép");
       return;
     }
+    const sourceKey = previousWeekOption.value;
+    const sourceLabel = previousWeekOption.label || previousWeekLabel;
+    const targetKey = weekKey;
+    const targetLabel = weekLabel;
     setPendingConfirm({
-      message: `Sao chép từ tuần "${previousWeek}" sang "${week}"?`,
+      message: `Sao chép từ tuần "${sourceLabel}" sang "${targetLabel}"?`,
       onConfirm: async () => {
         try {
           setActionLoading(true);
@@ -359,7 +465,7 @@ export default function AdminSchedulePage() {
             method: "POST",
             credentials: "include",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ fromWeek: previousWeek, toWeek: week }),
+            body: JSON.stringify({ fromWeek: sourceKey, toWeek: targetKey }),
           });
           if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
           const json = await resp.json();
@@ -373,12 +479,12 @@ export default function AdminSchedulePage() {
         }
       },
     });
-  }, [previousWeek, week, reload]);
+  }, [previousWeekOption, previousWeekLabel, weekKey, weekLabel, reload]);
 
   const handleExport = useCallback(async () => {
     try {
       const params = new URLSearchParams();
-      params.set("week", week);
+      params.set("week", weekKey);
       params.set("format", "csv");
       const resp = await fetch(`${API_EXPORT}?${params.toString()}`, { credentials: "include" });
       if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
@@ -386,7 +492,7 @@ export default function AdminSchedulePage() {
       const url = URL.createObjectURL(blob);
       const link = document.createElement("a");
       link.href = url;
-      link.download = `schedule-${week}.csv`;
+      link.download = `schedule-${weekKey}.csv`;
       document.body.appendChild(link);
       link.click();
       link.remove();
@@ -395,7 +501,7 @@ export default function AdminSchedulePage() {
     } catch (err: any) {
       toast.error(err?.message || "Không thể xuất lịch");
     }
-  }, [week]);
+  }, [weekKey]);
 
   const handleCreateSubmit = useCallback(async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -407,7 +513,7 @@ export default function AdminSchedulePage() {
       setActionLoading(true);
       const selectedClass = options?.classes.find((cls) => cls.id === createForm.classId);
       const payload = {
-        weekKey: week,
+        weekKey,
         day: createForm.day,
         slotId: createForm.slot,
         classId: createForm.classId,
@@ -434,7 +540,7 @@ export default function AdminSchedulePage() {
     } finally {
       setActionLoading(false);
     }
-  }, [createForm, options, week, reload, closeCreateModal]);
+  }, [createForm, options, weekKey, reload, closeCreateModal]);
 
   const handleAutoGenerate = useCallback(async () => {
     if (!autoSelection.length) {
@@ -447,7 +553,7 @@ export default function AdminSchedulePage() {
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ weekKey: week, classIds: autoSelection }),
+        body: JSON.stringify({ weekKey, classIds: autoSelection }),
       });
       if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
       const json = await resp.json();
@@ -462,7 +568,7 @@ export default function AdminSchedulePage() {
     } finally {
       setAutoLoading(false);
     }
-  }, [autoSelection, week]);
+  }, [autoSelection, weekKey]);
 
   const handleAutoApply = useCallback(async () => {
     if (!autoPlan.length) {
@@ -476,7 +582,7 @@ export default function AdminSchedulePage() {
         credentials: "include",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          weekKey: week,
+          weekKey,
           allocations: autoPlan.map((item) => ({
             ...item,
             room_name: item.room_name || item.room,
@@ -494,44 +600,76 @@ export default function AdminSchedulePage() {
     } finally {
       setAutoLoading(false);
     }
-  }, [autoPlan, week, reload, closeAutoModal]);
+  }, [autoPlan, weekKey, reload, closeAutoModal]);
 
   return (
     <>
       <Toaster position="top-right" toastOptions={{ duration: 3000 }} />
       <Shell collapsed={collapsed} setCollapsed={setCollapsed} router={router} search={search} setSearch={setSearch}>
         <div className="schedule-shell">
-        <div className="filters" style={{ display: "flex", gap: 12, alignItems: "center", marginBottom: 12, flexWrap: "wrap" }}>
-          <div style={{ display: "flex", gap: 12 }}>
-            <select className="select" value={year} onChange={(e) => setYear(e.target.value)}>
-              <option value="2024">2024</option>
-              <option value="2025">2025</option>
-              <option value="2026">2026</option>
-            </select>
-            <select className="select" value={week} onChange={(e) => setWeek(e.target.value)}>
-              {WEEK_OPTIONS.map((item) => (
-                <option key={item.value} value={item.value}>{item.label}</option>
-              ))}
-            </select>
+          <div
+            className="filters"
+            style={{ display: "flex", gap: 12, alignItems: "flex-start", marginBottom: 12, flexWrap: "wrap", justifyContent: "space-between" }}
+          >
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+                <input
+                  type="date"
+                  className="select"
+                  value={dateInputValue}
+                  onChange={handleDateInputChange}
+                />
+                <select className="select" value={weekKey} onChange={handleWeekSelect}>
+                  {weekOptions.map((item) => (
+                    <option key={item.value} value={item.value}>
+                      {item.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+                <button
+                  type="button"
+                  className="btn-outline"
+                  onClick={() => stepWeek(-1)}
+                  disabled={actionLoading}
+                  title={previousWeekOption?.label || previousWeekLabel}
+                >
+                  ⬅️ Tuần trước
+                </button>
+                <button type="button" className="btn-outline" onClick={goToCurrentWeek} disabled={actionLoading}>
+                  📅 Tuần hiện tại
+                </button>
+                <button
+                  type="button"
+                  className="btn-outline"
+                  onClick={() => stepWeek(1)}
+                  disabled={actionLoading}
+                  title={nextWeekOption?.label || nextWeekLabel}
+                >
+                  Tuần sau ➡️
+                </button>
+                <span style={{ fontWeight: 600 }}>Tuần đang chọn: {weekLabel}</span>
+              </div>
+            </div>
+            <div className="actions-bar">
+              <button className="btn-primary" onClick={openCreateModal} disabled={!options?.classes.length}>
+                ➕ Thêm lịch học
+              </button>
+              <button className="btn-outline" onClick={() => setModalAuto(true)} disabled={!options?.classes.length}>
+                ⚙️ Tự động xếp lịch
+              </button>
+              <button className="btn-danger" onClick={handleDeleteWeek} disabled={actionLoading}>
+                🧹 Xóa tuần này
+              </button>
+              <button className="btn-outline" onClick={handleCopyWeek} disabled={actionLoading || !previousWeekOption}>
+                📋 Sao chép tuần trước
+              </button>
+              <button className="btn-outline" onClick={handleExport}>
+                📤 Xuất lịch
+              </button>
+            </div>
           </div>
-          <div className="actions-bar">
-            <button className="btn-primary" onClick={openCreateModal} disabled={!options?.classes.length}>
-              ➕ Thêm lịch học
-            </button>
-            <button className="btn-outline" onClick={() => setModalAuto(true)} disabled={!options?.classes.length}>
-              ⚙️ Tự động xếp lịch
-            </button>
-            <button className="btn-danger" onClick={handleDeleteWeek} disabled={actionLoading}>
-              🧹 Xóa tuần này
-            </button>
-            <button className="btn-outline" onClick={handleCopyWeek} disabled={actionLoading || !previousWeek}>
-              📋 Sao chép tuần trước
-            </button>
-            <button className="btn-outline" onClick={handleExport}>
-              📤 Xuất lịch
-            </button>
-          </div>
-        </div>
 
         {loading ? (
           <div className="empty-state">Đang tải dữ liệu lịch học...</div>
