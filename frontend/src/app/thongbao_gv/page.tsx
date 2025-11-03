@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState, useCallback } from "react";
+import type { MouseEvent } from "react";
 import { apiFetchJson } from "../../lib/authClient";
 
 type TabKey = "inbox" | "send";
@@ -43,6 +44,74 @@ type SasSettings = { themeDark?: boolean };
 type SettingsEventDetail = { themeDark: boolean };
 
 const SETTINGS_CHANGED_EVENT = "sas_settings_changed";
+
+interface ReplyModalProps {
+  open: boolean;
+  target: InboxItem | null;
+  message: string;
+  sending: boolean;
+  error: string | null;
+  onClose: () => void;
+  onSubmit: () => void;
+  onMessageChange: (value: string) => void;
+  formatReplyDeadline: (value?: string | null) => string | null;
+}
+
+const ReplyModal = ({
+  open,
+  target,
+  message,
+  sending,
+  error,
+  onClose,
+  onSubmit,
+  onMessageChange,
+  formatReplyDeadline,
+}: ReplyModalProps) => (
+  <div
+    className="modal"
+    style={{ display: open ? "flex" : "none" }}
+    onClick={open ? onClose : undefined}
+    aria-hidden={!open}
+  >
+    <div className="modal-content" style={{ maxWidth: 480 }} onClick={(e) => e.stopPropagation()}>
+      <div className="modal-head">
+        <div className="title">Trả lời thông báo</div>
+        <button className="icon-btn" onClick={onClose}>✖</button>
+      </div>
+      <div className="modal-body">
+        <div className="meta">{target?.title ?? "--"}</div>
+        <div style={{ marginTop: 4, fontSize: 13, color: '#475569' }}>Gửi tới: {target?.from ?? 'Không xác định'}</div>
+        {target?.replyUntil ? (
+          <div style={{ marginTop: 4, fontSize: 12, color: '#0369a1' }}>
+            Hạn phản hồi: {formatReplyDeadline(target.replyUntil)}
+          </div>
+        ) : (
+          <div style={{ marginTop: 4, fontSize: 12, color: '#0369a1' }}>
+            Thông báo cho phép phản hồi
+          </div>
+        )}
+        <textarea
+          className="input"
+          rows={5}
+          placeholder="Nhập phản hồi của bạn..."
+          value={message}
+          onChange={(event) => onMessageChange(event.target.value)}
+          style={{ marginTop: 12 }}
+        />
+        {error && (
+          <div style={{ marginTop: 8, color: '#dc2626', fontSize: 13 }}>{error}</div>
+        )}
+      </div>
+      <div className="modal-foot" style={{ display: 'flex', justifyContent: 'flex-end', gap: 12 }}>
+        <button className="qr-btn" onClick={onClose}>Huỷ</button>
+        <button className="btn-primary" onClick={onSubmit} disabled={sending}>
+          {sending ? "Đang gửi..." : "Gửi phản hồi"}
+        </button>
+      </div>
+    </div>
+  </div>
+);
 
 export default function LecturerNotificationsPage() {
   const [collapsed, setCollapsed] = useState(false);
@@ -150,6 +219,7 @@ export default function LecturerNotificationsPage() {
   };
 
   const openReplyModal = (item: InboxItem) => {
+    setDetail(null);
     setReplyTarget(item);
     setReplyMessage("");
     setReplyError(null);
@@ -361,54 +431,20 @@ export default function LecturerNotificationsPage() {
         </div>
       )}
 
-      {replyTarget && (
-        <div className="modal" onClick={closeReplyModal}>
-          <div className="modal-content" style={{ maxWidth: 480 }} onClick={(e)=>e.stopPropagation()}>
-            <div className="modal-head">
-              <div className="title">Trả lời thông báo</div>
-              <button className="icon-btn" onClick={closeReplyModal}>✖</button>
-            </div>
-            <div className="modal-body">
-              <div className="meta">{replyTarget.title}</div>
-              <div style={{ marginTop: 4, fontSize: 13, color: '#475569' }}>Gửi tới: {replyTarget.from}</div>
-              {replyTarget.replyUntil ? (
-                <div style={{ marginTop: 4, fontSize: 12, color: '#0369a1' }}>
-                  Hạn phản hồi: {formatReplyDeadline(replyTarget.replyUntil)}
-                </div>
-              ) : (
-                <div style={{ marginTop: 4, fontSize: 12, color: '#0369a1' }}>
-                  Thông báo cho phép phản hồi
-                </div>
-              )}
-              <textarea
-                className="input"
-                rows={5}
-                placeholder="Nhập phản hồi của bạn..."
-                value={replyMessage}
-                onChange={(e) => {
-                  setReplyMessage(e.target.value);
-                  if (replyError) setReplyError(null);
-                }}
-                style={{ marginTop: 12 }}
-              />
-              {replyError && (
-                <div style={{ marginTop: 8, color: '#dc2626', fontSize: 13 }}>{replyError}</div>
-              )}
-            </div>
-            <div className="modal-foot" style={{ display: 'flex', justifyContent: 'flex-end', gap: 12 }}>
-              <button className="qr-btn" onClick={closeReplyModal}>Huỷ</button>
-              <button
-                className="btn-primary"
-                onClick={submitReply}
-                disabled={sendingReply}
-              >
-                {sendingReply ? "Đang gửi..." : "Gửi phản hồi"}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <ReplyModal
+        open={Boolean(replyTarget)}
+        target={replyTarget}
+        message={replyMessage}
+        sending={sendingReply}
+        error={replyError}
+        onClose={closeReplyModal}
+        onSubmit={submitReply}
+        onMessageChange={(value) => {
+          setReplyMessage(value);
+          if (replyError) setReplyError(null);
+        }}
+        formatReplyDeadline={formatReplyDeadline}
+      />
     </Shell>
   );
 }
-
