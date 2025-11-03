@@ -3,10 +3,10 @@ const { PrismaClient } = require("@prisma/client");
 const prisma = new PrismaClient();
 
 const COHORTS = [
-  { code: "K18", year: 2018 },
-  { code: "K19", year: 2019 },
-  { code: "K20", year: 2020 },
-  { code: "K21", year: 2021 },
+  { code: "K18", year: 2022 },
+  { code: "K19", year: 2023 },
+  { code: "K20", year: 2024 },
+  { code: "K21", year: 2025 },
 ];
 
 async function main() {

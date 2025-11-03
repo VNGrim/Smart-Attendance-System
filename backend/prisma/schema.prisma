@@ -123,6 +123,7 @@ model timetable {
   slot_id     Int
   room        String                @db.VarChar(50)
   week_key    String                @default("UNASSIGNED") @db.VarChar(20)
+  date        DateTime?             @db.Date
   teacher_id  String?               @db.VarChar(20)
   teacher_name String?              @db.VarChar(150)
   subject_name String?              @db.VarChar(150)
@@ -132,6 +133,7 @@ model timetable {
   @@index([week_key, day_of_week, slot_id], map: "timetable_week_slot_idx")
   @@index([week_key, teacher_id], map: "timetable_week_teacher_idx")
   @@index([slot_id], map: "slot_id")
+  @@index([date], map: "timetable_date_idx")
 }
 
 model rooms {

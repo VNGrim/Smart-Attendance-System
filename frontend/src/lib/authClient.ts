@@ -52,11 +52,13 @@ export function apiFetch(input: string, init?: FetchOptions) {
   return fetch(url, withAuth(init));
 }
 
-export async function apiFetchJson<T = any>(input: string, init?: FetchOptions): Promise<T> {
+type ErrorPayload = { message?: string };
+
+export async function apiFetchJson<T>(input: string, init?: FetchOptions): Promise<T> {
   const response = await apiFetch(input, init);
-  const data = await response.json().catch(() => ({}));
+  const data = (await response.json().catch(() => ({}))) as T | ErrorPayload;
   if (!response.ok) {
-    const message = (data as any)?.message || `HTTP ${response.status}`;
+    const message = (data as ErrorPayload)?.message || `HTTP ${response.status}`;
     throw new Error(message);
   }
   return data as T;

@@ -7,17 +7,20 @@ import { useRouter } from "next/navigation";
 type MiniClass = { id: string; code: string; subject: string; day: string; time: string; room: string };
 type NoteItem = { id: string; title: string; from: string; date: string };
 
+type SettingsEventDetail = { themeDark: boolean };
+const SETTINGS_CHANGED_EVENT = "sas_settings_changed";
+
 export default function LecturerDashboardPage() {
   const router = useRouter();
   const [collapsed, setCollapsed] = useState(false);
   const [dark, setDark] = useState(false);
-  const [notifCount, setNotifCount] = useState(3);
+  const [notifCount] = useState(3);
   const [name] = useState("Nguyễn Văn A");
 
-  const [stats, setStats] = useState({ classes: 4, sessionsToday: 2, students: 126, notifications: 3 });
+  const [stats] = useState({ classes: 4, sessionsToday: 2, students: 126, notifications: 3 });
   const [week, setWeek] = useState<MiniClass[]>([]);
   const [notes, setNotes] = useState<NoteItem[]>([]);
-  const [attendanceNote, setAttendanceNote] = useState("Lớp CN201 vừa được điểm danh 90% (45/50 sinh viên).");
+  const [attendanceNote] = useState("Lớp CN201 vừa được điểm danh 90% (45/50 sinh viên).");
 
   useEffect(() => {
     setWeek([
@@ -50,7 +53,7 @@ export default function LecturerDashboardPage() {
       const merged = { ...prev, themeDark: next };
       localStorage.setItem("sas_settings", JSON.stringify(merged));
       document.documentElement.style.colorScheme = next ? "dark" : "light";
-      window.dispatchEvent(new CustomEvent("sas_settings_changed" as any, { detail: merged }));
+      window.dispatchEvent(new CustomEvent<SettingsEventDetail>(SETTINGS_CHANGED_EVENT, { detail: merged }));
     } catch {}
   };
 
@@ -58,6 +61,17 @@ export default function LecturerDashboardPage() {
     try {
       return new Intl.DateTimeFormat("vi-VN", { weekday: "long", day: "2-digit", month: "2-digit", year: "numeric" }).format(new Date());
     } catch { return ""; }
+  }, []);
+
+  useEffect(() => {
+    const handler = (event: Event) => {
+      const detail = (event as CustomEvent<SettingsEventDetail>).detail;
+      if (!detail) return;
+      document.documentElement.style.colorScheme = detail.themeDark ? "dark" : "light";
+      setDark(detail.themeDark);
+    };
+    window.addEventListener(SETTINGS_CHANGED_EVENT, handler);
+    return () => window.removeEventListener(SETTINGS_CHANGED_EVENT, handler);
   }, []);
 
   const Shell = ({ children }: { children: React.ReactNode }) => (

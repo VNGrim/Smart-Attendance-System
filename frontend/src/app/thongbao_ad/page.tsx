@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useState, useEffect, useMemo, useRef, useCallback } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import { apiFetch, apiFetchJson } from "../../lib/authClient";
 import { useRouter } from "next/navigation";
 
@@ -445,7 +445,39 @@ function inferCategoryFromTarget(target?: string | null): NoticeCategory {
   return "toantruong";
 }
 
-function mapServerNotice(raw: any): Notice {
+type ServerNotice = {
+  id?: string;
+  code?: string;
+  dbId?: string | number;
+  title?: string;
+  sender?: string;
+  target?: string;
+  category?: string;
+  type?: string;
+  sendTime?: string | Date;
+  send_time?: string | Date;
+  status?: string;
+  content?: string;
+  recipients?: string[] | string;
+  history?: string[] | string;
+  scheduledAt?: string | Date | null;
+  scheduled_at?: string | Date | null;
+  createdAt?: string | Date | null;
+  created_at?: string | Date | null;
+  updatedAt?: string | Date | null;
+  updated_at?: string | Date | null;
+};
+
+type NotificationsResponse = {
+  announcements?: ServerNotice[];
+};
+
+type SasSettings = { themeDark?: boolean };
+type SettingsEventDetail = { themeDark: boolean };
+
+const SETTINGS_CHANGED_EVENT = "sas_settings_changed";
+
+function mapServerNotice(raw: ServerNotice): Notice {
   const id = typeof raw?.id === "string" && raw.id
     ? raw.id
     : raw?.code
@@ -517,10 +549,19 @@ export default function AdminNotifyPage() {
     try {
       const saved = localStorage.getItem("sas_settings");
       if (saved) {
-        const s = JSON.parse(saved);
-        document.documentElement.style.colorScheme = s.themeDark ? "dark" : "light";
+        const settings: SasSettings = JSON.parse(saved);
+        const themeDark = settings.themeDark ?? false;
+        document.documentElement.style.colorScheme = themeDark ? "dark" : "light";
       }
     } catch {}
+
+    const handler = (event: Event) => {
+      const detail = (event as CustomEvent<SettingsEventDetail>).detail;
+      if (!detail) return;
+      document.documentElement.style.colorScheme = detail.themeDark ? "dark" : "light";
+    };
+    window.addEventListener(SETTINGS_CHANGED_EVENT, handler);
+    return () => window.removeEventListener(SETTINGS_CHANGED_EVENT, handler);
   }, []);
 
   useEffect(() => {
@@ -530,9 +571,9 @@ export default function AdminNotifyPage() {
       setLoading(true);
       setError(null);
       try {
-        const data = await apiFetchJson("/api/admin/notifications");
+        const data = await apiFetchJson<NotificationsResponse>("/api/admin/notifications");
         const rawList = Array.isArray(data?.announcements) ? data.announcements : [];
-        const mapped: Notice[] = rawList.map(mapServerNotice);
+        const mapped: Notice[] = rawList.map((item) => mapServerNotice(item));
         if (!ignore) {
           setList(mapped);
           setDrawer(null);
@@ -543,7 +584,7 @@ export default function AdminNotifyPage() {
           }).length;
           setNotifCount(pendingCount);
         }
-      } catch (err: any) {
+      } catch (err: unknown) {
         if (!ignore) {
           console.error("admin notifications fetch error", err);
           setError("Không tải được danh sách thông báo");
@@ -564,9 +605,9 @@ export default function AdminNotifyPage() {
     setLoading(true);
     setError(null);
     try {
-      const data = await apiFetchJson("/api/admin/notifications");
+      const data = await apiFetchJson<NotificationsResponse>("/api/admin/notifications");
       const rawList = Array.isArray(data?.announcements) ? data.announcements : [];
-      const mapped: Notice[] = rawList.map(mapServerNotice);
+      const mapped: Notice[] = rawList.map((item) => mapServerNotice(item));
       setList(mapped);
       const pendingCount = mapped.filter((item: Notice) => {
         const status = item.status.toLowerCase();

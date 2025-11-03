@@ -18,49 +18,9 @@ const SUBJECT_MAP = {
 
 const DEFAULT_STATUS = "Đang hoạt động";
 
-const FALLBACK_CLASSES = [
-  {
-    class_id: "SE19B1",
-    class_name: SUBJECT_MAP.PRF192,
-    subject_code: "PRF192",
-    subject_name: SUBJECT_MAP.PRF192,
-    cohort: "K19",
-    major: "CNTT",
-    teacher_id: null,
-    teacherName: "Nguyễn Văn A",
-    teacherEmail: "a@uni.edu",
-    students: 32,
-    status: "Đang hoạt động",
-  },
-  {
-    class_id: "SE19B2",
-    class_name: SUBJECT_MAP.CEA201,
-    subject_code: "CEA201",
-    subject_name: SUBJECT_MAP.CEA201,
-    cohort: "K19",
-    major: "CNTT",
-    teacher_id: null,
-    teacherName: "Trần Thị B",
-    teacherEmail: "b@uni.edu",
-    students: 29,
-    status: "Đang hoạt động",
-  },
-  {
-    class_id: "SE20B1",
-    class_name: SUBJECT_MAP.CSI106,
-    subject_code: "CSI106",
-    subject_name: SUBJECT_MAP.CSI106,
-    cohort: "K20",
-    major: "CNTT",
-    teacher_id: null,
-    teacherName: "Nguyễn Văn C",
-    teacherEmail: "c@uni.edu",
-    students: 25,
-    status: "Kết thúc",
-  },
-];
+const FALLBACK_CLASSES = [];
 
-let fallbackStore = FALLBACK_CLASSES.map((item) => ({ ...item }));
+let fallbackStore = [];
 
 const cloneFallback = () => fallbackStore.map((item) => ({ ...item }));
 
