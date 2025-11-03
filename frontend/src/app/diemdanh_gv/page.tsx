@@ -613,13 +613,16 @@ export default function LecturerAttendancePage() {
                 <option value="" disabled>
                   -- Chọn slot --
                 </option>
-                {slots.map((item) => (
-                  <option key={item.slotId} value={item.slotId}>
+                {slots.map((item, index) => {
+                  const optionKey = item.slotId != null ? `${item.slotId}-${item.weekKey ?? index}` : `slot-${index}`;
+                  return (
+                    <option key={optionKey} value={item.slotId}>
                     Slot {item.slotId}
                     {item.dayOfWeek ? ` • ${DAY_LABELS[item.dayOfWeek] || item.dayOfWeek}` : ""}
                     {item.room ? ` • Phòng ${item.room || "?"}` : ""}
-                  </option>
-                ))}
+                    </option>
+                  );
+                })}
               </select>
             </div>
             <div className="kv">
