@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useState, useEffect, useMemo, useCallback } from "react";
+import type { ReactNode, MouseEvent } from "react";
 import { apiFetchJson } from "../../lib/authClient";
 
 interface Announcement {
@@ -100,6 +101,130 @@ type SasSettings = { themeDark?: boolean };
 type SettingsEventDetail = { themeDark: boolean };
 
 const SETTINGS_CHANGED_EVENT = "sas_settings_changed";
+
+interface StudentShellProps {
+  collapsed: boolean;
+  studentName: string;
+  todayStr: string;
+  themeDark: boolean;
+  onToggleCollapse: () => void;
+  onLogout: () => void;
+  children?: ReactNode;
+}
+
+const StudentShell = ({
+  collapsed,
+  studentName,
+  todayStr,
+  themeDark,
+  onToggleCollapse,
+  onLogout,
+  children,
+}: StudentShellProps) => (
+  <div className={`layout ${collapsed ? 'collapsed' : ''}`}>
+    <aside className="sidebar">
+      <div className="side-header">
+        <button className="collapse-btn" onClick={onToggleCollapse} title={collapsed ? 'Mở rộng' : 'Thu gọn'}>
+          {collapsed ? '⮞' : '⮜'}
+        </button>
+        <div className="side-name">
+          Chào mừng,<br />
+          {studentName || "Sinh viên"}
+        </div>
+      </div>
+      <nav className="side-nav">
+        <Link href="/tongquan_sv" className="side-link">🏠 {!collapsed && "Trang tổng quan"}</Link>
+        <div className="side-link active">🔔 {!collapsed && "Thông báo"}</div>
+        <Link href="/lichhoc_sv" className="side-link">📅 {!collapsed && "Lịch học"}</Link>
+        <Link href="/lichsu_sv" className="side-link">🕘 {!collapsed && "Lịch sử"}</Link>
+        <Link href="/caidat_sv" className="side-link">⚙️ {!collapsed && "Cài đặt"}</Link>
+      </nav>
+    </aside>
+    <header className="topbar">
+      <div className="welcome">
+        <div className="hello">Xin chào, {studentName || "Sinh viên"} 👋</div>
+        <div className="date">Hôm nay: {todayStr}</div>
+      </div>
+      <div className="controls">
+        <button className="qr-btn" onClick={onLogout}>🚪 Đăng xuất</button>
+      </div>
+    </header>
+    <main className={`main ${themeDark ? 'dark-theme' : 'light-theme'}`}>
+      {children}
+    </main>
+  </div>
+);
+
+interface ReplyModalProps {
+  open: boolean;
+  target: Announcement | null;
+  message: string;
+  sending: boolean;
+  error: string | null;
+  onClose: () => void;
+  onSubmit: () => void;
+  onMessageChange: (value: string) => void;
+  formatReplyDeadline: (value?: string | null) => string | null;
+}
+
+const ReplyModal = ({
+  open,
+  target,
+  message,
+  sending,
+  error,
+  onClose,
+  onSubmit,
+  onMessageChange,
+  formatReplyDeadline,
+}: ReplyModalProps) => {
+  const handleOverlayClick = () => {
+    if (!open) return;
+    onClose();
+  };
+
+  return (
+    <div
+      className="modal-overlay"
+      style={{ display: open ? "flex" : "none" }}
+      onClick={handleOverlayClick}
+      aria-hidden={!open}
+    >
+      <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-header">
+          <h2>Trả lời thông báo</h2>
+          <button className="close-btn" onClick={onClose}>×</button>
+        </div>
+        <div className="modal-body">
+          <div className="modal-date">Tiêu đề: {target?.title ?? "--"}</div>
+          <div className="modal-date">Người gửi: {target?.sender ?? "Không xác định"}</div>
+          {target?.replyUntil && (
+            <div className="modal-date" style={{ color: '#0369a1' }}>
+              Hạn phản hồi: {formatReplyDeadline(target.replyUntil)}
+            </div>
+          )}
+          <textarea
+            className="reply-textarea"
+            rows={5}
+            placeholder="Nhập phản hồi của bạn..."
+            value={message}
+            onChange={(event) => onMessageChange(event.target.value)}
+            style={{ marginTop: 12 }}
+          />
+          {error && (
+            <div style={{ marginTop: 8, color: '#dc2626', fontSize: 13 }}>{error}</div>
+          )}
+        </div>
+        <div className="modal-footer" style={{ display: 'flex', justifyContent: 'flex-end', gap: 12 }}>
+          <button className="qr-btn" onClick={onClose}>Huỷ</button>
+          <button className="reply-btn" onClick={onSubmit} disabled={sending}>
+            {sending ? "Đang gửi..." : "Gửi phản hồi"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
 
 export default function ThongBaoPage() {
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
@@ -217,13 +342,14 @@ export default function ThongBaoPage() {
 
   const startReply = (announcement: Announcement) => {
     if (!canStudentReply(announcement)) return;
+    setSelectedAnnouncement(null);
     setReplyTarget(announcement);
     setReplyMessage("");
     setReplyError(null);
     setSendingReply(false);
   };
 
-  const handleReplyClick = (event: React.MouseEvent<HTMLButtonElement>, announcement: Announcement) => {
+  const handleReplyClick = (event: MouseEvent<HTMLButtonElement>, announcement: Announcement) => {
     event.stopPropagation();
     startReply(announcement);
   };
@@ -325,9 +451,34 @@ export default function ThongBaoPage() {
     </div>
   );
 
+  const studentName = studentInfo?.full_name ?? "Sinh viên";
+
+  const toggleCollapse = useCallback(() => {
+    setCollapsed((value) => !value);
+  }, []);
+
+  const handleLogout = useCallback(() => {
+    if (typeof window === "undefined") return;
+    if (confirm('Bạn có chắc muốn đăng xuất?')) {
+      try {
+        localStorage.removeItem('sas_user');
+      } catch {}
+      window.location.href = '/login';
+    }
+  }, []);
+
+  const shellProps: Omit<StudentShellProps, "children"> = {
+    collapsed,
+    studentName,
+    todayStr,
+    themeDark,
+    onToggleCollapse: toggleCollapse,
+    onLogout: handleLogout,
+  };
+
   if (loading) {
     return (
-      <Shell>
+      <StudentShell {...shellProps}>
         <div className="container">
           <div className="card">
             <div className="loading">
@@ -336,13 +487,13 @@ export default function ThongBaoPage() {
             </div>
           </div>
         </div>
-      </Shell>
+      </StudentShell>
     );
   }
 
   if (error) {
     return (
-      <Shell>
+      <StudentShell {...shellProps}>
         <div className="container">
           <div className="card">
             <div className="error">
@@ -352,12 +503,12 @@ export default function ThongBaoPage() {
             </div>
           </div>
         </div>
-      </Shell>
+      </StudentShell>
     );
   }
 
   return (
-    <Shell>
+    <StudentShell {...shellProps}>
       <div className="container">
         {announcements.length === 0 ? (
           <div className="card empty-state">
@@ -433,45 +584,21 @@ export default function ThongBaoPage() {
         </div>
       )}
 
-      {replyTarget && (
-        <div className="modal-overlay" onClick={closeReplyModal}>
-          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header">
-              <h2>Trả lời thông báo</h2>
-              <button className="close-btn" onClick={closeReplyModal}>×</button>
-            </div>
-            <div className="modal-body">
-              <div className="modal-date">Tiêu đề: {replyTarget.title}</div>
-              <div className="modal-date">Người gửi: {replyTarget.sender ?? 'Không xác định'}</div>
-              {replyTarget.replyUntil && (
-                <div className="modal-date" style={{ color: '#0369a1' }}>
-                  Hạn phản hồi: {formatReplyDeadline(replyTarget.replyUntil)}
-                </div>
-              )}
-              <textarea
-                className="reply-textarea"
-                rows={5}
-                placeholder="Nhập phản hồi của bạn..."
-                value={replyMessage}
-                onChange={(e) => {
-                  setReplyMessage(e.target.value);
-                  if (replyError) setReplyError(null);
-                }}
-                style={{ marginTop: 12 }}
-              />
-              {replyError && (
-                <div className="reply-error" style={{ color: '#dc2626', marginTop: 8 }}>{replyError}</div>
-              )}
-            </div>
-            <div className="modal-footer" style={{ display: 'flex', justifyContent: 'flex-end', gap: 12 }}>
-              <button className="qr-btn" onClick={closeReplyModal}>Huỷ</button>
-              <button className="reply-btn" onClick={submitReply} disabled={sendingReply}>
-                {sendingReply ? 'Đang gửi...' : 'Gửi phản hồi'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-    </Shell>
+      <ReplyModal
+        open={Boolean(replyTarget)}
+        target={replyTarget}
+        message={replyMessage}
+        sending={sendingReply}
+        error={replyError}
+        onClose={closeReplyModal}
+        onSubmit={submitReply}
+        onMessageChange={(value) => {
+          setReplyMessage(value);
+          if (replyError) setReplyError(null);
+        }}
+        formatReplyDeadline={formatReplyDeadline}
+      />
+
+    </StudentShell>
   );
 }
