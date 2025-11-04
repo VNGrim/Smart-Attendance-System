@@ -87,6 +87,7 @@ model teachers {
   email            String?                @db.VarChar(100)
   phone            String?                @db.VarChar(20)
   faculty          String?                @db.VarChar(100)
+  avatar_url       String?                @db.VarChar(255)
   status           String                 @default("Đang dạy") @db.VarChar(50)
   account_id       Int?
   created_at       DateTime?              @default(now()) @db.Timestamp(0)

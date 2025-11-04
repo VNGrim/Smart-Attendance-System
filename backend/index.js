@@ -42,6 +42,9 @@ const adminAccountsRoutes = require("./src/taikhoan_ad.routes");
 const studentRoutes = require("./src/routes/student.routes");
 app.use("/api/students", studentRoutes);
 
+const teacherRoutes = require("./src/teachers/teachers.routes");
+app.use("/api/teachers", teacherRoutes);
+
 
 // 🧱 Mount các route hiện có
 app.use("/api/lichhoc", lichhocRoutes);

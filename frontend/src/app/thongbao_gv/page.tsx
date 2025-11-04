@@ -115,7 +115,7 @@ const ReplyModal = ({
 
 export default function LecturerNotificationsPage() {
   const [collapsed, setCollapsed] = useState(false);
-  const [dark, setDark] = useState(false);
+  const [dark, setDark] = useState(true);
   const [notifCount, setNotifCount] = useState(0);
   const [tab, setTab] = useState<TabKey>("inbox");
 
@@ -137,7 +137,8 @@ export default function LecturerNotificationsPage() {
 
   const applyTheme = useCallback((darkMode: boolean) => {
     setDark(darkMode);
-    document.documentElement.style.colorScheme = darkMode ? "dark" : "light";
+    document.documentElement.classList.toggle("dark-theme", darkMode);
+    document.documentElement.classList.toggle("light-theme", !darkMode);
   }, []);
 
   useEffect(() => {
@@ -284,7 +285,7 @@ export default function LecturerNotificationsPage() {
   };
 
   const Shell = ({ children }: { children: React.ReactNode }) => (
-    <div className={`layout ${collapsed ? "collapsed" : ""}`}>
+    <div className={`layout ${collapsed ? "collapsed" : ""} ${dark ? '' : 'light-theme'}`}>
       <aside className="sidebar">
         <div className="side-header">
           <button className="collapse-btn" onClick={() => setCollapsed(!collapsed)} title={collapsed ? "Mở rộng" : "Thu gọn"}>
