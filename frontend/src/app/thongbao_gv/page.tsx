@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState, useCallback } from "react";
 import type { MouseEvent } from "react";
-import { apiFetchJson } from "../../lib/authClient";
+import { apiFetch, apiFetchJson } from "../../lib/authClient";
 
 type TabKey = "inbox" | "send";
 type InboxItem = {
@@ -16,6 +16,7 @@ type InboxItem = {
   replyUntil?: string | null;
   attachments?: string[];
 };
+type TeacherClass = { id: string; name: string; subjectName?: string };
 type Announcement = {
   id: number;
   title: string;
@@ -276,8 +277,8 @@ export default function LecturerNotificationsPage() {
   const [replyError, setReplyError] = useState<string | null>(null);
   const [sendingReply, setSendingReply] = useState(false);
 
-  const [classes] = useState(["CN201 - .NET", "CN202 - CSDL", "CN203 - CTDL"]);
-  const [toClass, setToClass] = useState("CN201 - .NET");
+  const [classes, setClasses] = useState<TeacherClass[]>([]);
+  const [toClass, setToClass] = useState("");
   const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
   const [file, setFile] = useState<File | null>(null);
@@ -357,6 +358,22 @@ export default function LecturerNotificationsPage() {
   useEffect(() => {
     fetchAnnouncements().catch(() => {});
   }, [fetchAnnouncements]);
+
+  // load teacher classes
+  useEffect(() => {
+    (async () => {
+      try {
+        const resp = await apiFetchJson<{ success: boolean; data?: TeacherClass[]; message?: string }>(
+          "/api/teacher/notifications/classes"
+        );
+        if (resp && (resp as any).success && Array.isArray((resp as any).data)) {
+          const data = (resp as any).data as TeacherClass[];
+          setClasses(data);
+          if (data.length && !toClass) setToClass(data[0].id);
+        }
+      } catch {}
+    })();
+  }, []);
 
   const canReply = (item?: { allowReply?: boolean; replyUntil?: string | null }) => {
     if (!item?.allowReply) return false;
@@ -487,15 +504,33 @@ export default function LecturerNotificationsPage() {
     );
   };
 
-  const handleSend = () => {
+  const handleSend = async () => {
+    if (!toClass) {
+      alert("Vui lòng chọn lớp");
+      return;
+    }
     if (!title || !content) {
       alert("Vui lòng nhập tiêu đề và nội dung");
       return;
     }
-    alert(`Thông báo đã được gửi đến lớp ${toClass}`);
-    setTitle("");
-    setContent("");
-    setFile(null);
+    try {
+      const fd = new FormData();
+      fd.append("classId", toClass);
+      fd.append("title", title);
+      fd.append("content", content);
+      if (file) fd.append("file", file);
+      const resp = await apiFetch("/api/teacher/notifications/announcements", { method: "POST", body: fd });
+      if (!resp.ok) {
+        const text = await resp.text();
+        throw new Error(text || `HTTP ${resp.status}`);
+      }
+      alert(`Thông báo đã được gửi đến lớp ${toClass}`);
+      setTitle("");
+      setContent("");
+      setFile(null);
+    } catch (err: any) {
+      alert(err?.message || "Gửi thông báo thất bại");
+    }
   };
 
   const renderSendView = () => (
@@ -503,8 +538,9 @@ export default function LecturerNotificationsPage() {
       <div className="form">
         <label className="label">Chọn lớp</label>
         <select className="input" value={toClass} onChange={(event) => setToClass(event.target.value)}>
+          <option value="" disabled>-- Chọn lớp --</option>
           {classes.map((item) => (
-            <option key={item}>{item}</option>
+            <option key={item.id} value={item.id}>{item.id} - {item.name}</option>
           ))}
         </select>
         <label className="label">Tiêu đề</label>
