@@ -97,7 +97,9 @@ export default function CaiDatPage() {
       if (!studentId) return;
       try {
         const base = process.env.NEXT_PUBLIC_API_BASE || "http://localhost:8080";
-        const res = await fetch(`${base}/api/thongbao/students/${studentId}`);
+        const res = await fetch(`${base}/api/thongbao/students/${studentId}`, {
+          credentials: 'include'
+        });
         const data = await res.json();
         console.log("📥 Fetched student data:", data);
         if (data?.success) {
