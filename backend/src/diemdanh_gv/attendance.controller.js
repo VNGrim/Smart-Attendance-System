@@ -22,7 +22,7 @@ const { jsonResponse } = require("../utils/json");
 const CODE_CHARSET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 const CODE_LENGTH = 6;
 const SESSION_DURATION_SECONDS = 60;
-const MAX_RESETS = 3;
+const MAX_ATTEMPTS = 3; // tổng số lần sử dụng mã: lần tạo đầu + 2 lần reset
 
 const normalizeClassId = (value) => String(value ?? "").trim().toUpperCase();
 
@@ -56,8 +56,8 @@ const serializeSession = (session) => ({
   type: session.type,
   status: session.status,
   attempts: session.attempts,
-  maxResets: MAX_RESETS,
-  attemptsRemaining: Math.max(0, MAX_RESETS - session.attempts),
+  maxResets: MAX_ATTEMPTS,
+  attemptsRemaining: Math.max(0, MAX_ATTEMPTS - session.attempts),
   expiresAt: session.expires_at ? dayjs(session.expires_at).toISOString() : null,
   createdAt: dayjs(session.created_at).toISOString(),
   updatedAt: dayjs(session.updated_at).toISOString(),
@@ -215,7 +215,7 @@ const resetSessionCode = async (req, res) => {
     if (session.type === "manual") {
       return res.status(400).json({ success: false, message: "Hình thức thủ công không hỗ trợ reset mã" });
     }
-    if (session.attempts >= MAX_RESETS) {
+    if (session.attempts >= MAX_ATTEMPTS) {
       const updated = await updateSession(session.id, {
         status: "closed",
         expires_at: dayjs().utc().toDate(),
