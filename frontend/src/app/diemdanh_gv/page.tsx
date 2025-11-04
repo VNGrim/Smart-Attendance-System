@@ -32,6 +32,7 @@ type SessionSummary = {
   type: Mode;
   status: "active" | "expired" | "closed";
   attempts: number;
+  maxResets: number;
   attemptsRemaining: number;
   expiresAt: string | null;
   createdAt: string;
@@ -91,7 +92,7 @@ const SESSION_REQUIREMENTS: Record<Mode, { title: string; description: string }[
     },
     {
       title: "Thời hạn 60s",
-      description: "QR sẽ hết hạn sau 60 giây, có thể reset tối đa 3 lần",
+      description: "QR sẽ hết hạn sau 60 giây và tự động làm mới tối đa 3 lần",
     },
     {
       title: "Kết nối mạng",
@@ -105,7 +106,7 @@ const SESSION_REQUIREMENTS: Record<Mode, { title: string; description: string }[
     },
     {
       title: "Hiệu lực 60s",
-      description: "Mã hết hạn sau 60 giây, reset tối đa 3 lần trước khi đóng phiên",
+      description: "Mã hết hạn sau 60 giây và tự động làm mới tối đa 3 lần trước khi đóng phiên",
     },
     {
       title: "Chia sẻ mã",
@@ -163,19 +164,17 @@ async function fetchJson<T>(input: RequestInfo | URL, init?: RequestInit): Promi
   return data as T;
 }
 
-const formatTimeLeft = (expiresAt: string | null) => {
-  if (!expiresAt) return "--";
-  const diff = new Date(expiresAt).getTime() - Date.now();
-  if (diff <= 0) return "00:00";
-  const seconds = Math.ceil(diff / 1000);
-  const minutes = Math.floor(seconds / 60);
-  const remain = seconds % 60;
-  return `${minutes.toString().padStart(2, "0")}:${remain.toString().padStart(2, "0")}`;
+const formatCountdown = (secondsLeft: number | null) => {
+  if (secondsLeft == null) return "--";
+  const total = Math.max(0, Math.floor(secondsLeft));
+  const minutes = Math.floor(total / 60);
+  const seconds = total % 60;
+  return `${minutes.toString().padStart(2, "0")}:${seconds.toString().padStart(2, "0")}`;
 };
 
 export default function LecturerAttendancePage() {
   const [collapsed, setCollapsed] = useState(false);
-  const [dark, setDark] = useState(false);
+  const [dark, setDark] = useState(true);
   const [notifCount] = useState(2);
 
   const [classes, setClasses] = useState<ClassInfo[]>([]);
@@ -185,8 +184,11 @@ export default function LecturerAttendancePage() {
   const [mode, setMode] = useState<Mode>("qr");
   const [session, setSession] = useState<SessionDetail | null>(null);
   const [sessionLoading, setSessionLoading] = useState(false);
-  const [resetLoading, setResetLoading] = useState(false);
+  const [closingSession, setClosingSession] = useState(false);
   const [students, setStudents] = useState<AttendanceRow[]>([]);
+  const [timeLeft, setTimeLeft] = useState<number | null>(null);
+  const [autoResetPending, setAutoResetPending] = useState(false);
+  const [sessionNotice, setSessionNotice] = useState<{ type: "success" | "error"; message: string } | null>(null);
   const [filter, setFilter] = useState<Filter>("all");
   const [history, setHistory] = useState<HistoryItem[]>([]);
   const [studentLoading, setStudentLoading] = useState(false);
@@ -220,17 +222,29 @@ export default function LecturerAttendancePage() {
     return students;
   }, [students, filter]);
 
-  const timeLeftDisplay = useMemo(() => formatTimeLeft(session?.expiresAt ?? null), [session]);
+  const countdownDisplay = useMemo(() => formatCountdown(timeLeft), [timeLeft]);
 
   useEffect(() => {
     try {
       const saved = localStorage.getItem("sas_settings");
       if (saved) {
         const s = JSON.parse(saved);
-        setDark(!!s.themeDark);
-        document.documentElement.style.colorScheme = s.themeDark ? "dark" : "light";
+        const darkTheme = s.themeDark ?? true;
+        setDark(darkTheme);
+        document.documentElement.classList.toggle("dark-theme", darkTheme);
+        document.documentElement.classList.toggle("light-theme", !darkTheme);
       }
     } catch {}
+
+    const handler = (event: Event) => {
+      const detail = (event as CustomEvent<{ themeDark: boolean }>).detail;
+      if (!detail) return;
+      setDark(detail.themeDark);
+      document.documentElement.classList.toggle("dark-theme", detail.themeDark);
+      document.documentElement.classList.toggle("light-theme", !detail.themeDark);
+    };
+    window.addEventListener("sas_settings_changed", handler);
+    return () => window.removeEventListener("sas_settings_changed", handler);
   }, []);
 
   const stopPolling = useCallback(() => {
@@ -265,36 +279,11 @@ export default function LecturerAttendancePage() {
       const prev = saved ? JSON.parse(saved) : {};
       const merged = { ...prev, themeDark: next };
       localStorage.setItem("sas_settings", JSON.stringify(merged));
-      document.documentElement.style.colorScheme = next ? "dark" : "light";
+      document.documentElement.classList.toggle("dark-theme", next);
+      document.documentElement.classList.toggle("light-theme", !next);
       window.dispatchEvent(new CustomEvent("sas_settings_changed" as any, { detail: merged }));
     } catch {}
   };
-
-  const exportCsv = useCallback(() => {
-    if (!filtered.length) {
-      alert("Không có dữ liệu để xuất");
-      return;
-    }
-    const header = ["MaSV", "HoTen", "Email", "TrangThai", "ThoiGian", "GhiChu"];
-    const rows = filtered.map((s) => [
-      s.studentId,
-      s.fullName,
-      s.email || "",
-      s.status,
-      s.markedAt || "",
-      s.note || "",
-    ]);
-    const csv = [header, ...rows]
-      .map((r) => r.map((v) => `"${String(v ?? "").replace(/"/g, '""')}"`).join(","))
-      .join("\n");
-    const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `${cls || "class"}-attendance.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
-  }, [filtered, cls]);
 
   const pollSession = useCallback(
     (sessionId: number) => {
@@ -314,7 +303,7 @@ export default function LecturerAttendancePage() {
       }, 5000);
       setPolling(timer);
     },
-    [stopPolling]
+    [stopPolling, updateQrPreview]
   );
 
   const fetchSlots = useCallback(
@@ -413,6 +402,7 @@ export default function LecturerAttendancePage() {
         const summary = payload.data;
         await loadSessionDetail(summary.id);
         fetchHistory(classId, slotId);
+        setSessionNotice(null);
       } catch (err: any) {
         setError(err.message || "Không thể tạo buổi điểm danh");
       } finally {
@@ -428,6 +418,7 @@ export default function LecturerAttendancePage() {
       setSession(null);
       setStudents([]);
       setQrImage(null);
+      setSessionNotice(null);
       stopPolling();
       if (classId) {
         fetchSlots(classId);
@@ -465,6 +456,60 @@ export default function LecturerAttendancePage() {
     setRequirements(SESSION_REQUIREMENTS[session.type] || []);
   }, [session, updateQrPreview]);
 
+  useEffect(() => {
+    if (!session || session.type === "manual") {
+      setTimeLeft(null);
+      return;
+    }
+    if (!session.expiresAt) {
+      setTimeLeft(null);
+      return;
+    }
+    const update = () => {
+      const diff = new Date(session.expiresAt!).getTime() - Date.now();
+      setTimeLeft(diff / 1000);
+    };
+    update();
+    const interval = window.setInterval(update, 250);
+    return () => window.clearInterval(interval);
+  }, [session?.id, session?.expiresAt, session?.type]);
+
+  useEffect(() => {
+    if (!session || session.type === "manual") return;
+    if (session.status !== "active") return;
+    if (session.attempts >= session.maxResets) return;
+    if (timeLeft == null || timeLeft > 0) return;
+    if (autoResetPending || closingSession) return;
+
+    let cancelled = false;
+
+    const doReset = async () => {
+      setAutoResetPending(true);
+      try {
+        await fetchJson<{ success: boolean; data: SessionSummary }>(
+          `${API_BASE}/sessions/${session.id}/reset`,
+          {
+            method: "POST",
+          }
+        );
+        await loadSessionDetail(session.id);
+      } catch (err) {
+        console.error("auto reset session error", err);
+        await loadSessionDetail(session.id).catch(() => {});
+      } finally {
+        if (!cancelled) {
+          setAutoResetPending(false);
+        }
+      }
+    };
+
+    doReset();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [session?.id, session?.type, session?.status, session?.attempts, session?.maxResets, timeLeft, autoResetPending, closingSession, loadSessionDetail]);
+
   const handleCreateSession = useCallback(() => {
     if (!cls || slot == null) {
       setError("Vui lòng chọn lớp và slot");
@@ -481,28 +526,33 @@ export default function LecturerAttendancePage() {
         setSession(null);
         setStudents([]);
         setQrImage(null);
+        setSessionNotice(null);
       }
     },
     [session, stopPolling]
   );
 
-  const handleReset = useCallback(async () => {
+  const handleCloseSession = useCallback(async () => {
     if (!session) return;
     try {
-      setResetLoading(true);
-      const payload = await fetchJson<{ success: boolean; data: SessionSummary }>(
-        `${API_BASE}/sessions/${session.id}/reset`,
+      setClosingSession(true);
+      setSessionNotice(null);
+      await fetchJson<{ success: boolean; data: SessionSummary }>(
+        `${API_BASE}/sessions/${session.id}/close`,
         {
           method: "POST",
         }
       );
-      await loadSessionDetail(payload.data.id);
+      await loadSessionDetail(session.id);
+      stopPolling();
+      setSessionNotice({ type: "success", message: "Phiên điểm danh thành công" });
     } catch (err: any) {
-      alert(err.message || "Không thể reset mã");
+      console.error("close session error", err);
+      setSessionNotice({ type: "error", message: "Phiên điểm danh thất bại" });
     } finally {
-      setResetLoading(false);
+      setClosingSession(false);
     }
-  }, [session, loadSessionDetail]);
+  }, [session, loadSessionDetail, stopPolling]);
 
   const handleManualUpdate = useCallback(async () => {
     if (!session || !students.length) return;
@@ -547,7 +597,7 @@ export default function LecturerAttendancePage() {
   );
 
   const Shell = ({ children }: { children: React.ReactNode }) => (
-    <div className={`layout ${collapsed ? "collapsed" : ""}`}>
+    <div className={`layout ${collapsed ? "collapsed" : ""} ${dark ? '' : 'light-theme'}`}>
       <aside className="sidebar">
         <div className="side-header">
           <button className="collapse-btn" onClick={() => setCollapsed(!collapsed)} title={collapsed ? "Mở rộng" : "Thu gọn"}>
@@ -672,8 +722,13 @@ export default function LecturerAttendancePage() {
                 </div>
                 <div className="qr-meta">
                   <div className="time-left">Trạng thái: {session.status}</div>
-                  {session.type !== "manual" && <div className="time-left">Còn lại: {timeLeftDisplay}</div>}
-                  {session.type !== "manual" && <div className="time-left">Đã reset: {session.attempts}/{3}</div>}
+                  {session.type !== "manual" && <div className="time-left">Còn lại: {countdownDisplay}</div>}
+                  {session.type !== "manual" && (
+                    <div className="time-left">Lượt sử dụng mã: {session.attempts}/{session.maxResets}</div>
+                  )}
+                  {session.type !== "manual" && (
+                    <div className="time-left">Lượt còn lại: {Math.max(0, session.attemptsRemaining)}</div>
+                  )}
                   {typeof session.totalStudents === "number" && <div className="time-left">Tổng SV: {session.totalStudents}</div>}
                   {session.type === "manual" && (
                     <div className="time-left">Chọn sinh viên có mặt và nhấn lưu để cập nhật.</div>
@@ -681,19 +736,31 @@ export default function LecturerAttendancePage() {
                 </div>
               </div>
               <div className="actions end">
-                <button className="btn-outline" onClick={exportCsv}>
-                  Xuất Excel
-                </button>
                 {session.type !== "manual" && (
                   <button
                     className="btn-primary"
-                    onClick={handleReset}
-                    disabled={resetLoading || session.attempts >= 3 || session.status !== "active"}
+                    onClick={handleCloseSession}
+                    disabled={closingSession}
                   >
-                    ♻️ {resetLoading ? "Đang reset" : "Reset mã"}
+                    ✅ {closingSession ? "Đang kết thúc..." : "Kết thúc phiên"}
                   </button>
                 )}
               </div>
+              {sessionNotice && (
+                <div
+                  className="time-left"
+                  style={{
+                    marginTop: 12,
+                    padding: "10px 12px",
+                    borderRadius: 8,
+                    background: sessionNotice.type === "success" ? "#dcfce7" : "#fee2e2",
+                    color: sessionNotice.type === "success" ? "#166534" : "#b91c1c",
+                    fontWeight: 500,
+                  }}
+                >
+                  {sessionNotice.message}
+                </div>
+              )}
             </div>
           )}
 

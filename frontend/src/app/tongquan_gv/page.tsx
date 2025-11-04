@@ -13,7 +13,7 @@ const SETTINGS_CHANGED_EVENT = "sas_settings_changed";
 export default function LecturerDashboardPage() {
   const router = useRouter();
   const [collapsed, setCollapsed] = useState(false);
-  const [dark, setDark] = useState(false);
+  const [dark, setDark] = useState(true);
   const [notifCount] = useState(3);
   const [name] = useState("Nguyễn Văn A");
 
@@ -38,8 +38,10 @@ export default function LecturerDashboardPage() {
       const saved = localStorage.getItem("sas_settings");
       if (saved) {
         const s = JSON.parse(saved);
-        setDark(!!s.themeDark);
-        document.documentElement.style.colorScheme = s.themeDark ? "dark" : "light";
+        const darkTheme = s.themeDark ?? true;
+        setDark(darkTheme);
+        document.documentElement.classList.toggle("dark-theme", darkTheme);
+        document.documentElement.classList.toggle("light-theme", !darkTheme);
       }
     } catch {}
   }, []);
@@ -52,7 +54,8 @@ export default function LecturerDashboardPage() {
       const prev = saved ? JSON.parse(saved) : {};
       const merged = { ...prev, themeDark: next };
       localStorage.setItem("sas_settings", JSON.stringify(merged));
-      document.documentElement.style.colorScheme = next ? "dark" : "light";
+      document.documentElement.classList.toggle("dark-theme", next);
+      document.documentElement.classList.toggle("light-theme", !next);
       window.dispatchEvent(new CustomEvent<SettingsEventDetail>(SETTINGS_CHANGED_EVENT, { detail: merged }));
     } catch {}
   };
@@ -67,15 +70,16 @@ export default function LecturerDashboardPage() {
     const handler = (event: Event) => {
       const detail = (event as CustomEvent<SettingsEventDetail>).detail;
       if (!detail) return;
-      document.documentElement.style.colorScheme = detail.themeDark ? "dark" : "light";
       setDark(detail.themeDark);
+      document.documentElement.classList.toggle("dark-theme", detail.themeDark);
+      document.documentElement.classList.toggle("light-theme", !detail.themeDark);
     };
     window.addEventListener(SETTINGS_CHANGED_EVENT, handler);
     return () => window.removeEventListener(SETTINGS_CHANGED_EVENT, handler);
   }, []);
 
   const Shell = ({ children }: { children: React.ReactNode }) => (
-    <div className={`layout ${collapsed ? "collapsed" : ""}`}>
+    <div className={`layout ${collapsed ? "collapsed" : ""} ${dark ? '' : 'light-theme'}`}>
       <aside className="sidebar">
         <div className="side-header">
           <button className="collapse-btn" onClick={() => setCollapsed(!collapsed)} title={collapsed ? "Mở rộng" : "Thu gọn"}>

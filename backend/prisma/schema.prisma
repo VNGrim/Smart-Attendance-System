@@ -17,45 +17,42 @@ model accounts {
   teachers  teachers[]
 }
 
-
-
-
 model announcements {
-  id           Int       @id @default(autoincrement())
-  title        String    @db.VarChar(200)
-  content      String    @db.Text
-  created_at   DateTime  @default(now()) @db.Timestamp(0)
-  category     String    @default("general") @db.VarChar(50)
-  code         String?   @unique @default(uuid()) @db.VarChar(64)
+  id           Int                    @id @default(autoincrement())
+  title        String                 @db.VarChar(200)
+  content      String
+  created_at   DateTime               @default(now()) @db.Timestamp(0)
+  category     String                 @default("general") @db.VarChar(50)
+  code         String?                @unique @default(uuid()) @db.VarChar(64)
   history      Json?
   recipients   Json?
-  allow_reply  Boolean   @default(false)
-  reply_until  DateTime? @db.Timestamp(0)
-  scheduled_at DateTime? @db.Timestamp(0)
-  send_time    DateTime? @db.Timestamp(0)
-  sender       String    @default("Admin") @db.VarChar(100)
-  status       String    @default("Đã gửi") @db.VarChar(30)
-  target       String    @default("Toàn trường") @db.VarChar(255)
-  type         String    @default("Khác") @db.VarChar(50)
-  updated_at   DateTime  @default(now()) @updatedAt @db.Timestamp(0)
+  allow_reply  Boolean                @default(false)
+  reply_until  DateTime?              @db.Timestamp(0)
+  scheduled_at DateTime?              @db.Timestamp(0)
+  send_time    DateTime?              @db.Timestamp(0)
+  sender       String                 @default("Admin") @db.VarChar(100)
+  status       String                 @default("Đã gửi") @db.VarChar(30)
+  target       String                 @default("Toàn trường") @db.VarChar(255)
+  type         String                 @default("Khác") @db.VarChar(50)
+  updated_at   DateTime               @default(now()) @updatedAt @db.Timestamp(0)
   replies      announcement_replies[]
 
   @@index([created_at])
 }
 
 model announcement_replies {
-  id              Int            @id @default(autoincrement())
+  id              Int           @id @default(autoincrement())
   announcement_id Int
-  author_type     String         @db.VarChar(20)
-  author_code     String?        @db.VarChar(50)
-  author_name     String?        @db.VarChar(150)
-  author_class    String?        @db.VarChar(100)
-  author_subject  String?        @db.VarChar(150)
-  content         String         @db.Text
-  created_at      DateTime       @default(now()) @db.Timestamp(0)
-  read_at         DateTime?      @db.Timestamp(0)
+  author_type     String        @db.VarChar(20)
+  author_code     String?       @db.VarChar(50)
+  author_name     String?       @db.VarChar(150)
+  author_class    String?       @db.VarChar(100)
+  author_subject  String?       @db.VarChar(150)
+  content         String
+  created_at      DateTime      @default(now()) @db.Timestamp(0)
+  read_at         DateTime?     @db.Timestamp(0)
   metadata        Json?
-  announcement    announcements  @relation(fields: [announcement_id], references: [id], onDelete: Cascade, map: "announcement_replies_announcement_fk")
+  announcement    announcements @relation(fields: [announcement_id], references: [id], onDelete: Cascade, map: "announcement_replies_announcement_fk")
 
   @@index([announcement_id], map: "announcement_replies_announcement_idx")
   @@index([author_code], map: "announcement_replies_author_idx")
@@ -63,170 +60,166 @@ model announcement_replies {
 }
 
 model students {
-  student_id   String         @id @db.VarChar(20)
-  full_name    String         @db.VarChar(100)
-  course       String         @db.VarChar(10)
-  classes      String?        @db.VarChar(255)
-  major        String?        @db.VarChar(100)
-  advisor_name String?        @db.VarChar(100)
-  email        String?        @db.VarChar(100)
-  phone        String?        @db.VarChar(20)
-  avatar_url   String?        @db.VarChar(255)
-  status       student_status @default(active)
-  account_id   Int?
-  created_at   DateTime?      @default(now()) @db.Timestamp(0)
-  updated_at   DateTime       @default(now()) @updatedAt @db.Timestamp(0)
-  accounts     accounts?      @relation(fields: [account_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "students_ibfk_1")
+  student_id         String               @id @db.VarChar(20)
+  full_name          String               @db.VarChar(100)
+  course             String               @db.VarChar(10)
+  classes            String?              @db.VarChar(255)
+  major              String?              @db.VarChar(100)
+  advisor_name       String?              @db.VarChar(100)
+  email              String?              @db.VarChar(100)
+  phone              String?              @db.VarChar(20)
+  avatar_url         String?              @db.VarChar(255)
+  status             student_status       @default(active)
+  account_id         Int?
+  created_at         DateTime?            @default(now()) @db.Timestamp(0)
+  updated_at         DateTime             @default(now()) @updatedAt @db.Timestamp(0)
   attendance_records attendance_records[]
+  accounts           accounts?            @relation(fields: [account_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "students_ibfk_1")
 
-  @@index([account_id], map: "students_account_id_idx")
+  @@index([account_id])
 }
 
 model teachers {
-  teacher_id String    @id @db.VarChar(20)
-  full_name  String    @db.VarChar(100)
-  subject    String    @db.VarChar(100)
-  classes    String?   @db.VarChar(255)
-  email      String?   @db.VarChar(100)
-  phone      String?   @db.VarChar(20)
-  faculty    String?   @db.VarChar(100)
-  status     String    @default("Đang dạy") @db.VarChar(50)
-  account_id Int?
-  created_at DateTime? @default(now()) @db.Timestamp(0)
-  updated_at DateTime  @default(now()) @updatedAt @db.Timestamp(0)
-  accounts   accounts? @relation(fields: [account_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "teachers_ibfk_1")
-  classAssignments classes[] @relation("TeacherClasses")
-  availability teacher_availability[]
+  teacher_id       String                 @id @db.VarChar(20)
+  full_name        String                 @db.VarChar(100)
+  subject          String                 @db.VarChar(100)
+  classes          String?                @db.VarChar(255)
+  email            String?                @db.VarChar(100)
+  phone            String?                @db.VarChar(20)
+  faculty          String?                @db.VarChar(100)
+  avatar_url       String?                @db.VarChar(255)
+  status           String                 @default("Đang dạy") @db.VarChar(50)
+  account_id       Int?
+  created_at       DateTime?              @default(now()) @db.Timestamp(0)
+  updated_at       DateTime               @default(now()) @updatedAt @db.Timestamp(0)
+  classAssignments classes[]              @relation("TeacherClasses")
+  availability     teacher_availability[]
+  accounts         accounts?              @relation(fields: [account_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "teachers_ibfk_1")
 
-  @@index([account_id], map: "teachers_account_id_idx")
+  @@index([account_id])
 }
 
 model classes {
-  class_id     String   @id @db.VarChar(20)
-  class_name   String   @db.VarChar(150)
-  subject_code String   @db.VarChar(20)
-  subject_name String   @db.VarChar(150)
-  cohort       String   @db.VarChar(10)
-  major        String?  @db.VarChar(100)
-  teacher_id   String?  @db.VarChar(20)
-  status       String   @default("Đang hoạt động") @db.VarChar(30)
-  room         String?  @db.VarChar(50)
-  schedule     String?  @db.VarChar(255)
-  semester     String?  @db.VarChar(20)
-  school_year  String?  @db.VarChar(20)
-  description  String?  @db.Text
-  created_at   DateTime @default(now()) @db.Timestamp(0)
-  updated_at   DateTime @default(now()) @updatedAt @db.Timestamp(0)
-  teacher      teachers? @relation("TeacherClasses", fields: [teacher_id], references: [teacher_id], onDelete: SetNull, onUpdate: NoAction)
+  class_id            String                @id @db.VarChar(20)
+  class_name          String                @db.VarChar(150)
+  subject_code        String                @db.VarChar(20)
+  subject_name        String                @db.VarChar(150)
+  cohort              String                @db.VarChar(10)
+  major               String?               @db.VarChar(100)
+  teacher_id          String?               @db.VarChar(20)
+  status              String                @default("Đang hoạt động") @db.VarChar(30)
+  room                String?               @db.VarChar(50)
+  schedule            String?               @db.VarChar(255)
+  semester            String?               @db.VarChar(20)
+  school_year         String?               @db.VarChar(20)
+  description         String?
+  created_at          DateTime              @default(now()) @db.Timestamp(0)
+  updated_at          DateTime              @default(now()) @updatedAt @db.Timestamp(0)
   attendance_sessions attendance_sessions[]
+  teacher             teachers?             @relation("TeacherClasses", fields: [teacher_id], references: [teacher_id], onUpdate: NoAction)
 
   @@index([teacher_id], map: "classes_teacher_idx")
-  @@index([cohort], map: "classes_cohort_idx")
+  @@index([cohort])
 }
 
 model time_slots {
-  slot_id    Int         @id
-  start_time DateTime    @db.Time(0)
-  end_time   DateTime    @db.Time(0)
-  timetable  timetable[]
-  teacherAvailability teacher_availability[]
-  roomAvailability    room_availability[]
+  slot_id             Int                    @id
+  start_time          DateTime               @db.Time(0)
+  end_time            DateTime               @db.Time(0)
   attendance_sessions attendance_sessions[]
+  roomAvailability    room_availability[]
+  teacherAvailability teacher_availability[]
+  timetable           timetable[]
 
   @@index([slot_id], map: "time_slots_slot_idx")
 }
 
 model timetable {
-  id          Int                   @id @default(autoincrement())
-  classes     String                @db.VarChar(100)
-  day_of_week timetable_day_of_week
-  slot_id     Int
-  room        String                @db.VarChar(50)
-  week_key    String                @default("UNASSIGNED") @db.VarChar(20)
-  date        DateTime?             @db.Date
-  teacher_id  String?               @db.VarChar(20)
-  teacher_name String?              @db.VarChar(150)
-  subject_name String?              @db.VarChar(150)
-  room_name   String?               @db.VarChar(150)
-  time_slots  time_slots            @relation(fields: [slot_id], references: [slot_id], onDelete: Cascade, map: "timetable_ibfk_1")
+  id           Int                   @id @default(autoincrement())
+  classes      String                @db.VarChar(100)
+  day_of_week  timetable_day_of_week
+  slot_id      Int
+  room         String                @db.VarChar(50)
+  week_key     String                @default("UNASSIGNED") @db.VarChar(20)
+  date         DateTime?             @db.Date
+  teacher_id   String?               @db.VarChar(20)
+  teacher_name String?               @db.VarChar(150)
+  subject_name String?               @db.VarChar(150)
+  room_name    String?               @db.VarChar(150)
+  time_slots   time_slots            @relation(fields: [slot_id], references: [slot_id], onDelete: Cascade, map: "timetable_ibfk_1")
 
   @@index([week_key, day_of_week, slot_id], map: "timetable_week_slot_idx")
   @@index([week_key, teacher_id], map: "timetable_week_teacher_idx")
   @@index([slot_id], map: "slot_id")
-  @@index([date], map: "timetable_date_idx")
+  @@index([date])
 }
 
 model rooms {
-  room_id   Int      @id @default(autoincrement())
-  code      String   @unique @db.VarChar(50)
-  name      String?  @db.VarChar(150)
-  capacity  Int?
-  location  String?  @db.VarChar(150)
-  notes     String?  @db.Text
-  created_at DateTime @default(now()) @db.Timestamp(0)
-  updated_at DateTime @default(now()) @updatedAt @db.Timestamp(0)
-
+  room_id          Int                 @id @default(autoincrement())
+  code             String              @unique @db.VarChar(50)
+  name             String?             @db.VarChar(150)
+  capacity         Int?
+  location         String?             @db.VarChar(150)
+  notes            String?
+  created_at       DateTime            @default(now()) @db.Timestamp(0)
+  updated_at       DateTime            @default(now()) @updatedAt @db.Timestamp(0)
   roomAvailability room_availability[]
 }
 
 model teacher_availability {
-  id         Int                   @id @default(autoincrement())
-  teacher_id String                @db.VarChar(20)
-  day_of_week timetable_day_of_week
-  slot_id    Int
-  is_available Boolean             @default(true)
-
-  teacher   teachers?  @relation(fields: [teacher_id], references: [teacher_id], onDelete: Cascade, onUpdate: NoAction, map: "teacher_availability_teacher_fk")
-  time_slot time_slots @relation(fields: [slot_id], references: [slot_id], onDelete: Cascade, onUpdate: NoAction, map: "teacher_availability_slot_fk")
+  id           Int                   @id @default(autoincrement())
+  teacher_id   String                @db.VarChar(20)
+  day_of_week  timetable_day_of_week
+  slot_id      Int
+  is_available Boolean               @default(true)
+  time_slot    time_slots            @relation(fields: [slot_id], references: [slot_id], onDelete: Cascade, onUpdate: NoAction, map: "teacher_availability_slot_fk")
+  teacher      teachers              @relation(fields: [teacher_id], references: [teacher_id], onDelete: Cascade, onUpdate: NoAction, map: "teacher_availability_teacher_fk")
 
   @@index([teacher_id, day_of_week, slot_id], map: "teacher_availability_idx")
   @@index([slot_id], map: "teacher_availability_slot_idx")
 }
 
 model attendance_sessions {
-  id         Int            @id @default(autoincrement())
-  class_id   String         @db.VarChar(20)
-  slot_id    Int
-  day        DateTime       @db.Date
-  code       String         @db.VarChar(16)
-  expires_at DateTime       @db.Timestamp(0)
-  type       SessionType
-  status     SessionStatus  @default(active)
-  attempts   Int            @default(0)
-  created_at DateTime       @default(now()) @db.Timestamp(0)
-  updated_at DateTime       @default(now()) @updatedAt @db.Timestamp(0)
-
-  session_class classes     @relation(fields: [class_id], references: [class_id], onDelete: Cascade, map: "attendance_sessions_class_fk")
-  session_slot  time_slots  @relation(fields: [slot_id], references: [slot_id], onDelete: Cascade, map: "attendance_sessions_slot_fk")
+  id            Int                  @id @default(autoincrement())
+  class_id      String               @db.VarChar(20)
+  slot_id       Int
+  day           DateTime             @db.Date
+  code          String               @db.VarChar(16)
+  expires_at    DateTime             @db.Timestamp(0)
+  type          SessionType
+  status        SessionStatus        @default(active)
+  attempts      Int                  @default(0)
+  created_at    DateTime             @default(now()) @db.Timestamp(0)
+  updated_at    DateTime             @default(now()) @updatedAt @db.Timestamp(0)
   records       attendance_records[]
+  session_class classes              @relation(fields: [class_id], references: [class_id], onDelete: Cascade, map: "attendance_sessions_class_fk")
+  session_slot  time_slots           @relation(fields: [slot_id], references: [slot_id], onDelete: Cascade, map: "attendance_sessions_slot_fk")
 
   @@index([class_id, day, slot_id], map: "attendance_sessions_class_day_slot_idx")
 }
 
 model attendance_records {
-  id         Int               @id @default(autoincrement())
+  id         Int                 @id @default(autoincrement())
   session_id Int
-  student_id String            @db.VarChar(20)
-  status     AttendanceStatus  @default(present)
-  marked_at  DateTime          @default(now()) @db.Timestamp(0)
-  note       String?           @db.VarChar(255)
-
-  session attendance_sessions  @relation(fields: [session_id], references: [id], onDelete: Cascade, map: "attendance_records_session_fk")
-  student students             @relation(fields: [student_id], references: [student_id], onDelete: Cascade, map: "attendance_records_student_fk")
+  student_id String              @db.VarChar(20)
+  status     AttendanceStatus    @default(present)
+  marked_at  DateTime            @default(now()) @db.Timestamp(0)
+  note       String?             @db.VarChar(255)
+  session    attendance_sessions @relation(fields: [session_id], references: [id], onDelete: Cascade, map: "attendance_records_session_fk")
+  student    students            @relation(fields: [student_id], references: [student_id], onDelete: Cascade, map: "attendance_records_student_fk")
 
   @@unique([session_id, student_id], map: "attendance_records_session_student_unique")
   @@index([student_id], map: "attendance_records_student_idx")
 }
 
 model room_availability {
-  id         Int                   @id @default(autoincrement())
-  room_code  String                @db.VarChar(50)
-  day_of_week timetable_day_of_week
-  slot_id    Int
-  is_available Boolean             @default(true)
-
-  room      rooms?      @relation(fields: [room_code], references: [code], onDelete: Cascade, onUpdate: NoAction, map: "room_availability_room_fk")
-  time_slot time_slots @relation(fields: [slot_id], references: [slot_id], onDelete: Cascade, onUpdate: NoAction, map: "room_availability_slot_fk")
+  id           Int                   @id @default(autoincrement())
+  room_code    String                @db.VarChar(50)
+  day_of_week  timetable_day_of_week
+  slot_id      Int
+  is_available Boolean               @default(true)
+  room         rooms                 @relation(fields: [room_code], references: [code], onDelete: Cascade, onUpdate: NoAction, map: "room_availability_room_fk")
+  time_slot    time_slots            @relation(fields: [slot_id], references: [slot_id], onDelete: Cascade, onUpdate: NoAction, map: "room_availability_slot_fk")
 
   @@index([room_code, day_of_week, slot_id], map: "room_availability_idx")
   @@index([slot_id], map: "room_availability_slot_idx")
@@ -248,6 +241,15 @@ model cohorts {
   created_at DateTime @default(now()) @db.Timestamp(0)
 
   @@index([year])
+}
+
+model File {
+  id        Int      @id @default(autoincrement())
+  filename  String
+  original  String
+  mimetype  String
+  size      Int
+  createdAt DateTime @default(now())
 }
 
 enum timetable_day_of_week {
@@ -287,14 +289,4 @@ enum AttendanceStatus {
 enum student_status {
   active
   locked
-}
-
-
-model File {
-  id        Int      @id @default(autoincrement())
-  filename  String
-  original  String
-  mimetype  String
-  size      Int
-  createdAt DateTime @default(now())
 }

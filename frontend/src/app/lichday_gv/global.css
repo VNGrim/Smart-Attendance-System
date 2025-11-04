@@ -65,3 +65,106 @@ body { margin: 0; font-family: 'Inter', sans-serif; background: var(--background
 @media (prefers-color-scheme: dark) { .input, textarea.input { background: rgba(15,23,42,0.6); color: var(--foreground); } }
 @media (max-width: 1024px) { .cal-head, .cal-grid { grid-template-columns: 60px repeat(7, 1fr); } .event { left: 72px; } }
 @media (max-width: 640px) { .layout, .layout.collapsed { grid-template-columns: 1fr; grid-template-rows: 72px auto 1fr; grid-template-areas: "topbar" "sidebar" "main"; } }
+
+/* Light Theme */
+.layout.light-theme {
+  --background: #f8fafc;
+  --foreground: #0f172a;
+  --card-bg: #ffffff;
+  --card-border: rgba(0,0,0,0.1);
+  --shadow-soft: 0 8px 24px rgba(0,0,0,0.05);
+}
+
+/* Nền chính - màu trắng */
+.layout.light-theme .main { background: var(--background) !important; }
+
+/* Topbar và controls - GIỮ NGUYÊN MÀU TỐI (không áp dụng light theme) */
+/* Để topbar và các nút giữ màu tối, không override */
+
+/* Card lịch - màu trắng ngọc (ivory/pearl white) */
+.layout.light-theme .calendar, 
+.layout.light-theme .month { 
+  background: linear-gradient(135deg, #fffaf0 0%, #fdf5e6 100%);
+  border: 2px solid #d2b48c;
+  box-shadow: 0 4px 16px rgba(210,180,140,0.3);
+}
+
+/* Tiêu đề section */
+.layout.light-theme .section-title { color: var(--foreground); }
+
+/* Inputs và selects - nền sáng */
+.layout.light-theme .input, 
+.layout.light-theme select, 
+.layout.light-theme .filter-bar select { 
+  background: #f3f4f6; 
+  border: 1px solid var(--card-border); 
+  color: var(--foreground); 
+}
+
+/* Header của lịch và slot */
+.layout.light-theme .cal-head, 
+.layout.light-theme .slot { 
+  background: rgba(255,250,240,0.8); 
+  color: var(--foreground); 
+}
+
+/* Cells - màu ngọc nhẹ */
+.layout.light-theme .cell { 
+  background: rgba(253,245,230,0.5); 
+  border: 1px solid rgba(0,0,0,0.3); 
+}
+
+/* Column headers */
+.layout.light-theme .col-head, 
+.layout.light-theme .m-col-head { 
+  color: #334155; 
+  font-weight: 900; 
+}
+
+/* Slot header */
+.layout.light-theme .slot-head { 
+  background: rgba(255,250,240,0.9); 
+  border: 1px solid #000; 
+  color: #475569; 
+}
+
+/* Month view cells */
+.layout.light-theme .m-cell { 
+  background: rgba(253,245,230,0.4); 
+  border: 1px solid rgba(0,0,0,0.3); 
+}
+
+.layout.light-theme .m-date { 
+  color: #64748b; 
+}
+
+/* Drawer panel */
+.layout.light-theme .drawer-panel { 
+  background: var(--card-bg); 
+  border-left: 1px solid var(--card-border); 
+  color: var(--foreground); 
+}
+
+.layout.light-theme .drawer-head { 
+  border-bottom: 1px solid var(--card-border); 
+  color: var(--foreground); 
+}
+
+/* Event details */
+.layout.light-theme .k { 
+  color: #64748b; 
+}
+
+.layout.light-theme .v { 
+  color: var(--foreground); 
+}
+
+/* Event trong lịch - giữ màu gốc */
+.layout.light-theme .evt-title { 
+  color: #fff; 
+  text-shadow: 0 1px 2px rgba(0,0,0,0.3); 
+}
+
+.layout.light-theme .evt-sub { 
+  color: rgba(255,255,255,0.95); 
+}

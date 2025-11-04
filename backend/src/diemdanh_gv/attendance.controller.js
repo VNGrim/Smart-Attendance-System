@@ -56,6 +56,7 @@ const serializeSession = (session) => ({
   type: session.type,
   status: session.status,
   attempts: session.attempts,
+  maxResets: MAX_RESETS,
   attemptsRemaining: Math.max(0, MAX_RESETS - session.attempts),
   expiresAt: session.expires_at ? dayjs(session.expires_at).toISOString() : null,
   createdAt: dayjs(session.created_at).toISOString(),
@@ -120,12 +121,13 @@ const listClassSlots = async (req, res) => {
   try {
     const teacherId = extractTeacherId(req);
     const { classId } = req.params;
-    const date = toDateOnly(req.query?.date);
-    console.log("[Attendance] listClassSlots", { classId, date: date.format("YYYY-MM-DD") });
+    const targetDay = toDateOnly(req.query?.date);
+    console.log("[Attendance] listClassSlots", { classId, date: targetDay.format("YYYY-MM-DD") });
     await ensureTeacherOwnsClass(teacherId, classId);
-    const dayKey = getDayKeyFromDate(date);
+    const dayKey = getDayKeyFromDate(targetDay);
     console.log("[Attendance] dayKey", dayKey);
-    const slots = await getClassSlotsByDay(classId, dayKey);
+    const slots = await getClassSlotsByDay(classId, dayKey, targetDay.toDate());
+
     console.log("[Attendance] slots length", slots.length);
     const data = slots.map((slot) => ({
       timetableId: slot.id,
@@ -179,6 +181,8 @@ const createOrGetSession = async (req, res) => {
       ? now.add(SESSION_DURATION_SECONDS, "second").toDate()
       : now.toDate();
 
+    const initialAttempts = type === "manual" ? 0 : 1;
+
     const session = await createSession({
       class_id: normalizeClassId(classId),
       slot_id: slot,
@@ -186,7 +190,7 @@ const createOrGetSession = async (req, res) => {
       code,
       type,
       status: "active",
-      attempts: 0,
+      attempts: initialAttempts,
       expires_at: expiresAt,
     });
 
@@ -212,8 +216,11 @@ const resetSessionCode = async (req, res) => {
       return res.status(400).json({ success: false, message: "Hình thức thủ công không hỗ trợ reset mã" });
     }
     if (session.attempts >= MAX_RESETS) {
-      await updateSession(session.id, { status: "closed" });
-      return res.status(409).json({ success: false, message: "Đã hết lượt reset mã" });
+      const updated = await updateSession(session.id, {
+        status: "closed",
+        expires_at: dayjs().utc().toDate(),
+      });
+      return res.status(409).json({ success: false, message: "Đã hết lượt reset mã", data: serializeSession(updated) });
     }
 
     const now = dayjs().utc();
@@ -230,6 +237,30 @@ const resetSessionCode = async (req, res) => {
     if (error.status === 403) return res.status(403).json({ success: false, message: "Bạn không có quyền với lớp này" });
     console.error("attendance reset session error:", error);
     return res.status(500).json({ success: false, message: "Không thể reset mã" });
+  }
+};
+
+const closeSession = async (req, res) => {
+  try {
+    const teacherId = extractTeacherId(req);
+    const id = Number(req.params.id);
+    if (!id) return res.status(400).json({ success: false, message: "Thiếu session id" });
+
+    const session = await getSessionWithClass(id);
+    if (!session) return res.status(404).json({ success: false, message: "Không tìm thấy buổi điểm danh" });
+    await ensureTeacherOwnsClass(teacherId, session.session_class.class_id);
+
+    const updated = await updateSession(session.id, {
+      status: "closed",
+      expires_at: dayjs().utc().toDate(),
+    });
+
+    return jsonResponse(res, { success: true, data: serializeSession(updated) });
+  } catch (error) {
+    if (error.status === 404) return res.status(404).json({ success: false, message: "Không tìm thấy lớp" });
+    if (error.status === 403) return res.status(403).json({ success: false, message: "Bạn không có quyền với lớp này" });
+    console.error("attendance close session error:", error);
+    return res.status(500).json({ success: false, message: "Không thể kết thúc buổi điểm danh" });
   }
 };
 
@@ -412,4 +443,5 @@ module.exports = {
   getSessionStudents,
   updateManualAttendance,
   getClassHistory: getClassHistoryHandler,
+  closeSession,
 };

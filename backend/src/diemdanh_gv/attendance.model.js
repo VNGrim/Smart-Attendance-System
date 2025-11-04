@@ -39,13 +39,21 @@ async function getClassById(classId) {
   return prisma.classes.findUnique({ where: { class_id: classId } });
 }
 
-async function getClassSlotsByDay(classId, dayKey) {
+async function getClassSlotsByDay(classId, dayKey, targetDate) {
   await prisma.$ready;
+  const where = {
+    classes: classId,
+    ...(dayKey ? { day_of_week: dayKey } : {}),
+  };
+  if (targetDate) {
+    where.OR = [
+      { date: targetDate },
+      { date: null },
+    ];
+  }
+
   return prisma.timetable.findMany({
-    where: {
-      classes: classId,
-      ...(dayKey ? { day_of_week: dayKey } : {}),
-    },
+    where,
     select: {
       id: true,
       slot_id: true,

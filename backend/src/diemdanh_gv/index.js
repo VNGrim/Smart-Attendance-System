@@ -11,6 +11,7 @@ router.get("/classes", controller.listTeacherClasses);
 router.get("/classes/:classId/slots", controller.listClassSlots);
 router.post("/sessions", controller.createOrGetSession);
 router.post("/sessions/:id/reset", controller.resetSessionCode);
+router.post("/sessions/:id/close", controller.closeSession);
 router.get("/sessions/:id", controller.getSessionDetail);
 router.get("/sessions/:id/students", controller.getSessionStudents);
 router.post("/sessions/:id/manual", controller.updateManualAttendance);
