@@ -96,6 +96,22 @@ const formatReply = (row) => {
 
 class ThongBaoController {
   static formatAnnouncement(record) {
+    // derive attachments from history entries if present
+    let attachments = [];
+    const hist = Array.isArray(record.history) ? record.history : [];
+    for (const item of hist) {
+      if (item && Array.isArray(item.attachments)) {
+        for (const f of item.attachments) {
+          if (f && (f.url || f.stored)) {
+            attachments.push({
+              url: f.url || null,
+              filename: f.filename || f.stored || null,
+              size: typeof f.size === 'number' ? f.size : undefined,
+            });
+          }
+        }
+      }
+    }
     return {
       id: record.id,
       title: record.title,
@@ -107,6 +123,7 @@ class ThongBaoController {
       target: normalizeTarget(record.target),
       allowReply: resolveAllowReply(record),
       replyUntil: normalizeReplyUntil(record),
+      attachments,
     };
   }
 
@@ -146,7 +163,16 @@ class ThongBaoController {
       const filtered = announcements.filter((item) => {
         const target = normalizeTarget(item.target).toLowerCase();
         if (actor.type === 'student') {
-          return target.includes('sinh') || target.includes('toàn');
+          // student can see: global, student-target, or targeted to their class in target or recipients
+          if (target.includes('toàn') || target.includes('toan')) return true;
+          if (target.includes('sinh') || target.includes('student')) return true;
+          const classes = typeof actor.class === 'string'
+            ? actor.class.split(',').map((c) => c.trim()).filter(Boolean)
+            : Array.isArray(actor.class) ? actor.class : [];
+          // match if target equals any class or recipients includes any class
+          const recipients = Array.isArray(item.recipients) ? item.recipients.map(String) : [];
+          const lowerTarget = (item.target || '').trim();
+          return classes.some((cls) => lowerTarget === cls || recipients.includes(cls));
         }
         if (actor.type === 'teacher') {
           if (target.includes('giảng') || target.includes('toàn')) return true;
