@@ -1,4 +1,5 @@
 const ThongBaoModel = require('../thongbao_hienthi/thongbao_hienthi.model');
+const prisma = require('../config/prisma');
 
 const normalizeBoolean = (value) => {
   if (value == null) return null;
@@ -108,6 +109,87 @@ const resolveTeacherFromRequest = async (req) => {
 };
 
 class ThongBaoGVController {
+  static async getActiveClasses(req, res) {
+    try {
+      const actor = req.user ?? {};
+      const teacher = await ThongBaoModel.getTeacherByAccount(actor.user_code ?? actor.userCode ?? null);
+      const teacherId = teacher?.teacher_id;
+      if (!teacherId) {
+        return res.status(401).json({ success: false, message: 'Không xác định được giảng viên' });
+      }
+      const rows = await prisma.$queryRaw`
+        SELECT class_id, class_name, subject_name, status
+        FROM classes
+        WHERE teacher_id = ${teacherId} AND status = 'Đang hoạt động'
+        ORDER BY class_name ASC
+      `;
+      const data = rows.map(r => ({ id: r.class_id, name: r.class_name, subjectName: r.subject_name }));
+      return res.json({ success: true, data });
+    } catch (error) {
+      console.error('getActiveClasses error:', error);
+      return res.status(500).json({ success: false, message: 'Không thể tải danh sách lớp', detail: error?.message });
+    }
+  }
+
+  static async createAnnouncement(req, res) {
+    try {
+      const actor = req.user ?? {};
+      const teacher = await ThongBaoModel.getTeacherByAccount(actor.user_code ?? actor.userCode ?? null);
+      const teacherId = teacher?.teacher_id;
+      const teacherName = teacher?.full_name || actor.fullName || 'Giảng viên';
+      if (!teacherId) {
+        return res.status(401).json({ success: false, message: 'Không xác định được giảng viên' });
+      }
+
+      const body = req.body || {};
+      const classId = String(body.classId || body.class_id || '').trim();
+      const title = String(body.title || '').trim();
+      const content = String(body.content || '').trim();
+      const allowReply = normalizeBoolean(body.allowReply) ?? false;
+      const replyUntil = body.replyUntil ? new Date(body.replyUntil) : null;
+
+      if (!classId || !title || !content) {
+        return res.status(400).json({ success: false, message: 'Thiếu lớp, tiêu đề hoặc nội dung' });
+      }
+
+      // verify teacher owns class
+      const owns = await prisma.$queryRaw`SELECT 1 FROM classes WHERE class_id = ${classId} AND (teacher_id = ${teacherId} OR teacher_id IS NULL) LIMIT 1`;
+      if (!owns || !owns.length) {
+        return res.status(403).json({ success: false, message: 'Bạn không có quyền gửi thông báo cho lớp này' });
+      }
+
+      // handle attachment
+      let attachments = [];
+      if (req.file) {
+        const url = `/uploads/${req.file.filename}`;
+        attachments.push({ filename: req.file.originalname, stored: req.file.filename, url, size: req.file.size });
+      }
+
+      const historyEntry = { action: 'created', by: 'teacher', teacherId, classId, allowReply, attachments };
+
+      const created = await prisma.announcements.create({
+        data: {
+          title,
+          content,
+          sender: teacherName,
+          target: classId,
+          category: 'class',
+          type: 'Giảng viên',
+          status: 'Đã gửi',
+          send_time: new Date(),
+          allow_reply: allowReply,
+          reply_until: replyUntil || undefined,
+          recipients: [classId],
+          history: [historyEntry],
+        },
+      });
+
+      return res.status(201).json({ success: true, data: { id: created.id } });
+    } catch (error) {
+      console.error('createAnnouncement error:', error);
+      return res.status(500).json({ success: false, message: 'Không thể gửi thông báo', detail: error?.message });
+    }
+  }
   static async getAllAnnouncements(req, res) {
     try {
       const teacher = await resolveTeacherFromRequest(req);

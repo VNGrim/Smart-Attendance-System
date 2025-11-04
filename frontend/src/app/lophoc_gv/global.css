@@ -64,3 +64,28 @@ body { margin: 0; font-family: 'Inter', sans-serif; background: var(--background
 @media (prefers-color-scheme: dark) { .class-item:hover { background: rgba(255,255,255,0.06); } .input { background: rgba(15,23,42,0.6); color: var(--foreground); } }
 @media (max-width: 1024px) { .two-col { grid-template-columns: 1fr; } }
 
+/* Light Theme */
+.layout.light-theme {
+  --background: #f8fafc;
+  --foreground: #0f172a;
+  --card-bg: #ffffff;
+  --card-border: rgba(0,0,0,0.1);
+  --shadow-soft: 0 8px 24px rgba(0,0,0,0.05);
+}
+.layout.light-theme .main { background: var(--background) !important; }
+.layout.light-theme .card, .layout.light-theme .panel, .layout.light-theme .class-item, .layout.light-theme .student-row { background: var(--card-bg); border: 1px solid var(--card-border); color: var(--foreground); }
+.layout.light-theme .section-title { color: var(--foreground); font-weight: 900; }
+.layout.light-theme .input, .layout.light-theme select { background: #f3f4f6; border: 1px solid var(--card-border); color: var(--foreground); }
+.layout.light-theme .tab { color: #64748b; font-weight: 700; }
+.layout.light-theme .tab.active { color: var(--foreground); border-color: #3b82f6; font-weight: 900; }
+.layout.light-theme .student-row:hover { background: #f9fafb; }
+.layout.light-theme .class-item .code, .layout.light-theme .class-item .subject { color: #0f172a; font-weight: 900; }
+.layout.light-theme td, .layout.light-theme th { color: #0f172a; font-weight: 700; }
+.layout.light-theme .student-row .name, .layout.light-theme .student-row .id { color: #0f172a; font-weight: 800; }
+.layout.light-theme .list-title { color: #0f172a; font-weight: 900; }
+.layout.light-theme .c-title { color: #0f172a !important; font-weight: 900; }
+.layout.light-theme .c-sub { color: #334155; font-weight: 700; }
+.layout.light-theme .class-info .title { color: #0f172a !important; font-weight: 900; }
+.layout.light-theme .class-info .meta { color: #475569; font-weight: 600; }
+.layout.light-theme .left-list, .layout.light-theme .right-detail { background: var(--card-bg); border: 1px solid var(--card-border); }
+

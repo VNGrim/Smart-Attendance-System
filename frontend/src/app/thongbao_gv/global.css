@@ -53,3 +53,20 @@ textarea.input { resize: vertical; }
 @media (prefers-color-scheme: dark) { .input, textarea.input { background: rgba(15,23,42,0.6); color: var(--foreground); } .card-inbox:hover { background: rgba(255,255,255,0.06); } }
 @media (max-width: 640px) { .layout, .layout.collapsed { grid-template-columns: 1fr; grid-template-rows: 72px auto 1fr; grid-template-areas: "topbar" "sidebar" "main"; } }
 
+/* Light Theme */
+.layout.light-theme {
+  --background: #f8fafc;
+  --foreground: #0f172a;
+  --card-bg: #ffffff;
+  --card-border: rgba(0,0,0,0.1);
+  --shadow-soft: 0 8px 24px rgba(0,0,0,0.05);
+}
+.layout.light-theme .main { background: var(--background) !important; }
+.layout.light-theme .card, .layout.light-theme .panel, .layout.light-theme .card-inbox, .layout.light-theme .modal-content { background: var(--card-bg); border: 1px solid var(--card-border); color: var(--foreground); }
+.layout.light-theme .section-title, .layout.light-theme .card-title { color: var(--foreground); }
+.layout.light-theme .input, .layout.light-theme textarea.input, .layout.light-theme select { background: #f3f4f6; border: 1px solid var(--card-border); color: var(--foreground); }
+.layout.light-theme .card-inbox:hover { background: #f9fafb; }
+.layout.light-theme .tab { color: #64748b; }
+.layout.light-theme .tab.active { color: var(--foreground); border-color: #3b82f6; }
+
+

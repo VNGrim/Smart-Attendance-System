@@ -65,6 +65,16 @@ export default function AdminStudentsPage() {
           credentials: "include",
           signal: controller.signal,
         });
+        if (resp.status === 401) {
+          // Not authenticated
+          if (isMounted) setError('Chưa đăng nhập hoặc phiên đã hết, vui lòng đăng nhập.');
+          try { router.push('/login'); } catch {};
+          return;
+        }
+        if (resp.status === 403) {
+          if (isMounted) setError('Bạn không có quyền truy cập trang này.');
+          return;
+        }
         if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
         const data: StudentsListResponse = await resp.json();
         if (!isMounted) return;
@@ -102,6 +112,15 @@ export default function AdminStudentsPage() {
         const resp = await fetch("http://localhost:8080/api/admin/students/options", {
           credentials: "include",
         });
+        if (resp.status === 401) {
+          setOptions(FALLBACK_OPTIONS);
+          try { router.push('/login'); } catch {};
+          return;
+        }
+        if (resp.status === 403) {
+          setOptions(FALLBACK_OPTIONS);
+          return;
+        }
         if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
         const data: StudentOptionsResponse = await resp.json();
         const nextOptions = {

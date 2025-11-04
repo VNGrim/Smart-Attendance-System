@@ -55,3 +55,19 @@ th, td { text-align: left; padding: 10px; border-top: 1px solid var(--card-borde
 @media (prefers-color-scheme: dark) { .input { background: rgba(15,23,42,0.6); color: var(--foreground); } }
 @media (max-width: 1024px) { .grid2 { grid-template-columns: 1fr; } .kv { grid-template-columns: 1fr; align-items: start; } }
 
+/* Light Theme */
+.layout.light-theme {
+  --background: #f8fafc;
+  --foreground: #0f172a;
+  --card-bg: #ffffff;
+  --card-border: rgba(0,0,0,0.1);
+  --shadow-soft: 0 8px 24px rgba(0,0,0,0.05);
+}
+.layout.light-theme .main { background: var(--background) !important; }
+.layout.light-theme .card, .layout.light-theme .panel, .layout.light-theme .attendance-row, .layout.light-theme .qr-box { background: var(--card-bg); border: 1px solid var(--card-border); color: var(--foreground); }
+.layout.light-theme .section-title, .layout.light-theme .card-title { color: var(--foreground); }
+.layout.light-theme .input, .layout.light-theme select, .layout.light-theme .btn { background: #f3f4f6; border: 1px solid var(--card-border); color: var(--foreground); }
+.layout.light-theme .mode-opt { color: #64748b; }
+.layout.light-theme .mode-opt.active { color: var(--foreground); border-color: #3b82f6; }
+.layout.light-theme .attendance-row:hover { background: #f9fafb; }
+

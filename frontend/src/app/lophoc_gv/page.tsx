@@ -17,7 +17,7 @@ const SETTINGS_CHANGED_EVENT = "sas_settings_changed";
 
 export default function LecturerClassesPage() {
   const [collapsed, setCollapsed] = useState(false);
-  const [dark, setDark] = useState(false);
+  const [dark, setDark] = useState(true);
   const [notifCount] = useState(2);
 
   const [classes, setClasses] = useState<ClassInfo[]>([]);
@@ -44,9 +44,10 @@ export default function LecturerClassesPage() {
       const saved = localStorage.getItem("sas_settings");
       if (saved) {
         const settings: SasSettings = JSON.parse(saved);
-        const themeDark = settings.themeDark ?? false;
+        const themeDark = settings.themeDark ?? true;
         setDark(themeDark);
-        document.documentElement.style.colorScheme = themeDark ? "dark" : "light";
+        document.documentElement.classList.toggle("dark-theme", themeDark);
+        document.documentElement.classList.toggle("light-theme", !themeDark);
       }
     } catch {}
 
@@ -54,7 +55,8 @@ export default function LecturerClassesPage() {
       const detail = (event as CustomEvent<SettingsEventDetail>).detail;
       if (!detail) return;
       setDark(detail.themeDark);
-      document.documentElement.style.colorScheme = detail.themeDark ? "dark" : "light";
+      document.documentElement.classList.toggle("dark-theme", detail.themeDark);
+      document.documentElement.classList.toggle("light-theme", !detail.themeDark);
     };
     window.addEventListener(SETTINGS_CHANGED_EVENT, handler);
     return () => window.removeEventListener(SETTINGS_CHANGED_EVENT, handler);
@@ -113,7 +115,7 @@ export default function LecturerClassesPage() {
   };
 
   const Shell = ({ children }: { children: React.ReactNode }) => (
-    <div className={`layout ${collapsed ? "collapsed" : ""}`}>
+    <div className={`layout ${collapsed ? "collapsed" : ""} ${dark ? '' : 'light-theme'}`}>
       <aside className="sidebar">
         <div className="side-header">
           <button className="collapse-btn" onClick={() => setCollapsed(!collapsed)} title={collapsed ? "Mở rộng" : "Thu gọn"}>

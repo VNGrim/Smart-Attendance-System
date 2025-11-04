@@ -174,7 +174,7 @@ const formatCountdown = (secondsLeft: number | null) => {
 
 export default function LecturerAttendancePage() {
   const [collapsed, setCollapsed] = useState(false);
-  const [dark, setDark] = useState(false);
+  const [dark, setDark] = useState(true);
   const [notifCount] = useState(2);
 
   const [classes, setClasses] = useState<ClassInfo[]>([]);
@@ -229,10 +229,22 @@ export default function LecturerAttendancePage() {
       const saved = localStorage.getItem("sas_settings");
       if (saved) {
         const s = JSON.parse(saved);
-        setDark(!!s.themeDark);
-        document.documentElement.style.colorScheme = s.themeDark ? "dark" : "light";
+        const darkTheme = s.themeDark ?? true;
+        setDark(darkTheme);
+        document.documentElement.classList.toggle("dark-theme", darkTheme);
+        document.documentElement.classList.toggle("light-theme", !darkTheme);
       }
     } catch {}
+
+    const handler = (event: Event) => {
+      const detail = (event as CustomEvent<{ themeDark: boolean }>).detail;
+      if (!detail) return;
+      setDark(detail.themeDark);
+      document.documentElement.classList.toggle("dark-theme", detail.themeDark);
+      document.documentElement.classList.toggle("light-theme", !detail.themeDark);
+    };
+    window.addEventListener("sas_settings_changed", handler);
+    return () => window.removeEventListener("sas_settings_changed", handler);
   }, []);
 
   const stopPolling = useCallback(() => {
@@ -267,7 +279,8 @@ export default function LecturerAttendancePage() {
       const prev = saved ? JSON.parse(saved) : {};
       const merged = { ...prev, themeDark: next };
       localStorage.setItem("sas_settings", JSON.stringify(merged));
-      document.documentElement.style.colorScheme = next ? "dark" : "light";
+      document.documentElement.classList.toggle("dark-theme", next);
+      document.documentElement.classList.toggle("light-theme", !next);
       window.dispatchEvent(new CustomEvent("sas_settings_changed" as any, { detail: merged }));
     } catch {}
   };
@@ -584,7 +597,7 @@ export default function LecturerAttendancePage() {
   );
 
   const Shell = ({ children }: { children: React.ReactNode }) => (
-    <div className={`layout ${collapsed ? "collapsed" : ""}`}>
+    <div className={`layout ${collapsed ? "collapsed" : ""} ${dark ? '' : 'light-theme'}`}>
       <aside className="sidebar">
         <div className="side-header">
           <button className="collapse-btn" onClick={() => setCollapsed(!collapsed)} title={collapsed ? "Mở rộng" : "Thu gọn"}>
