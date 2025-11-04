@@ -8,69 +8,58 @@ const cookieParser = require("cookie-parser");
 const prisma = require("./src/config/prisma"); // Import cấu hình Prisma
 
 const app = express();
-const PORT = 8080;
-
+const PORT = process.env.PORT || 8080;
 app.set("trust proxy", 1);
 
-app.use(cors({ origin: true, credentials: true }));
+// 🧩 Cấu hình middleware chung
+app.use(cors({
+  origin: "http://localhost:3000",
+  credentials: true, // Cho phép gửi cookie JWT
+}));
 app.use(bodyParser.json());
 app.use(cookieParser());
 
-// Mount lichhoc_hienthi routes
+// 🖼️ Cho phép truy cập ảnh avatar
+app.use("/uploads", express.static(path.join(__dirname, "uploads")));
+
+// 🧱 Import tất cả các route module
 const lichhocRoutes = require("./src/lichhoc_hienthi/lichhoc_hienthi.routes");
-app.use("/api/lichhoc", lichhocRoutes);
-
-// Mount thongbao_hienthi routes
 const thongbaoRoutes = require("./src/thongbao_hienthi/thongbao_hienthi.routes");
-app.use("/api/thongbao", thongbaoRoutes);
-
-// Mount thongbao_gv routes (Teacher notifications)
 const thongbaoGVRoutes = require("./src/thongbao_gv/thongbao_gv.routes");
-app.use("/api/teacher/notifications", thongbaoGVRoutes);
-
-// Mount lop_gv routes
 const lopRoutes = require("./src/lop_gv/lop_gv.routes");
-app.use("/api/lop", lopRoutes);
-
-// Lecturer attendance routes
 const attendanceRoutes = require("./src/diemdanh_gv");
-app.use("/api/attendances", attendanceRoutes);
-
-// Student attendance routes
 const studentAttendanceRoutes = require("./src/diemdanh_sv");
-app.use("/api/student-attendance", studentAttendanceRoutes);
-
-// Auth & User routes (JWT + cookie)
 const authRoutes = require("./src/routes/auth.routes");
 const userRoutes = require("./src/routes/user.routes");
+const adminOverviewRoutes = require("./src/tongquan_ad/tongquan_ad.routes");
+const adminAnnouncementRoutes = require("./src/thongbao_ad/thongbao_ad.routes");
+const adminLecturerRoutes = require("./src/giangvien_ad/giangvien_ad.routes");
+const adminClassRoutes = require("./src/lophoc_ad/lophoc_ad.routes");
+const adminStudentRoutes = require("./src/sinhvien_ad/sinhvien_ad.routes");
+const adminAccountsRoutes = require("./src/taikhoan_ad.routes");
+
+// 🧩 Route upload avatar
+const studentRoutes = require("./src/routes/student.routes");
+app.use("/api/students", studentRoutes);
+
+
+// 🧱 Mount các route hiện có
+app.use("/api/lichhoc", lichhocRoutes);
+app.use("/api/thongbao", thongbaoRoutes);
+app.use("/api/teacher/notifications", thongbaoGVRoutes);
+app.use("/api/lop", lopRoutes);
+app.use("/api/attendances", attendanceRoutes);
+app.use("/api/student-attendance", studentAttendanceRoutes);
 app.use("/api/auth", authRoutes);
 app.use("/api", userRoutes);
-
-// Admin overview routes
-const adminOverviewRoutes = require("./src/tongquan_ad/tongquan_ad.routes");
 app.use("/api/admin/overview", adminOverviewRoutes);
-
-// Admin announcements routes
-const adminAnnouncementRoutes = require("./src/thongbao_ad/thongbao_ad.routes");
 app.use("/api/admin/notifications", adminAnnouncementRoutes);
-
-// Admin lecturers routes
-const adminLecturerRoutes = require("./src/giangvien_ad/giangvien_ad.routes");
 app.use("/api/admin/lecturers", adminLecturerRoutes);
-
-// Admin classes routes
-const adminClassRoutes = require("./src/lophoc_ad/lophoc_ad.routes");
 app.use("/api/admin/classes", adminClassRoutes);
-
-// Admin students routes
-const adminStudentRoutes = require("./src/sinhvien_ad/sinhvien_ad.routes");
 app.use("/api/admin/students", adminStudentRoutes);
-
-// Admin accounts routes
-const adminAccountsRoutes = require("./src/taikhoan_ad.routes");
 app.use("/api/admin/accounts", adminAccountsRoutes);
 
-// API xem danh sách lớp
+// 🌱 Route test
 app.get("/api/classes", (req, res) => {
   res.json([
     { id: "C01", name: "Lập trình Web" },
@@ -78,7 +67,7 @@ app.get("/api/classes", (req, res) => {
   ]);
 });
 
-// Chạy server
+// 🚀 Chạy server
 app.listen(PORT, () => {
-  console.log(`🚀 Backend running at http://localhost:${PORT}`);
+  console.log(`✅ Backend đang chạy tại: http://localhost:${PORT}`);
 });

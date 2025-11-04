@@ -52,12 +52,48 @@ export function apiFetch(input: string, init?: FetchOptions) {
   return fetch(url, withAuth(init));
 }
 
-export async function apiFetchJson<T = any>(input: string, init?: FetchOptions): Promise<T> {
+type ErrorPayload = { message?: string };
+
+export async function apiFetchJson<T = unknown>(input: string, init?: RequestInit & { params?: Record<string, string | number | boolean | null | undefined> }): Promise<T> {
   const response = await apiFetch(input, init);
-  const data = await response.json().catch(() => ({}));
   if (!response.ok) {
-    const message = (data as any)?.message || `HTTP ${response.status}`;
-    throw new Error(message);
+    const text = await response.text();
+    throw new Error(text || `Request failed with status ${response.status}`);
   }
-  return data as T;
+  if (response.status === 204) {
+    return undefined as T;
+  }
+  return response.json() as Promise<T>;
+}
+
+export async function apiFetchMaybeJson<T = unknown>(input: string, init?: RequestInit & { params?: Record<string, string | number | boolean | null | undefined> }): Promise<T | null> {
+  const response = await apiFetch(input, init);
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(text || `Request failed with status ${response.status}`);
+  }
+  if (response.status === 204) {
+    return null;
+  }
+  const contentType = response.headers.get('content-type');
+  if (contentType && contentType.includes('application/json')) {
+    return (await response.json()) as T;
+  }
+  return null;
+}
+
+export async function apiFetchForReplies<T = unknown>(input: string, init?: RequestInit & { params?: Record<string, string | number | boolean | null | undefined> }): Promise<T | null> {
+  const response = await apiFetch(input, init);
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(text || `Request failed with status ${response.status}`);
+  }
+  if (response.status === 204) {
+    return null;
+  }
+  const contentType = response.headers.get('content-type');
+  if (contentType && contentType.includes('application/json')) {
+    return (await response.json()) as T;
+  }
+  return null;
 }

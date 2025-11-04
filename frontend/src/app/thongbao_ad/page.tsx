@@ -1,14 +1,15 @@
 "use client";
 
 import Link from "next/link";
-import { useState, useEffect, useMemo, useRef } from "react";
-import { apiFetch, apiFetchJson } from "../../lib/authClient";
+import { useState, useEffect, useMemo, useCallback } from "react";
+import { apiFetch, apiFetchJson, apiFetchMaybeJson } from "../../lib/authClient";
 import { useRouter } from "next/navigation";
 
 type NoticeCategory = "toantruong" | "giangvien" | "sinhvien" | "scheduled" | "deleted" | "khac";
 
 type Notice = {
   id: string;
+  dbId?: number | null;
   title: string;
   sender: string;
   target: string;
@@ -22,6 +23,10 @@ type Notice = {
   scheduledAt?: string | null;
   createdAt?: string | null;
   updatedAt?: string | null;
+  allowReply?: boolean;
+  replyUntil?: string | null;
+  replyUntilRaw?: string | null;
+  replyStats?: ReplyStats | null;
 };
 
 type Lecturer = {
@@ -40,6 +45,40 @@ type NoticeFormPayload = {
   allowReply: boolean;
   showBanner: boolean;
   recipients: string[];
+  replyUntil?: string | null;
+};
+
+type ReplyStats = {
+  total: number;
+  unread: number;
+  latestAtRaw: string | null;
+  latestAtDisplay: string | null;
+};
+
+type AnnouncementReply = {
+  id: number;
+  content: string;
+  createdAt: string;
+  readAt: string | null;
+  author: {
+    type: string | null;
+    name: string | null;
+    code: string | null;
+    class?: string | null;
+    subject?: string | null;
+  } | null;
+};
+
+type AnnouncementRepliesResponse = {
+  success: boolean;
+  data?: AnnouncementReply[];
+  message?: string;
+};
+
+type MarkRepliesReadResponse = {
+  success: boolean;
+  data?: { updated: number };
+  message?: string;
 };
 
 const TARGET_OPTIONS = ["Tất cả sinh viên", "Tất cả giảng viên", "Giảng viên cụ thể"];
@@ -68,7 +107,7 @@ function AnnouncementModal({ open, edit, saving, onClose, onSubmit }: Announceme
   const [lecturerError, setLecturerError] = useState<string | null>(null);
   const [lecturerSearch, setLecturerSearch] = useState("");
 
-  const fetchLecturers = async (options: { search?: string; ids?: string[] } = {}) => {
+  const fetchLecturers = useCallback(async (options: { search?: string; ids?: string[] } = {}) => {
     const rawSearch = typeof options.search === "string" ? options.search : "";
     const trimmedSearch = rawSearch.trim();
     const ids = Array.isArray(options.ids) ? options.ids.filter((item) => item && item.trim().length) : undefined;
@@ -101,7 +140,7 @@ function AnnouncementModal({ open, edit, saving, onClose, onSubmit }: Announceme
     } finally {
       setLecturerLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     if (!open) return;
@@ -445,7 +484,49 @@ function inferCategoryFromTarget(target?: string | null): NoticeCategory {
   return "toantruong";
 }
 
-function mapServerNotice(raw: any): Notice {
+type ServerNotice = {
+  id?: string;
+  code?: string;
+  dbId?: string | number;
+  title?: string;
+  sender?: string;
+  target?: string;
+  category?: string;
+  type?: string;
+  sendTime?: string | Date;
+  send_time?: string | Date;
+  status?: string;
+  content?: string;
+  recipients?: string[] | string;
+  history?: string[] | string;
+  scheduledAt?: string | Date | null;
+  scheduled_at?: string | Date | null;
+  createdAt?: string | Date | null;
+  created_at?: string | Date | null;
+  updatedAt?: string | Date | null;
+  updated_at?: string | Date | null;
+  allowReply?: boolean;
+  allow_reply?: boolean;
+  replyUntil?: string | Date | null;
+  reply_until?: string | Date | null;
+  replyStats?: {
+    total?: number | string;
+    unread?: number | string;
+    latestAt?: string | Date | null;
+    latest_at?: string | Date | null;
+  };
+};
+
+type NotificationsResponse = {
+  announcements?: ServerNotice[];
+};
+
+type SasSettings = { themeDark?: boolean };
+type SettingsEventDetail = { themeDark: boolean };
+
+const SETTINGS_CHANGED_EVENT = "sas_settings_changed";
+
+function mapServerNotice(raw: ServerNotice): Notice {
   const id = typeof raw?.id === "string" && raw.id
     ? raw.id
     : raw?.code
@@ -459,6 +540,8 @@ function mapServerNotice(raw: any): Notice {
   const createdSource = raw?.createdAt ?? raw?.created_at;
   const updatedSource = raw?.updatedAt ?? raw?.updated_at;
 
+  const replyStatsRaw = raw?.replyStats ?? {};
+
   const notice: Notice = {
     id,
     title: String(raw?.title ?? ""),
@@ -469,11 +552,48 @@ function mapServerNotice(raw: any): Notice {
     sendTime: formatDateTime(sendSource),
     status: String(raw?.status ?? "Đã gửi"),
     content: String(raw?.content ?? ""),
+    dbId:
+      typeof raw?.dbId === "number"
+        ? raw.dbId
+        : typeof raw?.dbId === "string" && !Number.isNaN(Number(raw.dbId))
+          ? Number(raw.dbId)
+          : typeof raw?.id === "number"
+            ? raw.id
+            : typeof raw?.id === "string" && !Number.isNaN(Number(raw.id))
+              ? Number(raw.id)
+              : undefined,
     recipients: toArray(raw?.recipients),
     history: toArray(raw?.history),
     scheduledAt: scheduledSource ? formatDateTime(scheduledSource) : null,
     createdAt: createdSource ? formatDateTime(createdSource) : null,
     updatedAt: updatedSource ? formatDateTime(updatedSource) : null,
+    allowReply: Boolean(raw?.allowReply ?? raw?.allow_reply),
+    replyUntil: raw?.replyUntil
+      ? formatDateTime(raw.replyUntil)
+      : raw?.reply_until
+        ? formatDateTime(raw.reply_until)
+        : null,
+    replyUntilRaw: raw?.replyUntil
+      ? String(raw.replyUntil)
+      : raw?.reply_until
+        ? String(raw.reply_until)
+        : null,
+    replyStats: raw?.replyStats
+      ? {
+          total: Number(replyStatsRaw.total ?? 0),
+          unread: Number(replyStatsRaw.unread ?? 0),
+          latestAtRaw: replyStatsRaw.latestAt
+            ? String(replyStatsRaw.latestAt)
+            : replyStatsRaw.latest_at
+              ? String(replyStatsRaw.latest_at)
+              : null,
+          latestAtDisplay: replyStatsRaw.latestAt
+            ? formatDateTime(replyStatsRaw.latestAt)
+            : replyStatsRaw.latest_at
+              ? formatDateTime(replyStatsRaw.latest_at)
+              : null,
+        }
+      : null,
   };
 
   if (!notice.recipients?.length) delete notice.recipients;
@@ -482,6 +602,32 @@ function mapServerNotice(raw: any): Notice {
   if (!notice.updatedAt) delete notice.updatedAt;
 
   return notice;
+}
+
+function computeReplyStatsFromItems(items: AnnouncementReply[]): ReplyStats {
+  const total = items.length;
+  let unread = 0;
+  let latestTimestamp: number | null = null;
+
+  items.forEach((item) => {
+    if (!item.readAt) unread += 1;
+    const ts = new Date(item.createdAt).getTime();
+    if (!Number.isNaN(ts)) {
+      if (latestTimestamp == null || ts > latestTimestamp) {
+        latestTimestamp = ts;
+      }
+    }
+  });
+
+  const latestAtRaw = latestTimestamp != null ? new Date(latestTimestamp).toISOString() : null;
+  const latestAtDisplay = latestAtRaw ? formatDateTime(latestAtRaw) : null;
+
+  return {
+    total,
+    unread,
+    latestAtRaw,
+    latestAtDisplay,
+  };
 }
 
 export default function AdminNotifyPage() {
@@ -496,6 +642,23 @@ export default function AdminNotifyPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [replyList, setReplyList] = useState<AnnouncementReply[]>([]);
+  const [replyLoading, setReplyLoading] = useState(false);
+  const [replyError, setReplyError] = useState<string | null>(null);
+  const [markingReplies, setMarkingReplies] = useState(false);
+
+  const drawerDbId = useMemo(() => {
+    if (!drawer) return null;
+    if (typeof drawer.dbId === "number") return drawer.dbId;
+    const numericFromId = Number(String(drawer.id ?? "").replace(/[^0-9]/g, ""));
+    return Number.isNaN(numericFromId) ? null : numericFromId;
+  }, [drawer]);
+
+  const unreadReplyCount = useMemo(
+    () => replyList.reduce((acc, item) => (!item.readAt ? acc + 1 : acc), 0),
+    [replyList],
+  );
+
   const letterParagraphs = useMemo(() => {
     if (!drawer?.content) return [] as string[];
     return drawer.content
@@ -513,14 +676,29 @@ export default function AdminNotifyPage() {
     { key: "deleted", label: "🗑 Đã xóa" },
   ];
 
+  const syncReplyStats = useCallback((announcementId: number, replies: AnnouncementReply[]) => {
+    const stats = computeReplyStatsFromItems(replies);
+    setList((prev) => prev.map((item) => (item.dbId === announcementId ? { ...item, replyStats: stats } : item)));
+    setDrawer((prev) => (prev && prev.dbId === announcementId ? { ...prev, replyStats: stats } : prev));
+  }, []);
+
   useEffect(() => {
     try {
       const saved = localStorage.getItem("sas_settings");
       if (saved) {
-        const s = JSON.parse(saved);
-        document.documentElement.style.colorScheme = s.themeDark ? "dark" : "light";
+        const settings: SasSettings = JSON.parse(saved);
+        const themeDark = settings.themeDark ?? false;
+        document.documentElement.style.colorScheme = themeDark ? "dark" : "light";
       }
     } catch {}
+
+    const handler = (event: Event) => {
+      const detail = (event as CustomEvent<SettingsEventDetail>).detail;
+      if (!detail) return;
+      document.documentElement.style.colorScheme = detail.themeDark ? "dark" : "light";
+    };
+    window.addEventListener(SETTINGS_CHANGED_EVENT, handler);
+    return () => window.removeEventListener(SETTINGS_CHANGED_EVENT, handler);
   }, []);
 
   useEffect(() => {
@@ -530,9 +708,9 @@ export default function AdminNotifyPage() {
       setLoading(true);
       setError(null);
       try {
-        const data = await apiFetchJson("/api/admin/notifications");
+        const data = await apiFetchJson<NotificationsResponse>("/api/admin/notifications");
         const rawList = Array.isArray(data?.announcements) ? data.announcements : [];
-        const mapped: Notice[] = rawList.map(mapServerNotice);
+        const mapped: Notice[] = rawList.map((item) => mapServerNotice(item));
         if (!ignore) {
           setList(mapped);
           setDrawer(null);
@@ -543,7 +721,7 @@ export default function AdminNotifyPage() {
           }).length;
           setNotifCount(pendingCount);
         }
-      } catch (err: any) {
+      } catch (err: unknown) {
         if (!ignore) {
           console.error("admin notifications fetch error", err);
           setError("Không tải được danh sách thông báo");
@@ -560,13 +738,101 @@ export default function AdminNotifyPage() {
     };
   }, []);
 
+  useEffect(() => {
+    if (!drawerDbId) {
+      setReplyList([]);
+      setReplyError(null);
+      setReplyLoading(false);
+      return;
+    }
+
+    let ignore = false;
+    setReplyLoading(true);
+    setReplyError(null);
+
+    apiFetchJson<AnnouncementRepliesResponse>(`/api/admin/notifications/${drawerDbId}/replies`)
+      .then((response) => {
+        if (ignore) return;
+        if (!response.success) {
+          throw new Error(response.message || "Không thể lấy phản hồi");
+        }
+        const payload = Array.isArray(response.data) ? response.data : [];
+        setReplyList(payload);
+        syncReplyStats(drawerDbId, payload);
+      })
+      .catch((err) => {
+        if (ignore) return;
+        console.error("admin replies fetch error", err);
+        setReplyError(err instanceof Error ? err.message : "Không thể tải danh sách phản hồi");
+      })
+      .finally(() => {
+        if (!ignore) setReplyLoading(false);
+      });
+
+    return () => {
+      ignore = true;
+    };
+  }, [drawerDbId, syncReplyStats]);
+
+  const markRepliesAsRead = useCallback(
+    async (replyIds?: number[]) => {
+      if (!drawerDbId) return;
+      const ids = Array.isArray(replyIds)
+        ? replyIds
+            .map((value) => Number(value))
+            .filter((value) => Number.isInteger(value))
+        : undefined;
+
+      if (ids && ids.length === 0) return;
+
+      try {
+        setMarkingReplies(true);
+        setReplyError(null);
+        const response = await apiFetchMaybeJson<MarkRepliesReadResponse>(
+          `/api/admin/notifications/${drawerDbId}/replies/read`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ replyIds: ids }),
+          },
+        );
+
+        if (!response || !response.success) {
+          throw new Error(response?.message || "Không thể cập nhật trạng thái phản hồi");
+        }
+
+        let nextReplies: AnnouncementReply[] = [];
+        const readTimestamp = new Date().toISOString();
+        setReplyList((prev) => {
+          const updated = prev.map((item) => {
+            const shouldMark = !ids || !ids.length || ids.includes(item.id);
+            if (!shouldMark) return item;
+            if (item.readAt) return item;
+            return { ...item, readAt: readTimestamp };
+          });
+          nextReplies = updated;
+          return updated;
+        });
+        if (drawerDbId && nextReplies.length) {
+          syncReplyStats(drawerDbId, nextReplies);
+        }
+      } catch (err) {
+        console.error("admin replies mark read error", err);
+        setReplyError(err instanceof Error ? err.message : "Không thể cập nhật phản hồi");
+      } finally {
+        setMarkingReplies(false);
+      }
+    },
+    [drawerDbId, replyList, syncReplyStats],
+  );
+
   const reloadList = async () => {
     setLoading(true);
     setError(null);
     try {
-      const data = await apiFetchJson("/api/admin/notifications");
+      const data = await apiFetchJson<NotificationsResponse>("/api/admin/notifications");
       const rawList = Array.isArray(data?.announcements) ? data.announcements : [];
-      const mapped: Notice[] = rawList.map(mapServerNotice);
+      const mapped: Notice[] = rawList.map((item) => mapServerNotice(item));
       setList(mapped);
       const pendingCount = mapped.filter((item: Notice) => {
         const status = item.status.toLowerCase();
@@ -624,6 +890,8 @@ export default function AdminNotifyPage() {
                 sendTime: payload.action === "send" ? formatDateTime(new Date()) : n.sendTime,
                 scheduledAt: null,
                 recipients,
+                allowReply: payload.allowReply,
+                replyUntil: payload.replyUntil ?? null,
               }
             : n,
         ),
@@ -645,6 +913,8 @@ export default function AdminNotifyPage() {
       scheduledAt: undefined,
       sender: "Admin",
       recipients,
+      allowReply: payload.allowReply,
+      replyUntil: payload.replyUntil ?? null,
     };
 
     setSaving(true);
@@ -724,6 +994,7 @@ export default function AdminNotifyPage() {
             <div>Loại</div>
             <div>Thời gian gửi</div>
             <div>Trạng thái</div>
+            <div>Phản hồi</div>
             <div>Thao tác</div>
           </div>
           <div className="tbody">
@@ -739,6 +1010,18 @@ export default function AdminNotifyPage() {
                 <div>{n.sendTime}</div>
                 <div>
                   <span className={`status ${n.status}`.replace(/\s/g,"-")}>{n.status}</span>
+                </div>
+                <div>
+                  {n.allowReply ? (
+                    <div className="reply-pill" title="Số phản hồi">
+                      ↩ {n.replyStats?.total ?? 0}
+                      {n.replyStats?.unread ? (
+                        <span className="badge badge-alert">{n.replyStats.unread}</span>
+                      ) : null}
+                    </div>
+                  ) : (
+                    <span className="muted">--</span>
+                  )}
                 </div>
                 <div className="actions">
                   <button className="icon-btn" title="Chỉnh sửa" onClick={(e)=>{e.stopPropagation(); openEdit(n);}}>✏️</button>
@@ -793,6 +1076,79 @@ export default function AdminNotifyPage() {
                 )}
                 <div className="letter-signature">Trân trọng,<br />{drawer.sender}</div>
               </div>
+              {drawer.allowReply && (
+                <div className="letter-replies">
+                  <div className="letter-replies-header">
+                    <div className="letter-replies-title">
+                      ↩ Phản hồi ({drawer.replyStats?.total ?? replyList.length})
+                      {drawer.replyStats?.latestAtDisplay && (
+                        <span className="letter-replies-sub">• Mới nhất: {drawer.replyStats.latestAtDisplay}</span>
+                      )}
+                    </div>
+                    {drawer.replyStats?.unread || unreadReplyCount ? (
+                      <button
+                        className="qr-btn"
+                        disabled={markingReplies || unreadReplyCount === 0}
+                        onClick={() => markRepliesAsRead()}
+                      >
+                        ✅ Đánh dấu tất cả đã đọc
+                      </button>
+                    ) : null}
+                  </div>
+                  {replyLoading && <div className="letter-replies-loading">⏳ Đang tải phản hồi...</div>}
+                  {replyError && !replyLoading && (
+                    <div className="letter-replies-error">⚠️ {replyError}</div>
+                  )}
+                  {!replyLoading && !replyError && replyList.length === 0 && (
+                    <div className="letter-replies-empty">Chưa có phản hồi nào</div>
+                  )}
+                  {!replyLoading && !replyError && replyList.length > 0 && (
+                    <div className="letter-replies-list">
+                      {replyList.map((reply) => {
+                        const createdAt = new Date(reply.createdAt);
+                        const createdDisplay = Number.isNaN(createdAt.getTime())
+                          ? reply.createdAt
+                          : createdAt.toLocaleString("vi-VN", {
+                              day: "2-digit",
+                              month: "2-digit",
+                              year: "numeric",
+                              hour: "2-digit",
+                              minute: "2-digit",
+                            });
+                        const authorLabel = reply.author?.name || reply.author?.code || "Người dùng";
+                        const authorMeta = [reply.author?.type, reply.author?.code]
+                          .filter(Boolean)
+                          .join(" • ");
+                        return (
+                          <div key={reply.id} className={`letter-reply-item${reply.readAt ? "" : " unread"}`}>
+                            <div className="letter-reply-head">
+                              <div>
+                                <div className="letter-reply-author">{authorLabel}</div>
+                                {authorMeta && <div className="letter-reply-meta">{authorMeta}</div>}
+                              </div>
+                              <div className="letter-reply-time">{createdDisplay}</div>
+                            </div>
+                            <div className="letter-reply-content">{reply.content}</div>
+                            <div className="letter-reply-actions">
+                              {!reply.readAt ? (
+                                <button
+                                  className="qr-btn"
+                                  disabled={markingReplies}
+                                  onClick={() => markRepliesAsRead([reply.id])}
+                                >
+                                  ✓ Đánh dấu đã đọc
+                                </button>
+                              ) : (
+                                <span className="letter-reply-read">Đã đọc</span>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           </div>
         </div>

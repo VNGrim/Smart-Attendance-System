@@ -10,7 +10,11 @@ function auth(req, res, next) {
 
   try {
     const payload = jwt.verify(token, JWT_SECRET);
-    req.user = payload; // { user_code, role, fullName }
+    const normalizedUser = {
+      ...payload,
+      userId: payload.userId || payload.user_id || payload.user_code || payload.userCode || null,
+    };
+    req.user = normalizedUser; // { userId, role, fullName, ... }
     next();
   } catch (err) {
     return res.status(401).json({ success: false, message: 'Invalid token' });

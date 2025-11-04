@@ -6,12 +6,69 @@ const dayjs = require("dayjs");
 const utc = require("dayjs/plugin/utc");
 dayjs.extend(utc);
 const { Parser } = require("json2csv");
+const { parse, isValid, startOfWeek, format: formatDate, endOfWeek, addDays } = require("date-fns");
+
+const WEEK_START_OPTS = { weekStartsOn: 1, firstWeekContainsDate: 4 };
 
 const router = express.Router();
 router.use(auth, requireRole("admin"));
 
 const DAY_ORDER = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 const SLOT_IDS = [1, 2, 3, 4];
+
+function toDateOnly(date) {
+  if (!(date instanceof Date)) return null;
+  return new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+}
+
+function normalizeToWeekStart(date) {
+  return toDateOnly(startOfWeek(date, WEEK_START_OPTS));
+}
+
+function weekKeyFromDate(date) {
+  return formatDate(normalizeToWeekStart(date), "RRRR-'W'II");
+}
+
+function tryParseDateOnly(value) {
+  if (!value || (typeof value === "string" && !value.trim())) return null;
+  const input = typeof value === "string" ? value.trim() : value;
+  const patterns = ["yyyy-MM-dd", "dd/MM/yyyy", "MM/dd/yyyy"];
+  for (const pattern of patterns) {
+    const parsed = parse(input, pattern, new Date());
+    if (isValid(parsed)) return toDateOnly(parsed);
+  }
+  const fallback = new Date(input);
+  if (isValid(fallback)) return toDateOnly(fallback);
+  return null;
+}
+
+function resolveWeekStartFromKey(key) {
+  const normalized = normalizeWeekKey(key);
+  if (normalized === "UNASSIGNED") return null;
+  const parsed = parse(normalized, "RRRR-'W'II", new Date());
+  if (!isValid(parsed)) return null;
+  return normalizeToWeekStart(parsed);
+}
+
+function computeDateFromWeekDay(weekKey, day) {
+  const start = resolveWeekStartFromKey(weekKey);
+  if (!start) return null;
+  const normalizedDay = normalizeDay(day);
+  const index = DAY_ORDER.indexOf(normalizedDay);
+  if (index < 0) return null;
+  return toDateOnly(addDays(start, index));
+}
+
+function resolveScheduleDate({ weekKey, day, dateInput }) {
+  const provided = tryParseDateOnly(dateInput);
+  if (provided) return provided;
+  return computeDateFromWeekDay(weekKey, day);
+}
+
+function toISODateString(date) {
+  if (!date) return null;
+  return formatDate(date, "yyyy-MM-dd");
+}
 
 function normalizeDay(value) {
   if (!value) return "Mon";
@@ -29,8 +86,29 @@ function normalizeWeekKey(value) {
   if (!value) return "UNASSIGNED";
   const str = String(value).trim();
   if (!str) return "UNASSIGNED";
-  if (/^\d{4}-W\d{2}$/.test(str)) return str;
-  // Accept raw date range like 29/09 - 05/10 -> keep original but uppercase
+
+  const parsedIso = parse(str, "RRRR-'W'II", new Date());
+  if (isValid(parsedIso)) {
+    return weekKeyFromDate(parsedIso);
+  }
+
+  const parsedDate = parse(str, "yyyy-MM-dd", new Date());
+  if (isValid(parsedDate)) {
+    return weekKeyFromDate(parsedDate);
+  }
+
+  const rangeMatch = str.match(/(\d{1,2})\/(\d{1,2})(?:\/(\d{2,4}))?/);
+  if (rangeMatch) {
+    const day = rangeMatch[1];
+    const month = rangeMatch[2];
+    const year = rangeMatch[3] ? rangeMatch[3].padStart(4, "20") : String(new Date().getFullYear());
+    const composed = `${day.padStart(2, "0")}/${month.padStart(2, "0")}/${year}`;
+    const parsedRangeDate = parse(composed, "dd/MM/yyyy", new Date());
+    if (isValid(parsedRangeDate)) {
+      return weekKeyFromDate(parsedRangeDate);
+    }
+  }
+
   return str.toUpperCase();
 }
 
@@ -106,15 +184,10 @@ async function loadWeekSchedule(weekKey) {
   const rows = await prisma.timetable.findMany({
     where: { week_key: key },
     orderBy: [
-      {
-        day_of_week: "asc",
-      },
-      {
-        slot_id: "asc",
-      },
-      {
-        classes: "asc",
-      },
+      { date: "asc" },
+      { day_of_week: "asc" },
+      { slot_id: "asc" },
+      { classes: "asc" },
     ],
     include: {
       time_slots: true,
@@ -127,6 +200,8 @@ async function loadWeekSchedule(weekKey) {
     const slotId = Number(row.slot_id);
     const startTime = formatTime(row.time_slots?.start_time);
     const endTime = formatTime(row.time_slots?.end_time);
+    const computedDate = row.date ? toDateOnly(row.date) : computeDateFromWeekDay(row.week_key, row.day_of_week);
+    const isoDate = computedDate ? toISODateString(computedDate) : null;
 
     if (SLOT_IDS.includes(slotId)) {
       grid[slotId][dayKey] = {
@@ -137,6 +212,7 @@ async function loadWeekSchedule(weekKey) {
         room: row.room_name || row.room || "",
         startTime,
         endTime,
+        date: isoDate,
       };
     }
     return {
@@ -153,6 +229,7 @@ async function loadWeekSchedule(weekKey) {
       subject_name: row.subject_name || row.classes,
       teacher_id: row.teacher_id || "",
       teacher_name: row.teacher_name || "",
+      date: isoDate,
     };
   });
 
@@ -165,14 +242,18 @@ function validateSlot(slotId) {
 
 function ensureNotConflict(records, candidate) {
   return !records.some((item) => {
-    return (
-      item.week_key === candidate.week_key &&
-      item.day === candidate.day &&
-      item.slot_id === candidate.slot_id &&
-      (item.class_id === candidate.class_id ||
-        (candidate.teacher_id && item.teacher_id && item.teacher_id === candidate.teacher_id) ||
-        (item.room && candidate.room && item.room === candidate.room))
-    );
+    const sameSlotByDate = item.date && candidate.date
+      ? item.date === candidate.date && item.slot_id === candidate.slot_id
+      : false;
+
+    const sameSlotByWeek = item.week_key === candidate.week_key && item.day === candidate.day && item.slot_id === candidate.slot_id;
+
+    if (!sameSlotByDate && !sameSlotByWeek) return false;
+
+    if (item.class_id === candidate.class_id) return true;
+    if (candidate.teacher_id && item.teacher_id && item.teacher_id === candidate.teacher_id) return true;
+    if (item.room && candidate.room && item.room === candidate.room) return true;
+    return false;
   });
 }
 
@@ -203,9 +284,11 @@ router.get("/schedule", async (req, res) => {
 
 router.post("/schedule", async (req, res) => {
   try {
-    const { weekKey, day, slotId, classId, subjectName, teacherId, teacherName, room, roomName } = req.body;
-    const week_key = normalizeWeekKey(weekKey);
+    const { weekKey, day, slotId, classId, subjectName, teacherId, teacherName, room, roomName, date: dateInput } = req.body;
     const day_of_week = normalizeDay(day);
+    const scheduleDate = resolveScheduleDate({ weekKey, day: day_of_week, dateInput });
+    const week_key = scheduleDate ? weekKeyFromDate(scheduleDate) : normalizeWeekKey(weekKey);
+
     if (!validateSlot(slotId)) {
       return res.status(400).json({ success: false, message: "Slot không hợp lệ" });
     }
@@ -213,22 +296,39 @@ router.post("/schedule", async (req, res) => {
       return res.status(400).json({ success: false, message: "Thiếu mã lớp" });
     }
 
-    const existing = await prisma.timetable.findFirst({
-      where: {
-        week_key,
-        day_of_week,
-        slot_id: Number(slotId),
-        OR: [
-          { classes: classId },
-          teacherId
-            ? { teacher_id: teacherId }
-            : { id: -1 },
-          room
-            ? { room }
-            : { id: -1 },
+    const baseConflict = {
+      AND: [
+        { week_key },
+        { day_of_week },
+        { slot_id: Number(slotId) },
+        {
+          OR: [
+            { classes: classId },
+            teacherId ? { teacher_id: teacherId } : { id: -1 },
+            room ? { room } : { id: -1 },
+          ],
+        },
+      ],
+    };
+
+    const conflicts = [baseConflict];
+    if (scheduleDate) {
+      conflicts.push({
+        AND: [
+          { date: scheduleDate },
+          { slot_id: Number(slotId) },
+          {
+            OR: [
+              { classes: classId },
+              teacherId ? { teacher_id: teacherId } : { id: -1 },
+              room ? { room } : { id: -1 },
+            ],
+          },
         ],
-      },
-    });
+      });
+    }
+
+    const existing = await prisma.timetable.findFirst({ where: { OR: conflicts } });
     if (existing) {
       return res.status(409).json({ success: false, message: "Đã có lịch trùng (lớp/giảng viên/phòng)" });
     }
@@ -244,11 +344,12 @@ router.post("/schedule", async (req, res) => {
         teacher_name: teacherName || null,
         room: room || "",
         room_name: roomName || room || null,
+        date: scheduleDate || null,
       },
       include: { time_slots: true },
     });
 
-    return res.json({ success: true, data: created });
+    return res.json({ success: true, data: { ...created, date: created.date ? toISODateString(toDateOnly(created.date)) : null } });
   } catch (error) {
     console.error("create schedule error", error);
     return res.status(500).json({ success: false, message: "Không thể tạo lịch" });
@@ -338,12 +439,13 @@ async function getAvailabilityData() {
 function pickAvailableSlots(classes, teacherMap, roomMap, existing, week_key) {
   const plan = [];
   const occupied = existing.flat.map((item) => ({
-    week_key,
+    week_key: item.week_key || week_key,
     day: item.day,
     slot_id: item.slot_id,
     class_id: item.class_id,
     teacher_id: item.teacher_id,
     room: item.room,
+    date: item.date || null,
   }));
   const rooms = classes.reduce((acc, cls) => {
     if (cls.room) acc.add(cls.room);
@@ -374,6 +476,8 @@ function pickAvailableSlots(classes, teacherMap, roomMap, existing, week_key) {
           roomCode = availableRoom || null;
         }
 
+        const candidateDate = resolveScheduleDate({ weekKey: week_key, day, dateInput: null });
+        const isoDate = candidateDate ? toISODateString(candidateDate) : null;
         const candidate = {
           class_id: cls.id,
           class_name: cls.name,
@@ -383,6 +487,8 @@ function pickAvailableSlots(classes, teacherMap, roomMap, existing, week_key) {
           room: roomCode,
           day,
           slot_id: slot,
+          week_key,
+          date: isoDate,
         };
 
         if (ensureNotConflict(occupied, { ...candidate, week_key })) {
@@ -393,7 +499,7 @@ function pickAvailableSlots(classes, teacherMap, roomMap, existing, week_key) {
     if (candidates.length) {
       const best = candidates[0];
       plan.push(best);
-      occupied.push({ ...best, week_key });
+      occupied.push({ ...best });
     }
   });
 
@@ -440,7 +546,12 @@ router.post("/schedule/auto", async (req, res) => {
       week_key
     );
 
-    return res.json({ success: true, data: { plan, classes: formattedClasses, teachers, rooms, current: weekData } });
+    const normalizedPlan = plan.map((item) => ({
+      ...item,
+      date: item.date || toISODateString(resolveScheduleDate({ weekKey: week_key, day: item.day, dateInput: null })) || null,
+    }));
+
+    return res.json({ success: true, data: { plan: normalizedPlan, classes: formattedClasses, teachers, rooms, current: weekData } });
   } catch (error) {
     console.error("auto schedule error", error);
     return res.status(500).json({ success: false, message: "Không thể tạo gợi ý" });
@@ -457,36 +568,62 @@ router.post("/schedule/auto/apply", async (req, res) => {
 
     const createInputs = allocations
       .filter((item) => validateSlot(item.slot_id))
-      .map((item) => ({
-        week_key,
-        day_of_week: normalizeDay(item.day),
-        slot_id: Number(item.slot_id),
-        classes: item.class_id,
-        subject_name: item.subject_name || null,
-        teacher_id: item.teacher_id || null,
-        teacher_name: item.teacher_name || null,
-        room: item.room || "",
-        room_name: item.room_name || item.room || null,
-      }));
+      .map((item) => {
+        const day_of_week = normalizeDay(item.day);
+        const scheduleDate = resolveScheduleDate({ weekKey, day: day_of_week, dateInput: item.date });
+        const targetWeekKey = scheduleDate ? weekKeyFromDate(scheduleDate) : week_key;
+        return {
+          week_key: targetWeekKey,
+          day_of_week,
+          slot_id: Number(item.slot_id),
+          classes: item.class_id,
+          subject_name: item.subject_name || null,
+          teacher_id: item.teacher_id || null,
+          teacher_name: item.teacher_name || null,
+          room: item.room || "",
+          room_name: item.room_name || item.room || null,
+          date: scheduleDate || null,
+        };
+      });
 
     if (!createInputs.length) {
       return res.status(400).json({ success: false, message: "Không có lịch hợp lệ" });
     }
 
-    const conflicts = await prisma.timetable.findMany({
-      where: {
-        week_key,
-        OR: createInputs.map((item) => ({
-          day_of_week: item.day_of_week,
-          slot_id: item.slot_id,
-          OR: [
-            { classes: item.classes },
-            item.teacher_id ? { teacher_id: item.teacher_id } : { id: -1 },
-            item.room ? { room: item.room } : { id: -1 },
+    const conflictConditions = createInputs.flatMap((item) => {
+      const clashTargets = [
+        { classes: item.classes },
+        item.teacher_id ? { teacher_id: item.teacher_id } : { id: -1 },
+        item.room ? { room: item.room } : { id: -1 },
+      ];
+
+      const checks = [
+        {
+          AND: [
+            { week_key: item.week_key },
+            { day_of_week: item.day_of_week },
+            { slot_id: item.slot_id },
+            { OR: clashTargets },
           ],
-        })),
-      },
+        },
+      ];
+
+      if (item.date) {
+        checks.push({
+          AND: [
+            { date: item.date },
+            { slot_id: item.slot_id },
+            { OR: clashTargets },
+          ],
+        });
+      }
+
+      return checks;
     });
+
+    const conflicts = conflictConditions.length
+      ? await prisma.timetable.findMany({ where: { OR: conflictConditions } })
+      : [];
 
     if (conflicts.length) {
       return res.status(409).json({
@@ -516,6 +653,7 @@ router.get("/schedule/export", async (req, res) => {
       const parser = new Parser({
         fields: [
           "week_key",
+          "date",
           "day",
           "slot_id",
           "start_time",

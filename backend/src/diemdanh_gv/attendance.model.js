@@ -18,7 +18,7 @@ async function getClassesByTeacher(teacherId) {
     FROM classes c
     LEFT JOIN students s
       ON s.classes IS NOT NULL
-     AND FIND_IN_SET(UPPER(c.class_id), REPLACE(UPPER(s.classes), ' ', '')) > 0
+     AND CONCAT(',', REPLACE(UPPER(s.classes), ' ', ''), ',') LIKE CONCAT('%,', UPPER(c.class_id), ',%')
     WHERE c.teacher_id = ${teacherId}
     GROUP BY
       c.class_id,
@@ -128,7 +128,7 @@ async function getClassStudents(classId) {
       NULL AS enrolled_at
     FROM students s
     WHERE s.classes IS NOT NULL
-      AND FIND_IN_SET(UPPER(${normalized}), REPLACE(UPPER(s.classes), ' ', '')) > 0
+      AND CONCAT(',', REPLACE(UPPER(s.classes), ' ', ''), ',') LIKE CONCAT('%,', ${normalized}, ',%')
     ORDER BY s.full_name
   `;
 }
@@ -183,7 +183,7 @@ async function isStudentInClass(studentId, classId) {
     FROM students s
     WHERE s.student_id = ${studentId}
       AND s.classes IS NOT NULL
-      AND FIND_IN_SET(UPPER(${normalizedClass}), REPLACE(UPPER(s.classes), ' ', '')) > 0
+      AND CONCAT(',', REPLACE(UPPER(s.classes), ' ', ''), ',') LIKE CONCAT('%,', ${normalizedClass}, ',%')
   `;
   return Boolean(rows?.[0]?.total);
 }
@@ -220,7 +220,7 @@ async function countClassStudents(classId) {
     SELECT COUNT(*) AS total
     FROM students s
     WHERE s.classes IS NOT NULL
-      AND FIND_IN_SET(UPPER(${normalized}), REPLACE(UPPER(s.classes), ' ', '')) > 0
+      AND CONCAT(',', REPLACE(UPPER(s.classes), ' ', ''), ',') LIKE CONCAT('%,', ${normalized}, ',%')
   `;
   const value = rows?.[0]?.total ?? 0;
   return typeof value === "bigint" ? Number(value) : value;

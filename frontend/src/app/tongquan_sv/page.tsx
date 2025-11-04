@@ -15,11 +15,13 @@ type AttendanceItem = { subject: string; date: string; slot: string; present: bo
 type Assignment = { title: string; due: string; remain: string };
 
 const STUDENT_ATTENDANCE_API = makeApiUrl("/api/student-attendance");
+type SasSettings = { themeDark?: boolean };
+type SettingsEventDetail = { themeDark: boolean };
+const SETTINGS_CHANGED_EVENT = "sas_settings_changed";
 
 export default function StudentDashboardPage() {
   const [student, setStudent] = useState<Student | null>(null);
   const [collapsed, setCollapsed] = useState(false);
-  const [dark, setDark] = useState(false);
   const [notifCount] = useState(2);
   const [filter, setFilter] = useState<"all"|"teacher"|"school">("all");
   const [selectedAnnouncement, setSelectedAnnouncement] = useState<Announcement | null>(null);
@@ -34,28 +36,36 @@ export default function StudentDashboardPage() {
 
   useEffect(() => {
     const savedUser = localStorage.getItem("sas_user");
-    try { if (savedUser) { const u = JSON.parse(savedUser); if (u?.role === 'student') setStudent({ id: u.userId, name: u.fullName || "Sinh viên" }); } } catch {}
     try {
-    const saved = localStorage.getItem('sas_settings');
-    if (saved) {
-      const s = JSON.parse(saved);
-      setThemeDark(s.themeDark ?? true);
-      document.documentElement.classList.toggle('dark-theme', s.themeDark);
-      document.documentElement.classList.toggle('light-theme', !s.themeDark);
-    }
-  } catch {}
-  
-  const handler = (e: any) => {
-    const s = e.detail;
-    if (!s) return;
-    setThemeDark(s.themeDark);
-    document.documentElement.classList.toggle('dark-theme', s.themeDark);
-    document.documentElement.classList.toggle('light-theme', !s.themeDark);
-  };
-  window.addEventListener('sas_settings_changed', handler);
+      if (savedUser) {
+        const u = JSON.parse(savedUser);
+        if (u?.role === "student") {
+          setStudent({ id: u.userId, name: u.fullName || "Sinh viên" });
+        }
+      }
+    } catch {}
 
-  return () => window.removeEventListener('sas_settings_changed', handler);
-}, []);
+    try {
+      const saved = localStorage.getItem("sas_settings");
+      if (saved) {
+        const s: SasSettings = JSON.parse(saved);
+        const darkTheme = s.themeDark ?? true;
+        setThemeDark(darkTheme);
+        document.documentElement.classList.toggle("dark-theme", darkTheme);
+        document.documentElement.classList.toggle("light-theme", !darkTheme);
+      }
+    } catch {}
+
+    const handler = (event: Event) => {
+      const detail = (event as CustomEvent<SettingsEventDetail>).detail;
+      if (!detail) return;
+      setThemeDark(detail.themeDark);
+      document.documentElement.classList.toggle("dark-theme", detail.themeDark);
+      document.documentElement.classList.toggle("light-theme", !detail.themeDark);
+    };
+    window.addEventListener(SETTINGS_CHANGED_EVENT, handler);
+    return () => window.removeEventListener(SETTINGS_CHANGED_EVENT, handler);
+  }, []);
   const todayStr = useMemo(() => {
     const now = new Date();
     const weekday = ["Chủ nhật","Thứ Hai","Thứ Ba","Thứ Tư","Thứ Năm","Thứ Sáu","Thứ Bảy"][now.getDay()];
@@ -112,9 +122,10 @@ export default function StudentDashboardPage() {
       setShowCodeInput(false);
       setAttendanceCode("");
       setQrResult("");
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "❌ Có lỗi xảy ra khi điểm danh.";
       console.error("Attendance error:", error);
-      setAttendanceMessage({ type: "error", text: error?.message || "❌ Có lỗi xảy ra khi điểm danh." });
+      setAttendanceMessage({ type: "error", text: message });
     } finally {
       setAttendanceLoading(false);
     }
@@ -182,6 +193,9 @@ export default function StudentDashboardPage() {
           <div className="date">Hôm nay: {todayStr}</div>
         </div>
         <div className="controls">
+          <button className="icon-btn notif" title="Thông báo">
+            🔔{notifCount > 0 && <span className="badge">{notifCount}</span>}
+          </button>
           <div className="attendance-dropdown-wrapper">
             <button className="qr-btn primary" onClick={() => {
               // Show dropdown or modal with QR/Code options

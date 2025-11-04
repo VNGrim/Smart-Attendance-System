@@ -77,13 +77,25 @@ const ensureTeacherOwnsClass = async (teacherId, classId) => {
   return record;
 };
 
+const extractTeacherId = (req) => {
+  const user = req.user ?? {};
+  return (
+    user.userId
+    || user.user_id
+    || user.user_code
+    || user.userCode
+    || user.teacherId
+    || null
+  );
+};
+
 const listTeacherClasses = async (req, res) => {
   try {
-    const teacherId = req.user?.userId;
+    const teacherId = extractTeacherId(req);
     if (!teacherId) {
       return res.status(401).json({ success: false, message: "Không xác định được giảng viên" });
     }
-    console.log("[Attendance] listTeacherClasses user", teacherId);
+    console.log("[Attendance] listTeacherClasses user", teacherId, req.user);
     const rows = await getClassesByTeacher(teacherId);
     console.log("[Attendance] classes found", rows?.length);
     const data = rows.map((row) => ({
@@ -106,7 +118,7 @@ const listTeacherClasses = async (req, res) => {
 
 const listClassSlots = async (req, res) => {
   try {
-    const teacherId = req.user?.userId;
+    const teacherId = extractTeacherId(req);
     const { classId } = req.params;
     const date = toDateOnly(req.query?.date);
     console.log("[Attendance] listClassSlots", { classId, date: date.format("YYYY-MM-DD") });
@@ -134,7 +146,7 @@ const listClassSlots = async (req, res) => {
 
 const createOrGetSession = async (req, res) => {
   try {
-    const teacherId = req.user?.userId;
+    const teacherId = extractTeacherId(req);
     const { classId, slotId, type, date } = req.body || {};
     if (!classId || !slotId || !type) {
       return res.status(400).json({ success: false, message: "Thiếu thông tin lớp, slot hoặc hình thức" });
@@ -189,7 +201,7 @@ const createOrGetSession = async (req, res) => {
 
 const resetSessionCode = async (req, res) => {
   try {
-    const teacherId = req.user?.userId;
+    const teacherId = extractTeacherId(req);
     const id = Number(req.params.id);
     if (!id) return res.status(400).json({ success: false, message: "Thiếu session id" });
 
@@ -223,7 +235,7 @@ const resetSessionCode = async (req, res) => {
 
 const getSessionDetail = async (req, res) => {
   try {
-    const teacherId = req.user?.userId;
+    const teacherId = extractTeacherId(req);
     const id = Number(req.params.id);
     if (!id) return res.status(400).json({ success: false, message: "Thiếu session id" });
 
@@ -250,7 +262,7 @@ const getSessionDetail = async (req, res) => {
 
 const getSessionStudents = async (req, res) => {
   try {
-    const teacherId = req.user?.userId;
+    const teacherId = extractTeacherId(req);
     const id = Number(req.params.id);
     if (!id) return res.status(400).json({ success: false, message: "Thiếu session id" });
     const session = await getSessionWithClass(id);
@@ -298,7 +310,7 @@ const getSessionStudents = async (req, res) => {
 
 const updateManualAttendance = async (req, res) => {
   try {
-    const teacherId = req.user?.userId;
+    const teacherId = extractTeacherId(req);
     const id = Number(req.params.id);
     const { students } = req.body || {};
     if (!id) return res.status(400).json({ success: false, message: "Thiếu session id" });
@@ -357,7 +369,7 @@ const updateManualAttendance = async (req, res) => {
 
 const getClassHistoryHandler = async (req, res) => {
   try {
-    const teacherId = req.user?.userId;
+    const teacherId = extractTeacherId(req);
     const { classId } = req.params;
     const slot = req.query?.slot ? Number(req.query.slot) : undefined;
     await ensureTeacherOwnsClass(teacherId, classId);

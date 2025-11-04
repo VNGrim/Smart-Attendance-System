@@ -1,4 +1,5 @@
 const express = require('express');
+const bcrypt = require('bcryptjs');
 const prisma = require('../config/prisma');
 const { auth } = require('../middleware/auth');
 const { requireRole } = require('../middleware/roles');
@@ -114,6 +115,7 @@ router.post('/', async (req, res) => {
     }
 
     const passwordToUse = typeof password === 'string' && password.trim() ? password.trim() : DEFAULT_PASSWORD;
+    const hashedPassword = await bcrypt.hash(passwordToUse, 10);
     const subjectToUse = typeof subject === 'string' && subject.trim() ? subject.trim() : 'Chưa phân công';
     const facultyToUse = typeof faculty === 'string' && faculty.trim() ? faculty.trim() : 'Chưa cập nhật';
     const statusToUse = normalizeStatus(status);
@@ -125,7 +127,7 @@ router.post('/', async (req, res) => {
       const account = await tx.accounts.create({
         data: {
           user_code: teacherId,
-          password: passwordToUse,
+          password: hashedPassword,
           role: 'teacher',
         },
       });

@@ -1,101 +1,268 @@
-const ThongBaoGVModel = require('./thongbao_gv.model');
+const ThongBaoModel = require('../thongbao_hienthi/thongbao_hienthi.model');
+
+const normalizeBoolean = (value) => {
+  if (value == null) return null;
+  if (typeof value === 'boolean') return value;
+  if (typeof value === 'number') return value !== 0;
+  if (typeof value === 'string') {
+    const trimmed = value.trim().toLowerCase();
+    if (['true', '1', 'yes'].includes(trimmed)) return true;
+    if (['false', '0', 'no'].includes(trimmed)) return false;
+    try {
+      const parsed = JSON.parse(value);
+      if (typeof parsed === 'boolean') return parsed;
+      return normalizeBoolean(parsed);
+    } catch {
+      if (trimmed.includes('allowreply:true') || trimmed.includes('allow_reply":true')) return true;
+      if (trimmed.includes('allowreply:false') || trimmed.includes('allow_reply":false')) return false;
+      return null;
+    }
+  }
+  if (typeof value === 'object') {
+    if (Object.prototype.hasOwnProperty.call(value, 'allowReply')) {
+      return normalizeBoolean(value.allowReply);
+    }
+    if (Object.prototype.hasOwnProperty.call(value, 'allow_reply')) {
+      return normalizeBoolean(value.allow_reply);
+    }
+    if (Object.prototype.hasOwnProperty.call(value, 'settings')) {
+      const fromSettings = normalizeBoolean(value.settings);
+      if (fromSettings != null) return fromSettings;
+    }
+    const entries = Array.isArray(value) ? value : Object.values(value);
+    for (const item of entries) {
+      const result = normalizeBoolean(item);
+      if (result != null) return result;
+    }
+  }
+  return null;
+};
+
+const resolveAllowReply = (record) => {
+  const fromHistory = normalizeBoolean(record?.history);
+  if (fromHistory != null) return fromHistory;
+  if (record && Object.prototype.hasOwnProperty.call(record, 'allow_reply')) {
+    return normalizeBoolean(record.allow_reply) ?? false;
+  }
+  return false;
+};
+
+const normalizeReplyUntil = (record) => {
+  const source = record?.reply_until;
+  if (!source) return null;
+  const date = source instanceof Date ? source : new Date(String(source));
+  if (Number.isNaN(date.getTime())) return null;
+  return date.toISOString();
+};
+
+const normalizeTarget = (value) => {
+  if (!value || typeof value !== 'string') return 'Toàn trường';
+  return value.trim() || 'Toàn trường';
+};
+
+const normalizeSender = (value) => {
+  if (!value || typeof value !== 'string') return 'Admin';
+  return value.trim() || 'Admin';
+};
+
+const canTeacherAccess = (record, teacher) => {
+  if (!record) return false;
+  const target = normalizeTarget(record.target).toLowerCase();
+  if (target.includes('giảng') || target.includes('giang') || target.includes('teacher')) return true;
+  if (target.includes('toàn') || target.includes('all')) return true;
+  if (!teacher?.identifier) return false;
+  const recipients = Array.isArray(record.recipients) ? record.recipients.map((item) => String(item)) : [];
+  return recipients.includes(String(teacher.identifier));
+};
+
+const formatAnnouncement = (record) => {
+  const createdAt = record.created_at ? new Date(record.created_at) : null;
+  return {
+    id: record.id,
+    title: record.title,
+    content: record.content,
+    sender: normalizeSender(record.sender),
+    date: record.created_at ?? null,
+    dateFormatted: createdAt
+      ? createdAt.toLocaleDateString('vi-VN', { year: 'numeric', month: 'long', day: 'numeric' })
+      : '',
+    time: createdAt ? createdAt.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }) : '',
+    type: record.type || 'Khác',
+    status: record.status || 'Đã gửi',
+    category: record.category || 'general',
+    allowReply: resolveAllowReply(record),
+    replyUntil: normalizeReplyUntil(record),
+  };
+};
+
+const resolveTeacherFromRequest = async (req) => {
+  const actor = req.user ?? {};
+  const teacher = await ThongBaoModel.getTeacherByAccount(actor.user_code ?? actor.userCode ?? null);
+  return {
+    type: 'teacher',
+    identifier: teacher?.teacher_id ?? actor.user_code ?? null,
+    name: teacher?.full_name ?? actor.fullName ?? 'Giảng viên',
+    subject: teacher?.subject ?? null,
+    classes: teacher?.classes ?? null,
+  };
+};
 
 class ThongBaoGVController {
-  // API lấy danh sách thông báo cho giảng viên
   static async getAllAnnouncements(req, res) {
     try {
-      const announcements = await ThongBaoGVModel.getAllAnnouncementsForTeacher();
-      
-      // Format dữ liệu trả về với đầy đủ thông tin
-      const formattedAnnouncements = announcements.map(announcement => ({
-        id: announcement.id,
-        title: announcement.title,
-        content: announcement.content,
-        sender: announcement.sender || 'Admin',
-        date: announcement.created_at,
-        dateFormatted: announcement.created_at ? new Date(announcement.created_at).toLocaleDateString('vi-VN', {
-          year: 'numeric',
-          month: 'long',
-          day: 'numeric'
-        }) : '',
-        time: announcement.created_at ? new Date(announcement.created_at).toLocaleTimeString('vi-VN', {
-          hour: '2-digit',
-          minute: '2-digit'
-        }) : '',
-        type: announcement.type || 'Khác',
-        status: announcement.status || 'Đã gửi',
-        category: announcement.category || 'general'
-      }));
-      
+      const teacher = await resolveTeacherFromRequest(req);
+      const announcements = await ThongBaoModel.getAllAnnouncements();
+
+      const filtered = announcements.filter((record) => canTeacherAccess(record, teacher));
+      const formatted = filtered.map(formatAnnouncement);
+
       res.json({
         success: true,
-        data: formattedAnnouncements,
-        message: "Lấy danh sách thông báo thành công"
+        data: formatted,
+        message: 'Lấy danh sách thông báo thành công',
       });
     } catch (error) {
-      console.error("Error in getAllAnnouncements:", error);
+      console.error('Error in getAllAnnouncements:', error);
       res.status(500).json({
         success: false,
-        message: "Lỗi hệ thống. Không thể lấy danh sách thông báo.",
-        error: error.message
+        message: 'Lỗi hệ thống. Không thể lấy danh sách thông báo.',
+        error: error.message,
       });
     }
   }
 
-  // API lấy chi tiết thông báo theo ID cho giảng viên
   static async getAnnouncementById(req, res) {
     try {
       const { id } = req.params;
-      
-      // Validate ID
-      if (!id || isNaN(id)) {
-        return res.status(400).json({
-          success: false,
-          message: "ID thông báo không hợp lệ"
-        });
+      if (!id || Number.isNaN(Number(id))) {
+        return res.status(400).json({ success: false, message: 'ID thông báo không hợp lệ' });
       }
 
-      const announcement = await ThongBaoGVModel.getAnnouncementByIdForTeacher(id);
-      
+      const teacher = await resolveTeacherFromRequest(req);
+      const announcement = await ThongBaoModel.getAnnouncementById(Number(id));
+
       if (!announcement) {
-        return res.status(404).json({
-          success: false,
-          message: "Không tìm thấy thông báo"
-        });
+        return res.status(404).json({ success: false, message: 'Không tìm thấy thông báo' });
       }
 
-      // Format dữ liệu trả về với đầy đủ thông tin
-      const formattedAnnouncement = {
-        id: announcement.id,
-        title: announcement.title,
-        content: announcement.content,
-        sender: announcement.sender || 'Admin',
-        date: announcement.created_at,
-        dateFormatted: announcement.created_at ? new Date(announcement.created_at).toLocaleDateString('vi-VN', {
-          year: 'numeric',
-          month: 'long',
-          day: 'numeric'
-        }) : '',
-        time: announcement.created_at ? new Date(announcement.created_at).toLocaleTimeString('vi-VN', {
-          hour: '2-digit',
-          minute: '2-digit'
-        }) : '',
-        type: announcement.type || 'Khác',
-        status: announcement.status || 'Đã gửi',
-        category: announcement.category || 'general'
-      };
-      
+      if (!canTeacherAccess(announcement, teacher)) {
+        return res.status(403).json({ success: false, message: 'Bạn không có quyền xem thông báo này' });
+      }
+
+      const formatted = formatAnnouncement(announcement);
+
       res.json({
         success: true,
-        data: formattedAnnouncement,
-        message: "Lấy chi tiết thông báo thành công"
+        data: formatted,
+        message: 'Lấy chi tiết thông báo thành công',
       });
     } catch (error) {
-      console.error("Error in getAnnouncementById:", error);
+      console.error('Error in getAnnouncementById:', error);
       res.status(500).json({
         success: false,
-        message: "Lỗi hệ thống. Không thể lấy chi tiết thông báo.",
-        error: error.message
+        message: 'Lỗi hệ thống. Không thể lấy chi tiết thông báo.',
+        error: error.message,
+      });
+    }
+  }
+
+  static async addReply(req, res) {
+    try {
+      const { id } = req.params;
+      const { message } = req.body ?? {};
+
+      const announcementId = Number(id);
+      if (!id || Number.isNaN(announcementId)) {
+        return res.status(400).json({ success: false, message: 'ID thông báo không hợp lệ' });
+      }
+
+      const trimmedMessage = typeof message === 'string' ? message.trim() : '';
+      if (!trimmedMessage) {
+        return res.status(400).json({ success: false, message: 'Nội dung phản hồi không được để trống' });
+      }
+
+      const teacher = await resolveTeacherFromRequest(req);
+      if (!teacher.identifier) {
+        return res.status(403).json({ success: false, message: 'Tài khoản giảng viên không hợp lệ' });
+      }
+
+      const announcement = await ThongBaoModel.getAnnouncementById(announcementId);
+      if (!announcement) {
+        return res.status(404).json({ success: false, message: 'Không tìm thấy thông báo' });
+      }
+
+      if (!canTeacherAccess(announcement, teacher)) {
+        return res.status(403).json({ success: false, message: 'Bạn không có quyền phản hồi thông báo này' });
+      }
+
+      if (!resolveAllowReply(announcement)) {
+        return res.status(403).json({ success: false, message: 'Thông báo này không cho phép phản hồi' });
+      }
+
+      const replyDeadline = normalizeReplyUntil(announcement);
+      if (replyDeadline && new Date(replyDeadline).getTime() < Date.now()) {
+        return res.status(403).json({ success: false, message: 'Thời hạn phản hồi đã kết thúc' });
+      }
+
+      const record = await ThongBaoModel.addReply(announcementId, {
+        message: trimmedMessage,
+        authorType: 'teacher',
+        authorCode: teacher.identifier,
+        authorName: teacher.name,
+        authorSubject: teacher.subject ?? null,
+        authorClass: teacher.classes ?? null,
+        metadata: { role: 'teacher' },
+      });
+
+      return res.status(201).json({
+        success: true,
+        data: record,
+        message: 'Gửi phản hồi thành công',
+      });
+    } catch (error) {
+      console.error('Error in addReply (teacher):', error);
+      return res.status(500).json({
+        success: false,
+        message: 'Lỗi hệ thống. Không thể gửi phản hồi.',
+        error: error.message,
+      });
+    }
+  }
+
+  static async getMyReplies(req, res) {
+    try {
+      const { id } = req.params;
+      const announcementId = Number(id);
+      if (!id || Number.isNaN(announcementId)) {
+        return res.status(400).json({ success: false, message: 'ID thông báo không hợp lệ' });
+      }
+
+      const teacher = await resolveTeacherFromRequest(req);
+      if (!teacher.identifier) {
+        return res.status(403).json({ success: false, message: 'Tài khoản giảng viên không hợp lệ' });
+      }
+
+      const announcement = await ThongBaoModel.getAnnouncementById(announcementId);
+      if (!announcement) {
+        return res.status(404).json({ success: false, message: 'Không tìm thấy thông báo' });
+      }
+
+      if (!canTeacherAccess(announcement, teacher)) {
+        return res.status(403).json({ success: false, message: 'Bạn không có quyền xem phản hồi này' });
+      }
+
+      const replies = await ThongBaoModel.getRepliesByAnnouncement(announcementId, {
+        authorType: 'teacher',
+        authorCode: teacher.identifier,
+      });
+
+      return res.json({ success: true, data: replies });
+    } catch (error) {
+      console.error('Error in getMyReplies (teacher):', error);
+      return res.status(500).json({
+        success: false,
+        message: 'Lỗi hệ thống. Không thể lấy phản hồi.',
+        error: error.message,
       });
     }
   }

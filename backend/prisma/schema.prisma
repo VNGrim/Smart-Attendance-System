@@ -3,8 +3,9 @@ generator client {
 }
 
 datasource db {
-  provider = "mysql"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }
 
 model accounts {
@@ -28,6 +29,8 @@ model announcements {
   code         String?   @unique @default(uuid()) @db.VarChar(64)
   history      Json?
   recipients   Json?
+  allow_reply  Boolean   @default(false)
+  reply_until  DateTime? @db.Timestamp(0)
   scheduled_at DateTime? @db.Timestamp(0)
   send_time    DateTime? @db.Timestamp(0)
   sender       String    @default("Admin") @db.VarChar(100)
@@ -35,8 +38,28 @@ model announcements {
   target       String    @default("Toàn trường") @db.VarChar(255)
   type         String    @default("Khác") @db.VarChar(50)
   updated_at   DateTime  @default(now()) @updatedAt @db.Timestamp(0)
+  replies      announcement_replies[]
 
   @@index([created_at])
+}
+
+model announcement_replies {
+  id              Int            @id @default(autoincrement())
+  announcement_id Int
+  author_type     String         @db.VarChar(20)
+  author_code     String?        @db.VarChar(50)
+  author_name     String?        @db.VarChar(150)
+  author_class    String?        @db.VarChar(100)
+  author_subject  String?        @db.VarChar(150)
+  content         String         @db.Text
+  created_at      DateTime       @default(now()) @db.Timestamp(0)
+  read_at         DateTime?      @db.Timestamp(0)
+  metadata        Json?
+  announcement    announcements  @relation(fields: [announcement_id], references: [id], onDelete: Cascade, map: "announcement_replies_announcement_fk")
+
+  @@index([announcement_id], map: "announcement_replies_announcement_idx")
+  @@index([author_code], map: "announcement_replies_author_idx")
+  @@index([read_at], map: "announcement_replies_read_idx")
 }
 
 model students {
@@ -56,7 +79,7 @@ model students {
   accounts     accounts?      @relation(fields: [account_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "students_ibfk_1")
   attendance_records attendance_records[]
 
-  @@index([account_id], map: "account_id")
+  @@index([account_id], map: "students_account_id_idx")
 }
 
 model teachers {
@@ -75,7 +98,7 @@ model teachers {
   classAssignments classes[] @relation("TeacherClasses")
   availability teacher_availability[]
 
-  @@index([account_id], map: "account_id")
+  @@index([account_id], map: "teachers_account_id_idx")
 }
 
 model classes {
@@ -120,6 +143,7 @@ model timetable {
   slot_id     Int
   room        String                @db.VarChar(50)
   week_key    String                @default("UNASSIGNED") @db.VarChar(20)
+  date        DateTime?             @db.Date
   teacher_id  String?               @db.VarChar(20)
   teacher_name String?              @db.VarChar(150)
   subject_name String?              @db.VarChar(150)
@@ -129,6 +153,7 @@ model timetable {
   @@index([week_key, day_of_week, slot_id], map: "timetable_week_slot_idx")
   @@index([week_key, teacher_id], map: "timetable_week_teacher_idx")
   @@index([slot_id], map: "slot_id")
+  @@index([date], map: "timetable_date_idx")
 }
 
 model rooms {
@@ -262,4 +287,14 @@ enum AttendanceStatus {
 enum student_status {
   active
   locked
+}
+
+
+model File {
+  id        Int      @id @default(autoincrement())
+  filename  String
+  original  String
+  mimetype  String
+  size      Int
+  createdAt DateTime @default(now())
 }

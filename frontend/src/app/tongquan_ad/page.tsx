@@ -23,6 +23,48 @@ type SemesterStat = {
   attendanceRatio: number;
 };
 
+type SasSettings = { themeDark?: boolean };
+type SettingsEventDetail = { themeDark: boolean };
+
+type CompositionResponse = {
+  total?: number;
+  breakdown?: Partial<CompositionBreakdown>;
+};
+
+type SemesterAttendanceItem = {
+  code?: string;
+  name?: string;
+  totalStudents?: number;
+  total_students?: number;
+  attendanceRatio?: number;
+  attendance_ratio?: number;
+};
+
+type SemestersResponse = {
+  semesters?: SemesterAttendanceItem[];
+};
+
+type SemesterDetailResponse = {
+  semester?: SemesterAttendanceItem;
+};
+
+type ActivitiesResponse = {
+  items?: ActivityItem[];
+};
+
+type ActivityItem = {
+  id?: string | number;
+  action?: string;
+  actor?: string;
+  detail?: string | null;
+  time?: string | number | Date;
+};
+
+type CountResponse = { count?: number };
+type DeltaResponse = { delta?: number };
+
+const SETTINGS_CHANGED_EVENT = "sas_settings_changed";
+
 function formatDateTime(input: unknown) {
   if (!input) return "—";
   const date = input instanceof Date ? input : new Date(input as string);
@@ -53,6 +95,15 @@ const DEFAULT_COMPOSITION_PERCENT: CompositionBreakdown = {
 };
 
 const DEFAULT_TOTAL_USERS = 2473;
+
+const NUMBER_FORMATTER = new Intl.NumberFormat("en-US");
+
+const formatNumber = (value: number | null | undefined) => {
+  if (typeof value !== "number" || Number.isNaN(value)) {
+    return "0";
+  }
+  return NUMBER_FORMATTER.format(value);
+};
 
 export default function AdminOverviewPage() {
   const router = useRouter();
@@ -114,11 +165,23 @@ export default function AdminOverviewPage() {
     try {
       const saved = localStorage.getItem("sas_settings");
       if (saved) {
-        const s = JSON.parse(saved);
-        setDark(!!s.themeDark);
-        document.documentElement.style.colorScheme = s.themeDark ? "dark" : "light";
+        const s: SasSettings = JSON.parse(saved);
+        const themeDark = s.themeDark ?? false;
+        setDark(themeDark);
+        document.documentElement.style.colorScheme = themeDark ? "dark" : "light";
       }
     } catch {}
+  }, []);
+
+  useEffect(() => {
+    const handler = (event: Event) => {
+      const detail = (event as CustomEvent<SettingsEventDetail>).detail;
+      if (!detail) return;
+      setDark(detail.themeDark);
+      document.documentElement.style.colorScheme = detail.themeDark ? "dark" : "light";
+    };
+    window.addEventListener(SETTINGS_CHANGED_EVENT, handler);
+    return () => window.removeEventListener(SETTINGS_CHANGED_EVENT, handler);
   }, []);
 
   useEffect(() => {
@@ -126,7 +189,7 @@ export default function AdminOverviewPage() {
       setCompositionLoading(true);
       setCompositionError(null);
       try {
-        const data = await apiFetchJson("/api/admin/overview/composition");
+        const data = await apiFetchJson<CompositionResponse>("/api/admin/overview/composition");
         if (typeof data?.total === "number" && data?.breakdown) {
           setComposition({
             total: data.total,
@@ -139,7 +202,7 @@ export default function AdminOverviewPage() {
         } else {
           setComposition(null);
         }
-      } catch (err) {
+      } catch (err: unknown) {
         setCompositionError("Không tải được tỉ lệ thành phần");
         console.error("composition fetch error", err);
       } finally {
@@ -153,10 +216,10 @@ export default function AdminOverviewPage() {
       setSemesterLoading(true);
       setSemesterError(null);
       try {
-        const data = await apiFetchJson("/api/admin/overview/semesters/attendance");
+        const data = await apiFetchJson<SemestersResponse>("/api/admin/overview/semesters/attendance");
         if (Array.isArray(data?.semesters)) {
           setSemesters(
-            data.semesters.map((item: any) => ({
+            data.semesters.map((item) => ({
               code: String(item.code ?? ""),
               name: String(item.name ?? ""),
               totalStudents: Number(item.totalStudents ?? item.total_students ?? 0),
@@ -166,7 +229,7 @@ export default function AdminOverviewPage() {
         } else {
           setSemesters(DEFAULT_SEMESTERS);
         }
-      } catch (err) {
+      } catch (err: unknown) {
         setSemesterError("Không tải được tổng quan học kỳ");
         setSemesters(DEFAULT_SEMESTERS);
         console.error("semester stats fetch error", err);
@@ -181,11 +244,16 @@ export default function AdminOverviewPage() {
       setActivityLoading(true);
       setActivityError(null);
       try {
-        const data = await apiFetchJson("/api/admin/overview/activities/recent");
+        const data = await apiFetchJson<ActivitiesResponse>("/api/admin/overview/activities/recent");
         if (Array.isArray(data?.items)) {
           setActivity(
-            data.items.map((item: any) => {
-              const rawTime = typeof item.time === "string" ? item.time : item.time?.toString?.() ?? "";
+            data.items.map((item) => {
+              const rawTimeValue = item.time;
+              const rawTime = typeof rawTimeValue === "string" || typeof rawTimeValue === "number"
+                ? String(rawTimeValue)
+                : rawTimeValue instanceof Date
+                ? rawTimeValue.toISOString()
+                : "";
               return {
                 id: String(item.id ?? ""),
                 action: String(item.action ?? ""),
@@ -199,7 +267,7 @@ export default function AdminOverviewPage() {
         } else {
           setActivity([]);
         }
-      } catch (err: any) {
+      } catch (err: unknown) {
         setActivityError("Không tải được hoạt động gần đây");
         console.error("activities fetch error", err);
       } finally {
@@ -211,7 +279,7 @@ export default function AdminOverviewPage() {
   useEffect(() => {
     (async () => {
       try {
-        const data = await apiFetchJson("/api/admin/overview/students/count");
+        const data = await apiFetchJson<CountResponse>("/api/admin/overview/students/count");
         if (typeof data?.count === "number") setStudentCount(data.count);
       } catch {}
     })();
@@ -220,7 +288,7 @@ export default function AdminOverviewPage() {
   useEffect(() => {
     (async () => {
       try {
-        const data = await apiFetchJson("/api/admin/overview/lecturers/count");
+        const data = await apiFetchJson<CountResponse>("/api/admin/overview/lecturers/count");
         if (typeof data?.count === "number") setLecturerCount(data.count);
       } catch {}
     })();
@@ -229,7 +297,7 @@ export default function AdminOverviewPage() {
   useEffect(() => {
     (async () => {
       try {
-        const data = await apiFetchJson("/api/admin/overview/classes/count");
+        const data = await apiFetchJson<CountResponse>("/api/admin/overview/classes/count");
         if (typeof data?.count === "number") setClassCount(data.count);
       } catch {}
     })();
@@ -238,7 +306,7 @@ export default function AdminOverviewPage() {
   useEffect(() => {
     (async () => {
       try {
-        const data = await apiFetchJson("/api/admin/overview/sessions/today/count");
+        const data = await apiFetchJson<CountResponse>("/api/admin/overview/sessions/today/count");
         if (typeof data?.count === "number") setSessionsTodayCount(data.count);
       } catch {}
     })();
@@ -247,7 +315,7 @@ export default function AdminOverviewPage() {
   useEffect(() => {
     (async () => {
       try {
-        const data = await apiFetchJson("/api/admin/overview/students/monthly-delta");
+        const data = await apiFetchJson<DeltaResponse>("/api/admin/overview/students/monthly-delta");
         if (typeof data?.delta === "number") setStudentDelta(data.delta);
       } catch {}
     })();
@@ -256,7 +324,7 @@ export default function AdminOverviewPage() {
   useEffect(() => {
     (async () => {
       try {
-        const data = await apiFetchJson("/api/admin/overview/lecturers/monthly-delta");
+        const data = await apiFetchJson<DeltaResponse>("/api/admin/overview/lecturers/monthly-delta");
         if (typeof data?.delta === "number") setLecturerDelta(data.delta);
       } catch {}
     })();
@@ -267,11 +335,11 @@ export default function AdminOverviewPage() {
     setDark(next);
     try {
       const saved = localStorage.getItem("sas_settings");
-      const prev = saved ? JSON.parse(saved) : {};
+      const prev: SasSettings = saved ? JSON.parse(saved) : {};
       const merged = { ...prev, themeDark: next };
       localStorage.setItem("sas_settings", JSON.stringify(merged));
       document.documentElement.style.colorScheme = next ? "dark" : "light";
-      window.dispatchEvent(new CustomEvent("sas_settings_changed" as any, { detail: merged }));
+      window.dispatchEvent(new CustomEvent<SettingsEventDetail>(SETTINGS_CHANGED_EVENT, { detail: { themeDark: next } }));
     } catch {}
   };
 
@@ -323,6 +391,12 @@ export default function AdminOverviewPage() {
           <div className="page-title">📊 Tổng quan hệ thống</div>
         </div>
         <div className="controls">
+          <button className="icon-btn notif" title="Thông báo">
+            🔔{notifCount > 0 && <span className="badge">{notifCount}</span>}
+          </button>
+          <button className="icon-btn" onClick={toggleDark} title="Chuyển giao diện">
+            {dark ? "🌙" : "🌞"}
+          </button>
           <div className="search">
             <i className="fas fa-search" />
             <input
@@ -360,8 +434,8 @@ export default function AdminOverviewPage() {
       <section className="cards">
         <div className="card stat-card gradient-blue" onClick={() => onCardClick("students")}>
           <div className="card-top">👨‍🎓 Sinh viên</div>
-          <div className="card-num">{(studentCount ?? stats.students.value).toLocaleString()}</div>
-          <div className="card-sub">{typeof studentDelta === 'number' ? `${studentDelta >= 0 ? '+' : ''}${studentDelta.toLocaleString()} so với tháng trước` : stats.students.delta}</div>
+          <div className="card-num">{formatNumber(studentCount ?? stats.students.value)}</div>
+          <div className="card-sub">{typeof studentDelta === 'number' ? `${studentDelta >= 0 ? '+' : ''}${formatNumber(Math.abs(studentDelta))} so với tháng trước` : stats.students.delta}</div>
           <div className="spark" aria-hidden>
             <svg width="120" height="36" viewBox="0 0 120 36">
               <polyline fill="none" stroke="rgba(255,255,255,.9)" strokeWidth="2" points="0,28 20,30 40,18 60,22 80,10 100,14 120,8" />
@@ -370,16 +444,16 @@ export default function AdminOverviewPage() {
         </div>
         <div className="card stat-card" onClick={() => onCardClick("lecturers")}>
           <div className="card-top">👩‍🏫 Giảng viên</div>
-          <div className="card-num">{(lecturerCount ?? stats.lecturers.value).toLocaleString()}</div>
-          <div className="card-sub">{typeof lecturerDelta === 'number' ? `${lecturerDelta >= 0 ? '+' : ''}${lecturerDelta.toLocaleString()} so với tháng trước` : ''}</div>
+          <div className="card-num">{formatNumber(lecturerCount ?? stats.lecturers.value)}</div>
+          <div className="card-sub">{typeof lecturerDelta === 'number' ? `${lecturerDelta >= 0 ? '+' : ''}${formatNumber(Math.abs(lecturerDelta))} so với tháng trước` : ''}</div>
         </div>
         <div className="card stat-card" onClick={() => onCardClick("classes")}> 
           <div className="card-top">🏫 Lớp học</div>
-          <div className="card-num">{(classCount ?? stats.classes.value).toLocaleString()}</div>
+          <div className="card-num">{formatNumber(classCount ?? stats.classes.value)}</div>
         </div>
         <div className="card stat-card" onClick={() => onCardClick("sessionsToday")}>
           <div className="card-top">📅 Buổi học hôm nay</div>
-          <div className="card-num">{(sessionsTodayCount ?? stats.sessionsToday.value).toLocaleString()}</div>
+          <div className="card-num">{formatNumber(sessionsTodayCount ?? stats.sessionsToday.value)}</div>
         </div>
       </section>
 
@@ -407,7 +481,7 @@ export default function AdminOverviewPage() {
                     setSemesterDetail(null);
                     setSemesterDetailLoading(true);
                     try {
-                      const data = await apiFetchJson(`/api/admin/overview/semesters/attendance/${s.code}`);
+                      const data = await apiFetchJson<SemesterDetailResponse>(`/api/admin/overview/semesters/attendance/${s.code}`);
                       if (data?.semester) {
                         setSemesterDetail({
                           code: String(data.semester.code ?? s.code),
@@ -418,7 +492,7 @@ export default function AdminOverviewPage() {
                       } else {
                         setSemesterDetail(null);
                       }
-                    } catch (err) {
+                    } catch (err: unknown) {
                       console.error("semester detail fetch error", err);
                       setSemesterDetail(null);
                     } finally {
@@ -450,7 +524,7 @@ export default function AdminOverviewPage() {
               </svg>
               <div className="donut-center">
                 <div className="donut-total">Tổng</div>
-                <div className="donut-number">{totalUsers.toLocaleString()} người</div>
+                <div className="donut-number">{formatNumber(totalUsers)} người</div>
               </div>
             </div>
             <div className="legend">
@@ -466,7 +540,7 @@ export default function AdminOverviewPage() {
                         <span className="legend-percent">{percent}%</span>
                       </div>
                       {typeof count === 'number' && (
-                        <div className="legend-count">{count.toLocaleString()} người</div>
+                        <div className="legend-count">{formatNumber(count)} người</div>
                       )}
                     </div>
                   </div>
