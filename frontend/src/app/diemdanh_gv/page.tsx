@@ -24,48 +24,64 @@ type SlotInfo = {
   dayOfWeek?: string | null;
 };
 
+type SessionStatus = "active" | "expired" | "closed" | "ended" | string;
+
 type SessionSummary = {
-  id: number;
-  classId: string;
-  slotId: number;
-  code: string;
+  id: string;
+  classId: string | null;
+  slotId: number | null;
+  day: string | null;
+  code: string | null;
   type: Mode;
-  status: "active" | "expired" | "closed";
+  status: SessionStatus;
   attempts: number;
   maxResets: number;
   attemptsRemaining: number;
   expiresAt: string | null;
-  createdAt: string;
-  updatedAt: string;
+  createdAt: string | null;
+  updatedAt: string | null;
+  endedAt?: string | null;
+  totalStudents?: number | null;
+  createdBy?: string | null;
 };
 
 type SessionDetail = SessionSummary & {
-  className?: string;
-  subjectName?: string;
-  totalStudents?: number;
+  className?: string | null;
+  subjectName?: string | null;
+  totalStudents?: number | null;
 };
 
+type AttendanceStatus = "present" | "absent" | "excused";
+
 type AttendanceRow = {
+  recordId?: string | null;
   studentId: string;
-  fullName: string;
+  fullName: string | null;
   email?: string | null;
   course?: string | null;
-  status: "present" | "absent" | "excused";
+  status: AttendanceStatus;
   markedAt: string | null;
+  modifiedAt?: string | null;
+  modifiedBy?: string | null;
   note?: string | null;
 };
 
-type HistoryItem = {
-  id: number;
-  day: string;
-  slotId: number;
-  type: Mode;
-  status: string;
-  code: string;
-  present: number;
+type AttendanceSummary = {
   total: number;
+  present: number;
+  excused: number;
+  absent: number;
+};
+
+type HistoryItem = SessionSummary & {
+  summary: AttendanceSummary;
   ratio: number;
-  createdAt: string;
+};
+
+type HistoryDetail = {
+  session: SessionDetail;
+  records: AttendanceRow[];
+  summary: AttendanceSummary;
 };
 
 type Mode = "qr" | "code" | "manual";
@@ -73,6 +89,39 @@ type Mode = "qr" | "code" | "manual";
 type Filter = "all" | "present" | "absent" | "excused";
 
 const API_BASE = makeApiUrl("/api/attendances");
+
+const ensureSummary = (summary?: Partial<AttendanceSummary> | null): AttendanceSummary => ({
+  total: summary?.total ?? 0,
+  present: summary?.present ?? 0,
+  excused: summary?.excused ?? 0,
+  absent: summary?.absent ?? 0,
+});
+
+const computeRatio = (summary: AttendanceSummary): number => {
+  if (!summary.total) return 0;
+  return Math.round((summary.present / summary.total) * 100);
+};
+
+const getSessionDisplayDate = (session?: SessionSummary | SessionDetail | null): string | null => {
+  if (!session) return null;
+  return session.day ?? session.createdAt ?? session.updatedAt ?? session.endedAt ?? null;
+};
+
+const formatDateOrFallback = (value: string | null) => (value ? formatVietnamDate(value) : "--");
+const formatWeekdayOrFallback = (value: string | null) => (value ? formatVietnamWeekday(value) : "--");
+
+const MODE_LABELS: Record<Mode, string> = {
+  qr: "QR code",
+  code: "Nhập mã",
+  manual: "Thủ công",
+};
+
+const STATUS_LABELS: Record<string, string> = {
+  active: "Đang diễn ra",
+  expired: "Hết hạn",
+  closed: "Đã đóng",
+  ended: "Đã kết thúc",
+};
 
 const DAY_LABELS: Record<string, string> = {
   Mon: "Thứ 2",
@@ -82,6 +131,55 @@ const DAY_LABELS: Record<string, string> = {
   Fri: "Thứ 6",
   Sat: "Thứ 7",
   Sun: "Chủ nhật",
+};
+
+const ATTENDANCE_STATUS_OPTIONS: { value: AttendanceStatus; label: string }[] = [
+  { value: "present", label: "Có mặt" },
+  { value: "absent", label: "Vắng" },
+  { value: "excused", label: "Có phép" },
+];
+
+type ApiHistoryItem = SessionSummary & { summary?: Partial<AttendanceSummary> | null };
+
+const normalizeAttendanceStatus = (status: any): AttendanceStatus => {
+  const value = typeof status === "string" ? status.toLowerCase() : "";
+  if (value === "present" || value === "excused") return value;
+  return "absent";
+};
+
+const mapApiRecordToRow = (record: any): AttendanceRow => ({
+  recordId: record?.id ?? null,
+  studentId: record?.studentId ?? "",
+  fullName: record?.fullName ?? null,
+  email: record?.email ?? null,
+  course: record?.course ?? null,
+  status: normalizeAttendanceStatus(record?.status),
+  markedAt: record?.markedAt ?? record?.recordedAt ?? null,
+  modifiedAt: record?.modifiedAt ?? null,
+  modifiedBy: record?.modifiedBy ?? null,
+  note: record?.note ?? null,
+});
+
+const mapSessionStudentRow = (item: any): AttendanceRow => ({
+  recordId: item?.recordId ?? item?.id ?? null,
+  studentId: item?.studentId ?? "",
+  fullName: item?.fullName ?? null,
+  email: item?.email ?? null,
+  course: item?.course ?? null,
+  status: normalizeAttendanceStatus(item?.status),
+  markedAt: item?.markedAt ?? item?.recordedAt ?? null,
+  modifiedAt: item?.modifiedAt ?? null,
+  modifiedBy: item?.modifiedBy ?? null,
+  note: item?.note ?? null,
+});
+
+const normalizeHistoryItem = (item: ApiHistoryItem): HistoryItem => {
+  const summary = ensureSummary(item.summary);
+  return {
+    ...item,
+    summary,
+    ratio: computeRatio(summary),
+  };
 };
 
 const SESSION_REQUIREMENTS: Record<Mode, { title: string; description: string }[]> = {
@@ -191,6 +289,12 @@ export default function LecturerAttendancePage() {
   const [sessionNotice, setSessionNotice] = useState<{ type: "success" | "error"; message: string } | null>(null);
   const [filter, setFilter] = useState<Filter>("all");
   const [history, setHistory] = useState<HistoryItem[]>([]);
+  const [historyDate, setHistoryDate] = useState<string>(() => new Date().toISOString().slice(0, 10));
+  const [selectedHistoryId, setSelectedHistoryId] = useState<string | null>(null);
+  const [historyDetail, setHistoryDetail] = useState<HistoryDetail | null>(null);
+  const [historyDetailLoading, setHistoryDetailLoading] = useState(false);
+  const [historyDetailError, setHistoryDetailError] = useState<string | null>(null);
+  const [updatingRecordId, setUpdatingRecordId] = useState<string | null>(null);
   const [studentLoading, setStudentLoading] = useState(false);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -203,8 +307,8 @@ export default function LecturerAttendancePage() {
   const expiresAtRef = useRef<string | null>(null);
 
   const updateQrPreview = useCallback(
-    async (code: string, sessionType: Mode) => {
-      if (sessionType !== "qr") {
+    async (code: string | null, sessionType: Mode) => {
+      if (sessionType !== "qr" || !code) {
         setQrImage(null);
         return;
       }
@@ -316,7 +420,7 @@ export default function LecturerAttendancePage() {
   };
 
   const pollSession = useCallback(
-    (sessionId: number) => {
+    (sessionId: string) => {
       stopPolling();
       const timer = setInterval(async () => {
         try {
@@ -360,17 +464,28 @@ export default function LecturerAttendancePage() {
   );
 
   const fetchHistory = useCallback(
-    async (classId: string, slotId?: number | null) => {
+    async ({ classId, date, slotId }: { classId: string; date: string; slotId?: number | null }) => {
+      if (!classId) {
+        setHistory([]);
+        return;
+      }
       try {
         setHistoryLoading(true);
-        const qs = slotId ? `?slot=${slotId}` : "";
-        const payload = await fetchJson<{ success: boolean; data: HistoryItem[] }>(
-          `${API_BASE}/classes/${classId}/history${qs}`
+        const params = new URLSearchParams({ classId, date });
+        if (slotId != null) params.append("slot", String(slotId));
+        const payload = await fetchJson<{ success: boolean; data: ApiHistoryItem[] }>(
+          `${API_BASE}/sessions?${params.toString()}`
         );
-        setHistory(payload.data || []);
+        const items = (payload.data || []).map(normalizeHistoryItem);
+        setHistory(items);
+        setSelectedHistoryId((prev) => {
+          if (prev && items.some((item) => item.id === prev)) return prev;
+          return items[0]?.id ?? null;
+        });
       } catch (err) {
         console.error("fetch history error", err);
         setHistory([]);
+        setSelectedHistoryId(null);
       } finally {
         setHistoryLoading(false);
       }
@@ -379,13 +494,14 @@ export default function LecturerAttendancePage() {
   );
 
   const loadSessionStudents = useCallback(
-    async (sessionId: number) => {
+    async (sessionId: string) => {
       try {
         setStudentLoading(true);
-        const payload = await fetchJson<{ success: boolean; data: AttendanceRow[]; summary?: any }>(
+        const payload = await fetchJson<{ success: boolean; data: any[]; summary?: Partial<AttendanceSummary> }>(
           `${API_BASE}/sessions/${sessionId}/students`
         );
-        setStudents(payload.data || []);
+        const rows = (payload.data || []).map(mapSessionStudentRow);
+        setStudents(rows);
       } catch (err) {
         console.error("fetch session students error", err);
         setStudents([]);
@@ -397,7 +513,7 @@ export default function LecturerAttendancePage() {
   );
 
   const refreshSessionData = useCallback(
-    async (sessionId: number, options?: { loadStudents?: boolean }) => {
+    async (sessionId: string, options?: { loadStudents?: boolean }) => {
       try {
         const payload = await fetchJson<{ success: boolean; data: SessionDetail }>(
           `${API_BASE}/sessions/${sessionId}`
@@ -421,6 +537,62 @@ export default function LecturerAttendancePage() {
     [loadSessionStudents, pollSession, stopPolling]
   );
 
+  const fetchHistoryDetail = useCallback(
+    async (sessionId: string) => {
+      setHistoryDetailLoading(true);
+      setHistoryDetailError(null);
+      try {
+        const payload = await fetchJson<{ success: boolean; data: HistoryDetail }>(`${API_BASE}/session/${sessionId}`);
+        const records = payload.data.records.map(mapApiRecordToRow);
+        const summary = ensureSummary(payload.data.summary);
+        setHistoryDetail({
+          session: payload.data.session,
+          records,
+          summary,
+        });
+      } catch (err: any) {
+        console.error("fetch history detail error", err);
+        setHistoryDetailError(err.message || "Không thể tải chi tiết buổi điểm danh");
+        setHistoryDetail(null);
+      } finally {
+        setHistoryDetailLoading(false);
+      }
+    },
+    []
+  );
+
+  const patchHistoryRecord = useCallback(
+    async ({ sessionId, recordId, status, note }: { sessionId: string; recordId: string; status: AttendanceStatus; note?: string | null }) => {
+      setUpdatingRecordId(recordId);
+      try {
+        const payload = await fetchJson<{ success: boolean; data: { record: any; summary: Partial<AttendanceSummary> } }>(
+          `${API_BASE}/session/${sessionId}/record/${recordId}`,
+          {
+            method: "PATCH",
+            body: JSON.stringify({ status, note }),
+          }
+        );
+        const updated = mapApiRecordToRow(payload.data.record);
+        const summary = ensureSummary(payload.data.summary);
+        setHistoryDetail((prev) => {
+          if (!prev) return prev;
+          const records = prev.records.map((item) => (item.recordId === updated.recordId ? updated : item));
+          return {
+            ...prev,
+            records,
+            summary,
+          };
+        });
+      } catch (err: any) {
+        console.error("patch history record error", err);
+        alert(err.message || "Không thể cập nhật bản ghi");
+      } finally {
+        setUpdatingRecordId(null);
+      }
+    },
+    []
+  );
+
   const createSession = useCallback(
     async (classId: string, slotId: number, selectedMode: Mode) => {
       try {
@@ -436,7 +608,7 @@ export default function LecturerAttendancePage() {
         );
         const summary = payload.data;
         await refreshSessionData(summary.id);
-        fetchHistory(classId, slotId);
+        fetchHistory({ classId, date: historyDate, slotId });
         setSessionNotice(null);
       } catch (err: any) {
         setError(err.message || "Không thể tạo buổi điểm danh");
@@ -444,7 +616,7 @@ export default function LecturerAttendancePage() {
         setSessionLoading(false);
       }
     },
-    [fetchHistory, refreshSessionData]
+    [fetchHistory, historyDate, refreshSessionData]
   );
 
   const handleClassChange = useCallback(
@@ -455,9 +627,11 @@ export default function LecturerAttendancePage() {
       setQrImage(null);
       setSessionNotice(null);
       stopPolling();
+      const today = new Date().toISOString().slice(0, 10);
+      setHistoryDate(today);
       if (classId) {
         fetchSlots(classId);
-        fetchHistory(classId, null);
+        fetchHistory({ classId, date: today, slotId: null });
       }
     },
     [fetchSlots, fetchHistory, stopPolling]
@@ -466,14 +640,28 @@ export default function LecturerAttendancePage() {
   useEffect(() => {
     if (cls) {
       fetchSlots(cls);
-      fetchHistory(cls, null);
+      fetchHistory({ classId: cls, date: historyDate, slotId: null });
     }
-  }, [cls, fetchSlots, fetchHistory]);
+  }, [cls, historyDate, fetchSlots, fetchHistory]);
 
   useEffect(() => {
     if (!cls || slot == null) return;
-    fetchHistory(cls, slot);
-  }, [cls, slot, fetchHistory]);
+    fetchHistory({ classId: cls, date: historyDate, slotId: slot });
+  }, [cls, slot, historyDate, fetchHistory]);
+
+  useEffect(() => {
+    if (!cls) return;
+    fetchHistory({ classId: cls, date: historyDate, slotId: slot });
+  }, [historyDate, cls, slot, fetchHistory]);
+
+  useEffect(() => {
+    if (!selectedHistoryId) {
+      setHistoryDetail(null);
+      setHistoryDetailError(null);
+      return;
+    }
+    fetchHistoryDetail(selectedHistoryId);
+  }, [selectedHistoryId, fetchHistoryDetail]);
 
   useEffect(() => {
     sessionRef.current = session;
@@ -933,6 +1121,26 @@ export default function LecturerAttendancePage() {
 
       <div className="panel" style={{ marginTop: 16 }}>
         <div className="section-title">Lịch sử điểm danh</div>
+        <div className="history-filters" style={{ display: "flex", gap: 12, alignItems: "center", marginBottom: 12, flexWrap: "wrap" }}>
+          <label style={{ display: "flex", flexDirection: "column", fontSize: 12, color: "#475569" }}>
+            Ngày
+            <input
+              type="date"
+              className="input"
+              value={historyDate}
+              max={new Date().toISOString().slice(0, 10)}
+              onChange={(e) => setHistoryDate(e.target.value || new Date().toISOString().slice(0, 10))}
+              style={{ minWidth: 160 }}
+            />
+          </label>
+          <button
+            className="btn-secondary"
+            onClick={() => cls && fetchHistory({ classId: cls, date: historyDate, slotId: slot })}
+            disabled={!cls || historyLoading}
+          >
+            🔄 Làm mới
+          </button>
+        </div>
         {historyLoading && <div className="loading-row">Đang tải lịch sử...</div>}
         <div className="table-wrap">
           <table>
@@ -946,18 +1154,32 @@ export default function LecturerAttendancePage() {
               </tr>
             </thead>
             <tbody>
-              {history.map((h) => (
-                <tr key={h.id}>
-                  <td>
-                    <div>{formatVietnamDate(h.day)}</div>
-                    <div style={{ fontSize: 12, color: "#64748b" }}>{formatVietnamWeekday(h.day)}</div>
-                  </td>
-                  <td>{h.slotId}</td>
-                  <td>{h.type}</td>
-                  <td>{h.status}</td>
-                  <td>{h.ratio}% ({h.present}/{h.total})</td>
-                </tr>
-              ))}
+              {history.map((h) => {
+                const dayValue = getSessionDisplayDate(h);
+                const summary = ensureSummary(h.summary);
+                const isSelected = selectedHistoryId === h.id;
+                return (
+                  <tr
+                    key={h.id}
+                    onClick={() => setSelectedHistoryId(h.id)}
+                    style={{ cursor: "pointer", background: isSelected ? "#eef2ff" : undefined }}
+                  >
+                    <td>
+                      <div>{formatDateOrFallback(dayValue)}</div>
+                      <div style={{ fontSize: 12, color: "#64748b" }}>{formatWeekdayOrFallback(dayValue)}</div>
+                    </td>
+                    <td>{h.slotId ?? "--"}</td>
+                    <td>{MODE_LABELS[h.type]}</td>
+                    <td>{STATUS_LABELS[h.status] || h.status}</td>
+                    <td>
+                      <strong>{h.ratio}%</strong>
+                      <div style={{ fontSize: 12, color: "#64748b" }}>
+                        {summary.present}/{summary.total}
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
               {!history.length && !historyLoading && (
                 <tr>
                   <td colSpan={5} style={{ textAlign: "center", padding: 16, color: "#64748b" }}>
@@ -968,6 +1190,103 @@ export default function LecturerAttendancePage() {
             </tbody>
           </table>
         </div>
+
+        {selectedHistoryId && (
+          <div className="history-detail" style={{ marginTop: 16 }}>
+            <div className="section-title" style={{ marginBottom: 8 }}>Chi tiết buổi điểm danh</div>
+            {historyDetailLoading && <div className="loading-row">Đang tải chi tiết...</div>}
+            {historyDetailError && <div className="error-banner">⚠️ {historyDetailError}</div>}
+            {historyDetail && !historyDetailLoading && !historyDetailError && (
+              <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+                <div className="history-meta" style={{ display: "flex", flexWrap: "wrap", gap: 24 }}>
+                  <div>
+                    <div style={{ fontSize: 12, color: "#64748b" }}>Lớp</div>
+                    <div style={{ fontWeight: 600 }}>{historyDetail.session.className || historyDetail.session.classId}</div>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 12, color: "#64748b" }}>Môn học</div>
+                    <div>{historyDetail.session.subjectName || "--"}</div>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 12, color: "#64748b" }}>Ngày</div>
+                    <div>{formatDateOrFallback(getSessionDisplayDate(historyDetail.session))}</div>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 12, color: "#64748b" }}>Hình thức</div>
+                    <div>{MODE_LABELS[historyDetail.session.type]}</div>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 12, color: "#64748b" }}>Tỉ lệ</div>
+                    <div>
+                      <strong>{computeRatio(historyDetail.summary)}%</strong>
+                      <span style={{ marginLeft: 6, fontSize: 12, color: "#64748b" }}>
+                        {historyDetail.summary.present}/{historyDetail.summary.total}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="table-wrap">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Mã SV</th>
+                        <th>Họ tên</th>
+                        <th>Trạng thái</th>
+                        <th>Ghi chú</th>
+                        <th>Thời gian</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {historyDetail.records.map((row) => {
+                        const recordId = row.recordId;
+                        const disabled = !recordId || updatingRecordId === recordId;
+                        return (
+                          <tr key={`${row.studentId}-${recordId ?? "noid"}`}>
+                            <td>{row.studentId}</td>
+                            <td>{row.fullName || "--"}</td>
+                            <td>
+                              <select
+                                className="input"
+                                value={row.status}
+                                disabled={disabled}
+                                onChange={(event) => {
+                                  if (!recordId) return;
+                                  const nextStatus = event.target.value as AttendanceStatus;
+                                  patchHistoryRecord({
+                                    sessionId: historyDetail.session.id,
+                                    recordId,
+                                    status: nextStatus,
+                                    note: row.note ?? null,
+                                  });
+                                }}
+                              >
+                                {ATTENDANCE_STATUS_OPTIONS.map((option) => (
+                                  <option key={option.value} value={option.value}>
+                                    {option.label}
+                                  </option>
+                                ))}
+                              </select>
+                            </td>
+                            <td>{row.note || "--"}</td>
+                            <td>{row.markedAt ? formatVietnamTime(row.markedAt) : "--"}</td>
+                          </tr>
+                        );
+                      })}
+                      {!historyDetail.records.length && (
+                        <tr>
+                          <td colSpan={5} style={{ textAlign: "center", padding: 16, color: "#64748b" }}>
+                            Không có bản ghi điểm danh
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
       </div>
     </Shell>
   );

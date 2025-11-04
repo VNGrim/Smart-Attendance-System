@@ -7,6 +7,8 @@ const bodyParser = require("body-parser");
 const cookieParser = require("cookie-parser");
 const prisma = require("./src/config/prisma"); // Import cấu hình Prisma
 
+const { scheduleAttendanceCleanup } = require("./src/diemdanh_gv/attendance.cron");
+
 const app = express();
 const PORT = process.env.PORT || 8080;
 app.set("trust proxy", 1);
@@ -69,6 +71,9 @@ app.get("/api/classes", (req, res) => {
     { id: "C02", name: "Cơ sở dữ liệu" },
   ]);
 });
+
+// ⏰ Đăng ký cron cleanup session điểm danh cũ
+scheduleAttendanceCleanup();
 
 // 🚀 Chạy server
 app.listen(PORT, () => {
