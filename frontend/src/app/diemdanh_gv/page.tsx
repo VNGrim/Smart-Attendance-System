@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import QRCode from "qrcode";
 import { makeApiUrl } from "../../lib/apiBase";
 import { formatVietnamDate, formatVietnamTime, formatVietnamWeekday } from "../../lib/timezone";
@@ -197,6 +197,10 @@ export default function LecturerAttendancePage() {
   const [polling, setPolling] = useState<NodeJS.Timeout | null>(null);
   const [qrImage, setQrImage] = useState<string | null>(null);
   const [requirements, setRequirements] = useState<{ title: string; description: string }[]>([]);
+  const sessionRef = useRef<SessionDetail | null>(null);
+  const countdownRef = useRef<number | null>(null);
+  const isResettingRef = useRef(false);
+  const expiresAtRef = useRef<string | null>(null);
 
   const updateQrPreview = useCallback(
     async (code: string, sessionType: Mode) => {
@@ -223,6 +227,32 @@ export default function LecturerAttendancePage() {
   }, [students, filter]);
 
   const countdownDisplay = useMemo(() => formatCountdown(timeLeft), [timeLeft]);
+
+  const resetStats = useMemo(() => {
+    if (!session || session.type === "manual") {
+      return { used: 0, total: 0, remaining: 0 };
+    }
+    const total = Math.max(0, session.maxResets);
+    const used = Math.min(total, Math.max(0, session.attempts));
+    return {
+      used,
+      total,
+      remaining: Math.max(0, total - used),
+    };
+  }, [session]);
+
+  const clearCountdown = useCallback(() => {
+    if (countdownRef.current != null) {
+      window.clearInterval(countdownRef.current);
+      countdownRef.current = null;
+    }
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      clearCountdown();
+    };
+  }, [clearCountdown]);
 
   useEffect(() => {
     try {
@@ -300,7 +330,7 @@ export default function LecturerAttendancePage() {
         } catch (err) {
           console.error("poll session error", err);
         }
-      }, 5000);
+      }, 1000);
       setPolling(timer);
     },
     [stopPolling, updateQrPreview]
@@ -366,19 +396,24 @@ export default function LecturerAttendancePage() {
     []
   );
 
-  const loadSessionDetail = useCallback(
-    async (sessionId: number) => {
+  const refreshSessionData = useCallback(
+    async (sessionId: number, options?: { loadStudents?: boolean }) => {
       try {
         const payload = await fetchJson<{ success: boolean; data: SessionDetail }>(
           `${API_BASE}/sessions/${sessionId}`
         );
-        setSession(payload.data);
-        if (payload.data.status === "active") {
+        const data = payload.data;
+        setSession(data);
+        if (data.status === "active") {
           pollSession(sessionId);
+        } else {
+          stopPolling();
         }
-        await loadSessionStudents(sessionId);
+        if (options?.loadStudents !== false) {
+          await loadSessionStudents(sessionId);
+        }
       } catch (err) {
-        console.error("load session detail error", err);
+        console.error("refresh session error", err);
         setSession(null);
         stopPolling();
       }
@@ -400,7 +435,7 @@ export default function LecturerAttendancePage() {
           }
         );
         const summary = payload.data;
-        await loadSessionDetail(summary.id);
+        await refreshSessionData(summary.id);
         fetchHistory(classId, slotId);
         setSessionNotice(null);
       } catch (err: any) {
@@ -409,7 +444,7 @@ export default function LecturerAttendancePage() {
         setSessionLoading(false);
       }
     },
-    [fetchHistory, loadSessionDetail]
+    [fetchHistory, refreshSessionData]
   );
 
   const handleClassChange = useCallback(
@@ -441,14 +476,16 @@ export default function LecturerAttendancePage() {
   }, [cls, slot, fetchHistory]);
 
   useEffect(() => {
+    sessionRef.current = session;
     if (!session) {
       setStudents([]);
       setQrImage(null);
       setRequirements([]);
+      clearCountdown();
       return;
     }
     loadSessionStudents(session.id);
-  }, [session, loadSessionStudents]);
+  }, [session, loadSessionStudents, clearCountdown]);
 
   useEffect(() => {
     if (!session) return;
@@ -458,21 +495,80 @@ export default function LecturerAttendancePage() {
 
   useEffect(() => {
     if (!session || session.type === "manual") {
+      clearCountdown();
       setTimeLeft(null);
+      expiresAtRef.current = null;
+      return;
+    }
+    if (session.status !== "active") {
+      clearCountdown();
+      setTimeLeft(null);
+      expiresAtRef.current = null;
       return;
     }
     if (!session.expiresAt) {
+      clearCountdown();
       setTimeLeft(null);
+      expiresAtRef.current = null;
       return;
     }
-    const update = () => {
-      const diff = new Date(session.expiresAt!).getTime() - Date.now();
-      setTimeLeft(diff / 1000);
+
+    expiresAtRef.current = session.expiresAt;
+    const expireTime = new Date(session.expiresAt).getTime();
+    const startCountdown = () => {
+      const tick = () => {
+        const diff = expireTime - Date.now();
+        const seconds = Math.max(0, Math.round(diff / 1000));
+        setTimeLeft(seconds);
+        if (seconds <= 0) {
+          clearCountdown();
+        }
+      };
+      tick();
+      clearCountdown();
+      countdownRef.current = window.setInterval(tick, 1000);
     };
-    update();
-    const interval = window.setInterval(update, 250);
-    return () => window.clearInterval(interval);
-  }, [session?.id, session?.expiresAt, session?.type]);
+
+    startCountdown();
+
+    return () => {
+      clearCountdown();
+    };
+  }, [session, clearCountdown]);
+
+  const triggerReset = useCallback(async () => {
+    const current = sessionRef.current;
+    if (!current || current.type === "manual") return;
+    if (current.status !== "active") return;
+    if (current.attempts >= current.maxResets) return;
+    if (isResettingRef.current) return;
+
+    isResettingRef.current = true;
+    setAutoResetPending(true);
+    try {
+      const payload = await fetchJson<{ success: boolean; data: SessionSummary }>(
+        `${API_BASE}/sessions/${current.id}/reset`,
+        {
+          method: "POST",
+        }
+      );
+      const updated = payload.data;
+      sessionRef.current = { ...current, ...updated } as SessionDetail;
+      setSession((prev) => (prev && prev.id === updated.id ? { ...prev, ...updated } : prev));
+      expiresAtRef.current = updated.expiresAt;
+      await refreshSessionData(updated.id, { loadStudents: true });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      if (message !== "Đã hết lượt reset mã") {
+        console.error("auto reset session error", err);
+      }
+      const id = current.id;
+      await refreshSessionData(id).catch(() => {});
+    } finally {
+      isResettingRef.current = false;
+      setAutoResetPending(false);
+    }
+  }, [refreshSessionData]);
 
   useEffect(() => {
     if (!session || session.type === "manual") return;
@@ -480,35 +576,10 @@ export default function LecturerAttendancePage() {
     if (session.attempts >= session.maxResets) return;
     if (timeLeft == null || timeLeft > 0) return;
     if (autoResetPending || closingSession) return;
+    if (isResettingRef.current) return;
 
-    let cancelled = false;
-
-    const doReset = async () => {
-      setAutoResetPending(true);
-      try {
-        await fetchJson<{ success: boolean; data: SessionSummary }>(
-          `${API_BASE}/sessions/${session.id}/reset`,
-          {
-            method: "POST",
-          }
-        );
-        await loadSessionDetail(session.id);
-      } catch (err) {
-        console.error("auto reset session error", err);
-        await loadSessionDetail(session.id).catch(() => {});
-      } finally {
-        if (!cancelled) {
-          setAutoResetPending(false);
-        }
-      }
-    };
-
-    doReset();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [session?.id, session?.type, session?.status, session?.attempts, session?.maxResets, timeLeft, autoResetPending, closingSession, loadSessionDetail]);
+    triggerReset();
+  }, [session, timeLeft, autoResetPending, closingSession, triggerReset]);
 
   const handleCreateSession = useCallback(() => {
     if (!cls || slot == null) {
@@ -543,7 +614,7 @@ export default function LecturerAttendancePage() {
           method: "POST",
         }
       );
-      await loadSessionDetail(session.id);
+      await refreshSessionData(session.id);
       stopPolling();
       setSessionNotice({ type: "success", message: "Phiên điểm danh thành công" });
     } catch (err: any) {
@@ -552,7 +623,7 @@ export default function LecturerAttendancePage() {
     } finally {
       setClosingSession(false);
     }
-  }, [session, loadSessionDetail, stopPolling]);
+  }, [session, refreshSessionData, stopPolling]);
 
   const handleManualUpdate = useCallback(async () => {
     if (!session || !students.length) return;
@@ -724,10 +795,10 @@ export default function LecturerAttendancePage() {
                   <div className="time-left">Trạng thái: {session.status}</div>
                   {session.type !== "manual" && <div className="time-left">Còn lại: {countdownDisplay}</div>}
                   {session.type !== "manual" && (
-                    <div className="time-left">Lượt sử dụng mã: {session.attempts}/{session.maxResets}</div>
+                    <div className="time-left">Lượt sử dụng mã: {resetStats.used}/{resetStats.total}</div>
                   )}
                   {session.type !== "manual" && (
-                    <div className="time-left">Lượt còn lại: {Math.max(0, session.attemptsRemaining)}</div>
+                    <div className="time-left">Lượt còn lại: {resetStats.remaining}</div>
                   )}
                   {typeof session.totalStudents === "number" && <div className="time-left">Tổng SV: {session.totalStudents}</div>}
                   {session.type === "manual" && (
