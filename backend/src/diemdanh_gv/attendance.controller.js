@@ -218,18 +218,39 @@ const createOrGetSession = async (req, res) => {
     }
     await ensureTeacherOwnsClass(teacherId, classId);
     const targetDay = toDateOnly(date);
-    const dayKey = targetDay.format("YYYY-MM-DD");
     const existing = await findLatestSession({ classId, slotId: slot, day: targetDay.toDate() });
     const now = dayjs().utc();
 
-    if (existing && existing.status !== "closed") {
+    if (existing) {
       if (existing.expiresAt && dayjs(existing.expiresAt).isBefore(now) && existing.status === "active") {
         await updateSession(existing.id, { status: "expired" });
         existing.status = "expired";
       }
+      if (["ended", "closed"].includes(existing.status)) {
+        return res.status(409).json({ success: false, message: "Buổi điểm danh hôm nay đã được lưu" });
+      }
       if (existing.status === "active" && existing.type === type) {
         return jsonResponse(res, { success: true, data: serializeSession(existing), reused: true });
       }
+
+      const totalStudents = await countClassStudents(classId);
+      const code = ["qr", "code"].includes(type) ? generateCode() : null;
+      const expiresAt = ["qr", "code"].includes(type)
+        ? now.add(SESSION_DURATION_SECONDS, "second").toDate()
+        : null;
+      const attempts = type === "manual" ? 0 : 1;
+
+      const updated = await updateSession(existing.id, {
+        type,
+        status: "active",
+        code,
+        expiresAt,
+        attempts,
+        totalStudents,
+        createdBy: teacherId,
+      });
+
+      return jsonResponse(res, { success: true, data: serializeSession(updated), reused: true });
     }
 
     const code = ["qr", "code"].includes(type) ? generateCode() : null;
