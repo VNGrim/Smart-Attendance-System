@@ -3,7 +3,14 @@ const bcrypt = require("bcryptjs");
 
 const prisma = new PrismaClient();
 
-async function main() {
+const COHORTS = [
+  { code: "K18", year: 2022 },
+  { code: "K19", year: 2023 },
+  { code: "K20", year: 2024 },
+  { code: "K21", year: 2025 },
+];
+
+async function seedAdminAccount() {
   const username = "admin";
   const password = "admin123";
 
@@ -15,11 +22,31 @@ async function main() {
     create: { user_code: username, password: hashed, role: "admin" },
   });
 
-  console.log("Seeded admin account:", {
+  console.log("✅ Seeded admin account:", {
     id: account.id,
     user_code: account.user_code,
     role: account.role,
   });
+}
+
+async function seedCohorts() {
+  for (const cohort of COHORTS) {
+    const record = await prisma.cohorts.upsert({
+      where: { code: cohort.code },
+      update: { year: cohort.year },
+      create: {
+        code: cohort.code,
+        year: cohort.year,
+      },
+    });
+
+    console.log(`✅ Seeded cohort ${record.code} (${record.year})`);
+  }
+}
+
+async function main() {
+  await seedAdminAccount();
+  await seedCohorts();
 }
 
 main()

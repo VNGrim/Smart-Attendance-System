@@ -676,7 +676,6 @@ module.exports = {
   getSessionDetail,
   getSessionStudents,
   updateManualAttendance,
-  getClassHistory: getClassHistoryHandler,
   closeSession,
   listSessionsByDate: listSessionsByDateHandler,
   getSessionWithRecords: getSessionWithRecordsHandler,

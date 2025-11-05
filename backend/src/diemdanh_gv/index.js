@@ -17,7 +17,6 @@ router.get("/sessions/:id", controller.getSessionDetail);
 router.get("/session/:id", controller.getSessionWithRecords);
 router.get("/sessions/:id/students", controller.getSessionStudents);
 router.post("/sessions/:id/manual", controller.updateManualAttendance);
-router.get("/classes/:classId/history", controller.getClassHistory);
 router.get("/sessions", controller.listSessionsByDate);
 router.patch("/session/:id/record/:recordId", controller.patchAttendanceRecord);
 router.delete("/session/:id", controller.deleteSession);
