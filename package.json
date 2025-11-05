@@ -25,6 +25,7 @@
   },
   "dependencies": {
     "date-fns": "^4.1.0",
-    "multer": "^2.0.2"
+    "multer": "^2.0.2",
+    "node-cron": "^4.2.1"
   }
 }

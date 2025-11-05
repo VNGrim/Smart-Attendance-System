@@ -36,7 +36,7 @@ async function getClassesByTeacher(teacherId) {
 
 async function getClassById(classId) {
   await prisma.$ready;
-  return prisma.classes.findUnique({ where: { class_id: classId } });
+  return prisma.classes.findUnique({ where: { class_id: normalizeClassId(classId) } });
 }
 
 async function getClassSlotsByDay(classId, dayKey, targetDate) {
@@ -69,56 +69,62 @@ async function getClassSlotsByDay(classId, dayKey, targetDate) {
 
 async function getAttendanceRecord(sessionId, studentId) {
   await prisma.$ready;
-  return prisma.attendance_records.findUnique({
+  return prisma.attendanceRecord.findUnique({
     where: {
-      session_id_student_id: {
-        session_id: sessionId,
-        student_id: studentId,
+      sessionId_studentId: {
+        sessionId,
+        studentId,
       },
     },
   });
 }
 
+async function getAttendanceRecordById(id) {
+  await prisma.$ready;
+  return prisma.attendanceRecord.findUnique({ where: { id } });
+}
+
 async function findLatestSession({ classId, slotId, day }) {
   await prisma.$ready;
-  return prisma.attendance_sessions.findFirst({
-    where: { class_id: classId, slot_id: slotId, day },
-    orderBy: { created_at: "desc" },
+  return prisma.attendanceSession.findFirst({
+    where: { classId: normalizeClassId(classId), slot: slotId, date: day },
+    orderBy: { createdAt: "desc" },
   });
 }
 
 async function findActiveSessionByCode(code) {
   await prisma.$ready;
-  return prisma.attendance_sessions.findFirst({
+  return prisma.attendanceSession.findFirst({
     where: {
       code,
       status: "active",
     },
-    orderBy: { created_at: "desc" },
+    orderBy: { createdAt: "desc" },
   });
 }
 
 async function createSession(data) {
   await prisma.$ready;
-  return prisma.attendance_sessions.create({ data });
+  return prisma.attendanceSession.create({ data });
 }
 
 async function updateSession(id, data) {
   await prisma.$ready;
-  return prisma.attendance_sessions.update({ where: { id }, data });
+  return prisma.attendanceSession.update({ where: { id }, data });
 }
 
 async function getSessionById(id) {
   await prisma.$ready;
-  return prisma.attendance_sessions.findUnique({ where: { id } });
+  return prisma.attendanceSession.findUnique({ where: { id } });
 }
 
 async function getSessionWithClass(id) {
   await prisma.$ready;
-  return prisma.attendance_sessions.findUnique({
+  return prisma.attendanceSession.findUnique({
     where: { id },
     include: {
       session_class: true,
+      records: true,
     },
   });
 }
@@ -143,12 +149,15 @@ async function getClassStudents(classId) {
 
 async function getAttendanceRecords(sessionId) {
   await prisma.$ready;
-  return prisma.attendance_records.findMany({
-    where: { session_id: sessionId },
+  return prisma.attendanceRecord.findMany({
+    where: { sessionId },
     select: {
-      student_id: true,
+      id: true,
+      studentId: true,
       status: true,
-      marked_at: true,
+      recordedAt: true,
+      modifiedBy: true,
+      modifiedAt: true,
       note: true,
     },
   });
@@ -159,23 +168,27 @@ async function saveManualAttendance(sessionId, entries) {
   await prisma.$ready;
   const now = new Date();
   const tasks = entries.map((entry) =>
-    prisma.attendance_records.upsert({
+    prisma.attendanceRecord.upsert({
       where: {
-        session_id_student_id: {
-        session_id: sessionId,
-        student_id: entry.studentId,
-      },
+        sessionId_studentId: {
+          sessionId,
+          studentId: entry.studentId,
+        },
       },
       update: {
         status: entry.status,
-        marked_at: entry.markedAt || now,
+        recordedAt: entry.markedAt || now,
+        modifiedAt: now,
+        modifiedBy: entry.modifiedBy || null,
         note: entry.note ?? null,
       },
       create: {
-        session_id: sessionId,
-        student_id: entry.studentId,
+        sessionId,
+        studentId: entry.studentId,
         status: entry.status,
-        marked_at: entry.markedAt || now,
+        recordedAt: entry.markedAt || now,
+        modifiedAt: entry.modifiedBy ? now : null,
+        modifiedBy: entry.modifiedBy || null,
         note: entry.note ?? null,
       },
     })
@@ -199,23 +212,24 @@ async function isStudentInClass(studentId, classId) {
 async function markStudentAttendance(sessionId, studentId, status = "present", note = null) {
   await prisma.$ready;
   const now = new Date();
-  return prisma.attendance_records.upsert({
+  return prisma.attendanceRecord.upsert({
     where: {
-      session_id_student_id: {
-        session_id: sessionId,
-        student_id: studentId,
+      sessionId_studentId: {
+        sessionId,
+        studentId,
       },
     },
     update: {
       status,
-      marked_at: now,
+      recordedAt: now,
+      modifiedAt: now,
       note,
     },
     create: {
-      session_id: sessionId,
-      student_id: studentId,
+      sessionId,
+      studentId,
       status,
-      marked_at: now,
+      recordedAt: now,
       note,
     },
   });
@@ -236,10 +250,10 @@ async function countClassStudents(classId) {
 
 async function getClassHistory(classId, slotId, limit = 20) {
   await prisma.$ready;
-  return prisma.attendance_sessions.findMany({
+  return prisma.attendanceSession.findMany({
     where: {
-      class_id: classId,
-      ...(slotId ? { slot_id: slotId } : {}),
+      classId: normalizeClassId(classId),
+      ...(slotId ? { slot: slotId } : {}),
     },
     include: {
       records: {
@@ -248,9 +262,191 @@ async function getClassHistory(classId, slotId, limit = 20) {
         },
       },
     },
-    orderBy: [{ day: "desc" }, { created_at: "desc" }],
+    orderBy: [{ date: "desc" }, { createdAt: "desc" }],
     take: limit,
   });
+}
+
+async function findSessionByComposite({ classId, slot, date }) {
+  await prisma.$ready;
+  return prisma.attendanceSession.findFirst({
+    where: {
+      classId: normalizeClassId(classId),
+      slot,
+      date,
+    },
+  });
+}
+
+async function listSessionsByDate(classId, date) {
+  await prisma.$ready;
+  return prisma.attendanceSession.findMany({
+    where: {
+      classId: normalizeClassId(classId),
+      date,
+    },
+    include: {
+      records: {
+        select: {
+          status: true,
+        },
+      },
+    },
+    orderBy: [{ slot: "asc" }, { createdAt: "asc" }],
+  });
+}
+
+async function getSessionWithRecords(sessionId) {
+  await prisma.$ready;
+  return prisma.attendanceSession.findUnique({
+    where: { id: sessionId },
+    include: {
+      session_class: true,
+      records: true,
+    },
+  });
+}
+
+async function updateAttendanceRecordById(recordId, data) {
+  await prisma.$ready;
+  return prisma.attendanceRecord.update({
+    where: { id: recordId },
+    data,
+  });
+}
+
+async function deleteSessionById(sessionId) {
+  await prisma.$ready;
+  return prisma.attendanceSession.delete({ where: { id: sessionId } });
+}
+
+async function cleanupOldSessions({ before, statuses = ["ended", "closed", "expired"] } = {}) {
+  await prisma.$ready;
+  if (!before) return 0;
+
+  const cutoff = new Date(before);
+  if (Number.isNaN(cutoff.getTime())) return 0;
+  cutoff.setHours(0, 0, 0, 0);
+
+  const where = {
+    date: {
+      lt: cutoff,
+    },
+    ...(Array.isArray(statuses) && statuses.length
+      ? {
+          status: {
+            in: statuses.map((item) => String(item).toLowerCase()),
+          },
+        }
+      : {}),
+  };
+
+  const result = await prisma.attendanceSession.deleteMany({ where });
+  return result.count ?? 0;
+}
+
+async function finalizeAttendanceSession({
+  classId,
+  slot,
+  date,
+  type,
+  code = null,
+  createdBy,
+}) {
+  await prisma.$ready;
+  const normalizedClassId = normalizeClassId(classId);
+  const slotNumber = Number(slot);
+  if (!Number.isInteger(slotNumber) || slotNumber <= 0) {
+    const error = new Error("INVALID_SLOT");
+    error.status = 400;
+    throw error;
+  }
+
+  const targetDate = new Date(date);
+  targetDate.setHours(0, 0, 0, 0);
+
+  const students = await getClassStudents(normalizedClassId);
+  const studentIds = students.map((student) => student.student_id);
+  const now = new Date();
+  const normalizedType = String(type || "manual").toLowerCase();
+  const normalizedCode = code ? String(code).trim().toUpperCase() : null;
+
+  const session = await prisma.$transaction(async (tx) => {
+    const existing = await tx.attendanceSession.findFirst({
+      where: {
+        classId: normalizedClassId,
+        slot: slotNumber,
+        date: targetDate,
+      },
+    });
+
+    if (existing && existing.status === "ended") {
+      const error = new Error("SESSION_ALREADY_ENDED");
+      error.status = 409;
+      throw error;
+    }
+
+    let persisted = existing;
+    if (persisted) {
+      persisted = await tx.attendanceSession.update({
+        where: { id: existing.id },
+        data: {
+          type: normalizedType,
+          code: normalizedCode,
+          status: "ended",
+          endedAt: now,
+          expiresAt: now,
+          totalStudents: studentIds.length,
+          createdBy: existing.createdBy || createdBy,
+        },
+      });
+    } else {
+      persisted = await tx.attendanceSession.create({
+        data: {
+          classId: normalizedClassId,
+          slot: slotNumber,
+          date: targetDate,
+          type: normalizedType,
+          code: normalizedCode,
+          createdBy,
+          status: "ended",
+          endedAt: now,
+          expiresAt: now,
+          totalStudents: studentIds.length,
+        },
+      });
+    }
+
+    const existingRecords = await tx.attendanceRecord.findMany({
+      where: { sessionId: persisted.id },
+      select: {
+        studentId: true,
+      },
+    });
+    const existingSet = new Set(existingRecords.map((item) => item.studentId));
+    const toCreate = studentIds
+      .filter((studentId) => !existingSet.has(studentId))
+      .map((studentId) => ({
+        sessionId: persisted.id,
+        studentId,
+        status: "absent",
+      }));
+
+    if (toCreate.length) {
+      await tx.attendanceRecord.createMany({ data: toCreate });
+    }
+
+    return persisted;
+  });
+
+  const records = await getAttendanceRecords(session.id);
+
+  return {
+    session,
+    records,
+    students,
+    totalStudents: studentIds.length,
+  };
 }
 
 module.exports = {
@@ -269,6 +465,14 @@ module.exports = {
   isStudentInClass,
   markStudentAttendance,
   getAttendanceRecord,
+  getAttendanceRecordById,
   countClassStudents,
   getClassHistory,
+  findSessionByComposite,
+  listSessionsByDate,
+  getSessionWithRecords,
+  updateAttendanceRecordById,
+  deleteSessionById,
+  cleanupOldSessions,
+  finalizeAttendanceSession,
 };

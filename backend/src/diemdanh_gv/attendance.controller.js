@@ -16,6 +16,12 @@ const {
   saveManualAttendance,
   countClassStudents,
   getClassHistory,
+  finalizeAttendanceSession,
+  listSessionsByDate,
+  getSessionWithRecords,
+  updateAttendanceRecordById,
+  deleteSessionById,
+  getAttendanceRecordById,
 } = require("./attendance.model");
 const { jsonResponse } = require("../utils/json");
 
@@ -47,21 +53,71 @@ const DAY_MAP = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
 const getDayKeyFromDate = (date) => DAY_MAP[dayjs(date).day()] ?? "Mon";
 
-const serializeSession = (session) => ({
-  id: session.id,
-  classId: session.class_id,
-  slotId: session.slot_id,
-  day: dayjs(session.day).format("YYYY-MM-DD"),
-  code: session.code,
-  type: session.type,
-  status: session.status,
-  attempts: session.attempts,
-  maxResets: MAX_ATTEMPTS,
-  attemptsRemaining: Math.max(0, MAX_ATTEMPTS - session.attempts),
-  expiresAt: session.expires_at ? dayjs(session.expires_at).toISOString() : null,
-  createdAt: dayjs(session.created_at).toISOString(),
-  updatedAt: dayjs(session.updated_at).toISOString(),
-});
+const VALID_STATUSES = new Set(["present", "absent", "excused"]);
+
+const mapRecordsWithStudents = (records = [], students = []) => {
+  const studentMap = new Map(students.map((item) => [item.student_id, item]));
+  return records.map((record) => {
+    const student = studentMap.get(record.studentId);
+    const recordedAt = record.recordedAt ? dayjs(record.recordedAt).toISOString() : null;
+    return {
+      id: record.id,
+      studentId: record.studentId,
+      fullName: student?.full_name ?? null,
+      email: student?.email ?? null,
+      course: student?.course ?? null,
+      status: record.status,
+      recordedAt,
+      markedAt: recordedAt,
+      modifiedAt: record.modifiedAt ? dayjs(record.modifiedAt).toISOString() : null,
+      modifiedBy: record.modifiedBy ?? null,
+      note: record.note ?? null,
+    };
+  });
+};
+
+const summarizeRecords = (records = []) => {
+  let present = 0;
+  let excused = 0;
+  for (const record of records) {
+    if (record.status === "present") present += 1;
+    else if (record.status === "excused") excused += 1;
+  }
+  const total = records.length;
+  const absent = Math.max(0, total - present - excused);
+  return { total, present, excused, absent };
+};
+
+const serializeSession = (session) => {
+  const classId = session.classId ?? session.class_id;
+  const slot = session.slot ?? session.slot_id;
+  const date = session.date ?? session.day;
+  const expiresAt = session.expiresAt ?? session.expires_at;
+  const createdAt = session.createdAt ?? session.created_at;
+  const updatedAt = session.updatedAt ?? session.updated_at;
+  const endedAt = session.endedAt ?? session.ended_at;
+  const totalStudents = session.totalStudents ?? session.total_students;
+  const createdBy = session.createdBy ?? session.created_by;
+
+  return {
+    id: session.id,
+    classId: classId ? normalizeClassId(classId) : null,
+    slotId: slot ?? null,
+    day: date ? dayjs(date).format("YYYY-MM-DD") : null,
+    code: session.code || null,
+    type: session.type,
+    status: session.status,
+    attempts: session.attempts ?? 0,
+    maxResets: MAX_ATTEMPTS,
+    attemptsRemaining: Math.max(0, MAX_ATTEMPTS - (session.attempts ?? 0)),
+    expiresAt: expiresAt ? dayjs(expiresAt).toISOString() : null,
+    createdAt: createdAt ? dayjs(createdAt).toISOString() : null,
+    updatedAt: updatedAt ? dayjs(updatedAt).toISOString() : null,
+    endedAt: endedAt ? dayjs(endedAt).toISOString() : null,
+    totalStudents: totalStudents ?? null,
+    createdBy: createdBy ?? null,
+  };
+};
 
 const ensureTeacherOwnsClass = async (teacherId, classId) => {
   const record = await getClassById(classId);
@@ -167,7 +223,7 @@ const createOrGetSession = async (req, res) => {
     const now = dayjs().utc();
 
     if (existing && existing.status !== "closed") {
-      if (existing.expires_at && dayjs(existing.expires_at).isBefore(now) && existing.status === "active") {
+      if (existing.expiresAt && dayjs(existing.expiresAt).isBefore(now) && existing.status === "active") {
         await updateSession(existing.id, { status: "expired" });
         existing.status = "expired";
       }
@@ -176,22 +232,25 @@ const createOrGetSession = async (req, res) => {
       }
     }
 
-    const code = generateCode();
+    const code = ["qr", "code"].includes(type) ? generateCode() : null;
     const expiresAt = ["qr", "code"].includes(type)
       ? now.add(SESSION_DURATION_SECONDS, "second").toDate()
-      : now.toDate();
+      : null;
 
     const initialAttempts = type === "manual" ? 0 : 1;
+    const totalStudents = await countClassStudents(classId);
 
     const session = await createSession({
-      class_id: normalizeClassId(classId),
-      slot_id: slot,
-      day: targetDay.toDate(),
+      classId: normalizeClassId(classId),
+      slot,
+      date: targetDay.toDate(),
       code,
       type,
       status: "active",
       attempts: initialAttempts,
-      expires_at: expiresAt,
+      expiresAt,
+      createdBy: teacherId,
+      totalStudents,
     });
 
     return jsonResponse(res, { success: true, data: serializeSession(session) }, 201);
@@ -203,10 +262,228 @@ const createOrGetSession = async (req, res) => {
   }
 };
 
+const endAttendanceSession = async (req, res) => {
+  try {
+    const teacherId = extractTeacherId(req);
+    const { classId, slot, method, code } = req.body || {};
+    if (!teacherId) {
+      return res.status(401).json({ success: false, message: "Không xác định được giảng viên" });
+    }
+    if (!classId || slot == null || !method) {
+      return res.status(400).json({ success: false, message: "Thiếu thông tin lớp, slot hoặc phương thức" });
+    }
+    const slotNumber = Number(slot);
+    if (!Number.isInteger(slotNumber) || slotNumber <= 0) {
+      return res.status(400).json({ success: false, message: "Slot không hợp lệ" });
+    }
+    if (!["qr", "code", "manual"].includes(String(method))) {
+      return res.status(400).json({ success: false, message: "Phương thức không hợp lệ" });
+    }
+
+    await ensureTeacherOwnsClass(teacherId, classId);
+
+    const targetDay = dayjs().startOf("day").toDate();
+    const result = await finalizeAttendanceSession({
+      classId,
+      slot: slotNumber,
+      date: targetDay,
+      type: String(method),
+      code,
+      createdBy: teacherId,
+    });
+
+    const records = mapRecordsWithStudents(result.records, result.students);
+    const summary = summarizeRecords(records);
+
+    return jsonResponse(
+      res,
+      {
+        success: true,
+        data: {
+          session: serializeSession(result.session),
+          records,
+          summary,
+        },
+      },
+      201
+    );
+  } catch (error) {
+    if (error.status === 404) return res.status(404).json({ success: false, message: "Không tìm thấy lớp" });
+    if (error.status === 403) return res.status(403).json({ success: false, message: "Bạn không có quyền với lớp này" });
+    if (error.status === 409) return res.status(409).json({ success: false, message: "Buổi điểm danh hôm nay đã được lưu" });
+    if (error.status === 400) return res.status(400).json({ success: false, message: "Dữ liệu không hợp lệ" });
+    console.error("attendance end session error:", error);
+    return res.status(500).json({ success: false, message: "Không thể lưu buổi điểm danh" });
+  }
+};
+
+const listSessionsByDateHandler = async (req, res) => {
+  try {
+    const teacherId = extractTeacherId(req);
+    const classId = req.query?.classId;
+    if (!classId) {
+      return res.status(400).json({ success: false, message: "Thiếu classId" });
+    }
+    await ensureTeacherOwnsClass(teacherId, classId);
+
+    const targetDay = toDateOnly(req.query?.date);
+    const sessions = await listSessionsByDate(classId, targetDay.toDate());
+    const data = sessions.map((item) => {
+      const serialized = serializeSession(item);
+      const summary = summarizeRecords(item.records || []);
+      return {
+        ...serialized,
+        summary,
+      };
+    });
+
+    return jsonResponse(res, { success: true, data });
+  } catch (error) {
+    if (error.status === 404) return res.status(404).json({ success: false, message: "Không tìm thấy lớp" });
+    if (error.status === 403) return res.status(403).json({ success: false, message: "Bạn không có quyền với lớp này" });
+    console.error("attendance list sessions error:", error);
+    return res.status(500).json({ success: false, message: "Không thể tải danh sách buổi điểm danh" });
+  }
+};
+
+const getSessionWithRecordsHandler = async (req, res) => {
+  try {
+    const teacherId = extractTeacherId(req);
+    const { id } = req.params;
+    if (!id) return res.status(400).json({ success: false, message: "Thiếu session id" });
+
+    const session = await getSessionWithRecords(id);
+    if (!session) return res.status(404).json({ success: false, message: "Không tìm thấy buổi điểm danh" });
+    await ensureTeacherOwnsClass(teacherId, session.session_class.class_id);
+
+    const students = await getClassStudents(session.session_class.class_id);
+    const records = mapRecordsWithStudents(session.records || [], students);
+    const summary = summarizeRecords(records);
+    const totalStudents = session.totalStudents ?? students.length;
+
+    return jsonResponse(res, {
+      success: true,
+      data: {
+        session: {
+          ...serializeSession(session),
+          className: session.session_class.class_name,
+          subjectName: session.session_class.subject_name,
+          totalStudents,
+        },
+        records,
+        summary,
+      },
+    });
+  } catch (error) {
+    if (error.status === 404) return res.status(404).json({ success: false, message: "Không tìm thấy buổi điểm danh" });
+    if (error.status === 403) return res.status(403).json({ success: false, message: "Bạn không có quyền với lớp này" });
+    console.error("attendance session detail error:", error);
+    return res.status(500).json({ success: false, message: "Không thể tải thông tin buổi điểm danh" });
+  }
+};
+
+const patchAttendanceRecord = async (req, res) => {
+  try {
+    const teacherId = extractTeacherId(req);
+    const { id, recordId } = req.params;
+    const { status, note, markedAt } = req.body || {};
+    if (!id || !recordId) {
+      return res.status(400).json({ success: false, message: "Thiếu session id hoặc record id" });
+    }
+
+    const session = await getSessionWithClass(id);
+    if (!session) return res.status(404).json({ success: false, message: "Không tìm thấy buổi điểm danh" });
+    await ensureTeacherOwnsClass(teacherId, session.session_class.class_id);
+
+    const record = await getAttendanceRecordById(recordId);
+    if (!record || record.sessionId !== id) {
+      return res.status(404).json({ success: false, message: "Không tìm thấy bản ghi điểm danh" });
+    }
+
+    const payload = {};
+    const now = new Date();
+    if (status !== undefined) {
+      const normalized = String(status).toLowerCase();
+      if (!VALID_STATUSES.has(normalized)) {
+        return res.status(400).json({ success: false, message: "Trạng thái không hợp lệ" });
+      }
+      payload.status = normalized;
+      const parsedMarkedAt = markedAt ? dayjs(markedAt) : null;
+      if (parsedMarkedAt && parsedMarkedAt.isValid()) {
+        payload.recordedAt = parsedMarkedAt.toDate();
+      } else if (normalized === "present") {
+        payload.recordedAt = now;
+      } else {
+        payload.recordedAt = null;
+      }
+    }
+
+    if (note !== undefined) {
+      payload.note = note ?? null;
+    }
+
+    if (!Object.keys(payload).length) {
+      return res.status(400).json({ success: false, message: "Không có dữ liệu cần cập nhật" });
+    }
+
+    payload.modifiedAt = now;
+    payload.modifiedBy = teacherId;
+
+    await updateAttendanceRecordById(recordId, payload);
+
+    const [records, students] = await Promise.all([
+      getAttendanceRecords(id),
+      getClassStudents(session.session_class.class_id),
+    ]);
+    const mapped = mapRecordsWithStudents(records, students);
+    const summary = summarizeRecords(mapped);
+    const updatedRecord = mapped.find((item) => item.id === recordId) ?? null;
+
+    return jsonResponse(res, {
+      success: true,
+      data: {
+        record: updatedRecord,
+        summary,
+      },
+    });
+  } catch (error) {
+    if (error.status === 404) return res.status(404).json({ success: false, message: "Không tìm thấy buổi điểm danh" });
+    if (error.status === 403) return res.status(403).json({ success: false, message: "Bạn không có quyền với lớp này" });
+    console.error("attendance patch record error:", error);
+    return res.status(500).json({ success: false, message: "Không thể cập nhật bản ghi điểm danh" });
+  }
+};
+
+const deleteSessionHandler = async (req, res) => {
+  try {
+    const teacherId = extractTeacherId(req);
+    const { id } = req.params;
+    if (!id) return res.status(400).json({ success: false, message: "Thiếu session id" });
+
+    const session = await getSessionWithClass(id);
+    if (!session) return res.status(404).json({ success: false, message: "Không tìm thấy buổi điểm danh" });
+    await ensureTeacherOwnsClass(teacherId, session.session_class.class_id);
+
+    const sessionDate = dayjs(session.date ?? session.day);
+    if (!sessionDate.isSame(dayjs(), "day")) {
+      return res.status(403).json({ success: false, message: "Chỉ được phép xoá buổi điểm danh trong ngày" });
+    }
+
+    await deleteSessionById(id);
+
+    return jsonResponse(res, { success: true, data: { deleted: true } });
+  } catch (error) {
+    if (error.status === 404) return res.status(404).json({ success: false, message: "Không tìm thấy buổi điểm danh" });
+    if (error.status === 403) return res.status(403).json({ success: false, message: "Bạn không có quyền với lớp này" });
+    console.error("attendance delete session error:", error);
+    return res.status(500).json({ success: false, message: "Không thể xoá buổi điểm danh" });
+  }
+};
+
 const resetSessionCode = async (req, res) => {
   try {
     const teacherId = extractTeacherId(req);
-    const id = Number(req.params.id);
+    const { id } = req.params;
     if (!id) return res.status(400).json({ success: false, message: "Thiếu session id" });
 
     const session = await getSessionWithClass(id);
@@ -215,10 +492,10 @@ const resetSessionCode = async (req, res) => {
     if (session.type === "manual") {
       return res.status(400).json({ success: false, message: "Hình thức thủ công không hỗ trợ reset mã" });
     }
-    if (session.attempts >= MAX_ATTEMPTS) {
+    if ((session.attempts ?? 0) >= MAX_ATTEMPTS) {
       const updated = await updateSession(session.id, {
         status: "closed",
-        expires_at: dayjs().utc().toDate(),
+        expiresAt: dayjs().utc().toDate(),
       });
       return res.status(409).json({ success: false, message: "Đã hết lượt reset mã", data: serializeSession(updated) });
     }
@@ -226,8 +503,8 @@ const resetSessionCode = async (req, res) => {
     const now = dayjs().utc();
     const updated = await updateSession(session.id, {
       code: generateCode(),
-      expires_at: now.add(SESSION_DURATION_SECONDS, "second").toDate(),
-      attempts: session.attempts + 1,
+      expiresAt: now.add(SESSION_DURATION_SECONDS, "second").toDate(),
+      attempts: (session.attempts ?? 0) + 1,
       status: "active",
     });
 
@@ -243,7 +520,7 @@ const resetSessionCode = async (req, res) => {
 const closeSession = async (req, res) => {
   try {
     const teacherId = extractTeacherId(req);
-    const id = Number(req.params.id);
+    const { id } = req.params;
     if (!id) return res.status(400).json({ success: false, message: "Thiếu session id" });
 
     const session = await getSessionWithClass(id);
@@ -252,7 +529,8 @@ const closeSession = async (req, res) => {
 
     const updated = await updateSession(session.id, {
       status: "closed",
-      expires_at: dayjs().utc().toDate(),
+      expiresAt: dayjs().utc().toDate(),
+      endedAt: dayjs().utc().toDate(),
     });
 
     return jsonResponse(res, { success: true, data: serializeSession(updated) });
@@ -267,13 +545,15 @@ const closeSession = async (req, res) => {
 const getSessionDetail = async (req, res) => {
   try {
     const teacherId = extractTeacherId(req);
-    const id = Number(req.params.id);
+    const { id } = req.params;
     if (!id) return res.status(400).json({ success: false, message: "Thiếu session id" });
 
     const session = await getSessionWithClass(id);
     if (!session) return res.status(404).json({ success: false, message: "Không tìm thấy buổi điểm danh" });
     await ensureTeacherOwnsClass(teacherId, session.session_class.class_id);
-    const totalStudents = await countClassStudents(session.session_class.class_id);
+
+    const totalStudents = session.totalStudents ?? (await countClassStudents(session.session_class.class_id));
+
     return jsonResponse(res, {
       success: true,
       data: {
@@ -294,8 +574,9 @@ const getSessionDetail = async (req, res) => {
 const getSessionStudents = async (req, res) => {
   try {
     const teacherId = extractTeacherId(req);
-    const id = Number(req.params.id);
+    const { id } = req.params;
     if (!id) return res.status(400).json({ success: false, message: "Thiếu session id" });
+
     const session = await getSessionWithClass(id);
     if (!session) return res.status(404).json({ success: false, message: "Không tìm thấy buổi điểm danh" });
     await ensureTeacherOwnsClass(teacherId, session.session_class.class_id);
@@ -304,31 +585,16 @@ const getSessionStudents = async (req, res) => {
       getClassStudents(session.session_class.class_id),
       getAttendanceRecords(id),
     ]);
-    const recordMap = new Map(records.map((item) => [item.student_id, item]));
-
-    const data = students.map((student) => {
-      const record = recordMap.get(student.student_id);
-      return {
-        studentId: student.student_id,
-        fullName: student.full_name,
-        email: student.email,
-        course: student.course,
-        status: record?.status || "absent",
-        markedAt: record?.marked_at ? dayjs(record.marked_at).toISOString() : null,
-        note: record?.note || null,
-      };
-    });
-
-    const present = data.filter((item) => item.status === "present").length;
-    const excused = data.filter((item) => item.status === "excused").length;
+    const data = mapRecordsWithStudents(records, students);
+    const { total, present, excused, absent } = summarizeRecords(data);
     return jsonResponse(res, {
       success: true,
       data,
       summary: {
-        total: data.length,
+        total,
         present,
         excused,
-        absent: data.length - present - excused,
+        absent,
       },
     });
   } catch (error) {
@@ -342,7 +608,7 @@ const getSessionStudents = async (req, res) => {
 const updateManualAttendance = async (req, res) => {
   try {
     const teacherId = extractTeacherId(req);
-    const id = Number(req.params.id);
+    const { id } = req.params;
     const { students } = req.body || {};
     if (!id) return res.status(400).json({ success: false, message: "Thiếu session id" });
     if (!Array.isArray(students) || !students.length) {
@@ -366,6 +632,7 @@ const updateManualAttendance = async (req, res) => {
         status,
         markedAt: item.markedAt ? new Date(item.markedAt) : undefined,
         note: item.note ?? null,
+        modifiedBy: teacherId,
       };
     });
 
@@ -374,7 +641,7 @@ const updateManualAttendance = async (req, res) => {
       getClassStudents(session.session_class.class_id),
       getAttendanceRecords(id),
     ]);
-    const recordMap = new Map(records.map((item) => [item.student_id, item]));
+    const recordMap = new Map(records.map((item) => [item.studentId, item]));
 
     const data = updatedStudents.map((student) => {
       const record = recordMap.get(student.student_id);
@@ -384,7 +651,9 @@ const updateManualAttendance = async (req, res) => {
         email: student.email,
         course: student.course,
         status: record?.status || "absent",
-        markedAt: record?.marked_at ? dayjs(record.marked_at).toISOString() : null,
+        markedAt: record?.recordedAt ? dayjs(record.recordedAt).toISOString() : null,
+        modifiedAt: record?.modifiedAt ? dayjs(record.modifiedAt).toISOString() : null,
+        modifiedBy: record?.modifiedBy || null,
         note: record?.note || null,
       };
     });
@@ -398,50 +667,18 @@ const updateManualAttendance = async (req, res) => {
   }
 };
 
-const getClassHistoryHandler = async (req, res) => {
-  try {
-    const teacherId = extractTeacherId(req);
-    const { classId } = req.params;
-    const slot = req.query?.slot ? Number(req.query.slot) : undefined;
-    await ensureTeacherOwnsClass(teacherId, classId);
-    const [rows, totalStudents] = await Promise.all([
-      getClassHistory(classId, slot, 50),
-      countClassStudents(classId),
-    ]);
-    const data = rows.map((row) => {
-      const present = row.records?.filter((r) => r.status === "present").length || 0;
-      const total = totalStudents || row.records?.length || 0;
-      const ratio = total ? Math.round((present / total) * 100) : 0;
-      return {
-        id: row.id,
-        day: dayjs(row.day).format("YYYY-MM-DD"),
-        slotId: row.slot_id,
-        type: row.type,
-        status: row.status,
-        code: row.code,
-        present,
-        total,
-        ratio,
-        createdAt: dayjs(row.created_at).toISOString(),
-      };
-    });
-    return jsonResponse(res, { success: true, data });
-  } catch (error) {
-    if (error.status === 404) return res.status(404).json({ success: false, message: "Không tìm thấy lớp" });
-    if (error.status === 403) return res.status(403).json({ success: false, message: "Bạn không có quyền với lớp này" });
-    console.error("attendance class history error:", error);
-    return res.status(500).json({ success: false, message: "Không thể tải lịch sử điểm danh" });
-  }
-};
-
 module.exports = {
   listTeacherClasses,
   listClassSlots,
   createOrGetSession,
+  endAttendanceSession,
   resetSessionCode,
   getSessionDetail,
   getSessionStudents,
   updateManualAttendance,
-  getClassHistory: getClassHistoryHandler,
   closeSession,
+  listSessionsByDate: listSessionsByDateHandler,
+  getSessionWithRecords: getSessionWithRecordsHandler,
+  patchAttendanceRecord,
+  deleteSession: deleteSessionHandler,
 };
