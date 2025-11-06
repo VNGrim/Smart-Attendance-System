@@ -1,93 +1,99 @@
-const LopModel = require('./lop_gv.model');
+﻿const prisma = require('../config/prisma');
+const dayjs = require('dayjs');
 
 class LopController {
   // API lấy danh sách lớp học của giảng viên
   static async getTeacherClasses(req, res) {
     try {
-      const { teacherId } = req.params;
+      const teacherId = req.user?.userId;
       
-      // Validate teacherId
       if (!teacherId) {
-        return res.status(400).json({
+        return res.status(401).json({
           success: false,
-          message: "Mã giảng viên không được để trống"
+          message: 'Không xác định được giảng viên'
         });
       }
 
-      const classes = await LopModel.getClassesByTeacher(teacherId);
-      
-      // Format dữ liệu trả về
-      const formattedClasses = classes.map(cls => ({
-        class_id: cls.class_id,
-        class_name: cls.class_name,
-        subject_name: cls.subject_name,
-        semester: cls.semester,
-        school_year: cls.school_year,
-        student_count: cls.student_count || 0
-      }));
+      await prisma.$ready;
+
+      const classes = await prisma.classes.findMany({
+        where: {
+          teacher_id: teacherId,
+          status: 'Đang hoạt động'
+        },
+        select: {
+          class_id: true,
+          class_name: true,
+          subject_code: true,
+          subject_name: true,
+          room: true,
+          schedule: true,
+          cohort: true,
+          semester: true,
+          school_year: true
+        },
+        orderBy: {
+          class_id: 'asc'
+        }
+      });
+
+      // Lấy thông tin lịch học và số sinh viên cho từng lớp
+      const classesWithDetails = await Promise.all(
+        classes.map(async (cls) => {
+          // Lấy lịch học đầu tiên
+          const firstSchedule = await prisma.timetable.findFirst({
+            where: { classes: cls.class_id },
+            include: { time_slots: true },
+            orderBy: [
+              { day_of_week: 'asc' },
+              { slot_id: 'asc' }
+            ]
+          });
+
+          const dayNames = {
+            Mon: 'Thứ 2', Tue: 'Thứ 3', Wed: 'Thứ 4',
+            Thu: 'Thứ 5', Fri: 'Thứ 6', Sat: 'Thứ 7', Sun: 'CN'
+          };
+
+          let scheduleText = cls.schedule || 'Chưa có lịch';
+          if (firstSchedule) {
+            const dayName = dayNames[firstSchedule.day_of_week] || firstSchedule.day_of_week;
+            const startTime = firstSchedule.time_slots?.start_time 
+              ? dayjs(firstSchedule.time_slots.start_time).format('HH:mm')
+              : '';
+            scheduleText = `  `;
+          }
+
+          // Đếm số sinh viên
+          const studentCount = await prisma.students.count({
+            where: {
+              classes: { contains: cls.class_id }
+            }
+          });
+
+          return {
+            id: cls.class_id,
+            code: cls.subject_code || cls.class_id,
+            subject: cls.subject_name || cls.class_name,
+            size: studentCount,
+            schedule: scheduleText,
+            room: cls.room || firstSchedule?.room_name || 'TBA',
+            semester: cls.semester,
+            schoolYear: cls.school_year,
+            cohort: cls.cohort
+          };
+        })
+      );
       
       res.json({
         success: true,
-        data: formattedClasses,
-        message: "Lấy danh sách lớp học thành công"
+        data: classesWithDetails
       });
     } catch (error) {
-      console.error("Error in getTeacherClasses:", error);
+      console.error('Error in getTeacherClasses:', error);
       res.status(500).json({
         success: false,
-        message: "Lỗi hệ thống. Không thể lấy danh sách lớp học.",
-        error: error.message
-      });
-    }
-  }
-
-  // API lấy chi tiết lớp học
-  static async getClassDetails(req, res) {
-    try {
-      const { classId } = req.params;
-      
-      // Validate classId
-      if (!classId) {
-        return res.status(400).json({
-          success: false,
-          message: "Mã lớp học không được để trống"
-        });
-      }
-
-      const classDetails = await LopModel.getClassById(classId);
-      
-      if (!classDetails) {
-        return res.status(404).json({
-          success: false,
-          message: "Không tìm thấy lớp học"
-        });
-      }
-
-      // Format dữ liệu trả về
-      const formattedClass = {
-        class_id: classDetails.class_id,
-        class_name: classDetails.class_name,
-        subject_name: classDetails.subject_name,
-        semester: classDetails.semester,
-        school_year: classDetails.school_year,
-        room: classDetails.room,
-        schedule: classDetails.schedule,
-        description: classDetails.description,
-        teacher_name: classDetails.teacher_name,
-        teacher_id: classDetails.teacher_id
-      };
-      
-      res.json({
-        success: true,
-        data: formattedClass,
-        message: "Lấy chi tiết lớp học thành công"
-      });
-    } catch (error) {
-      console.error("Error in getClassDetails:", error);
-      res.status(500).json({
-        success: false,
-        message: "Lỗi hệ thống. Không thể lấy chi tiết lớp học.",
-        error: error.message
+        message: 'Lỗi khi lấy danh sách lớp học'
       });
     }
   }
@@ -95,203 +101,219 @@ class LopController {
   // API lấy danh sách sinh viên trong lớp
   static async getClassStudents(req, res) {
     try {
+      const teacherId = req.user?.userId;
       const { classId } = req.params;
       
-      // Validate classId
-      if (!classId) {
-        return res.status(400).json({
-          success: false,
-          message: "Mã lớp học không được để trống"
-        });
-      }
-
-      const students = await LopModel.getStudentsInClass(classId);
-      
-      // Format dữ liệu trả về
-      const formattedStudents = students.map(student => ({
-        student_id: student.student_id,
-        full_name: student.full_name,
-        email: student.email,
-        phone: student.phone,
-        course: student.course,
-        enrolled_at: student.enrolled_at,
-        status: student.status
-      }));
-      
-      res.json({
-        success: true,
-        data: formattedStudents,
-        message: "Lấy danh sách sinh viên thành công"
-      });
-    } catch (error) {
-      console.error("Error in getClassStudents:", error);
-      res.status(500).json({
-        success: false,
-        message: "Lỗi hệ thống. Không thể lấy danh sách sinh viên.",
-        error: error.message
-      });
-    }
-  }
-
-  // API lấy thông tin giảng viên
-  static async getTeacherInfo(req, res) {
-    try {
-      const { teacherId } = req.params;
-      
-      // Validate teacherId
       if (!teacherId) {
-        return res.status(400).json({
+        return res.status(401).json({
           success: false,
-          message: "Mã giảng viên không được để trống"
+          message: 'Không xác định được giảng viên'
         });
       }
 
-      const teacher = await LopModel.getTeacherInfo(teacherId);
-      
-      if (!teacher) {
-        return res.status(404).json({
-          success: false,
-          message: "Không tìm thấy thông tin giảng viên"
-        });
-      }
-
-      // Format dữ liệu trả về
-      const formattedTeacher = {
-        teacher_id: teacher.teacher_id,
-        full_name: teacher.full_name,
-        email: teacher.email,
-        phone: teacher.phone,
-        department: teacher.department
-      };
-      
-      res.json({
-        success: true,
-        data: formattedTeacher,
-        message: "Lấy thông tin giảng viên thành công"
-      });
-    } catch (error) {
-      console.error("Error in getTeacherInfo:", error);
-      res.status(500).json({
-        success: false,
-        message: "Lỗi hệ thống. Không thể lấy thông tin giảng viên.",
-        error: error.message
-      });
-    }
-  }
-
-  // API lấy thông tin giảng viên từ user_code
-  static async getTeacherByUserCode(req, res) {
-    try {
-      const { userCode } = req.params;
-      
-      // Validate userCode
-      if (!userCode) {
-        return res.status(400).json({
-          success: false,
-          message: "Mã đăng nhập không được để trống"
-        });
-      }
-
-      const teacher = await LopModel.getTeacherByAccount(userCode);
-      
-      if (!teacher) {
-        return res.status(404).json({
-          success: false,
-          message: "Không tìm thấy thông tin giảng viên"
-        });
-      }
-
-      // Format dữ liệu trả về
-      const formattedTeacher = {
-        teacher_id: teacher.teacher_id,
-        full_name: teacher.full_name,
-        email: teacher.email,
-        phone: teacher.phone,
-        department: teacher.department
-      };
-      
-      res.json({
-        success: true,
-        data: formattedTeacher,
-        message: "Lấy thông tin giảng viên thành công"
-      });
-    } catch (error) {
-      console.error("Error in getTeacherByUserCode:", error);
-      res.status(500).json({
-        success: false,
-        message: "Lỗi hệ thống. Không thể lấy thông tin giảng viên.",
-        error: error.message
-      });
-    }
-  }
-
-  // API lấy thông báo của lớp học
-  static async getClassAnnouncements(req, res) {
-    try {
-      const { classId } = req.params;
-      
-      // Validate classId
       if (!classId) {
         return res.status(400).json({
           success: false,
-          message: "Mã lớp học không được để trống"
+          message: 'Mã lớp học không được để trống'
         });
       }
 
-      const announcements = await LopModel.getClassAnnouncements(classId);
-      
-      // Format dữ liệu trả về
-      const formattedAnnouncements = announcements.map(announcement => ({
-        id: announcement.id,
-        title: announcement.title,
-        content: announcement.content,
-        created_at: announcement.created_at,
-        updated_at: announcement.updated_at,
-        date: announcement.created_at.toISOString().split('T')[0]
-      }));
+      await prisma.$ready;
+
+      // Kiểm tra quyền truy cập
+      const classInfo = await prisma.classes.findFirst({
+        where: {
+          class_id: classId,
+          teacher_id: teacherId
+        }
+      });
+
+      if (!classInfo) {
+        return res.status(403).json({
+          success: false,
+          message: 'Không có quyền truy cập lớp này'
+        });
+      }
+
+      // Lấy danh sách sinh viên
+      const students = await prisma.students.findMany({
+        where: {
+          classes: { contains: classId }
+        },
+        select: {
+          student_id: true,
+          full_name: true,
+          email: true,
+          phone: true,
+          course: true,
+          major: true
+        },
+        orderBy: {
+          student_id: 'asc'
+        }
+      });
+
+      // Tính tỷ lệ điểm danh
+      const studentsWithAttendance = await Promise.all(
+        students.map(async (student) => {
+          const totalRecords = await prisma.attendanceRecord.count({
+            where: {
+              studentId: student.student_id,
+              session: { classId: classId }
+            }
+          });
+
+          const presentRecords = await prisma.attendanceRecord.count({
+            where: {
+              studentId: student.student_id,
+              session: { classId: classId },
+              status: 'present'
+            }
+          });
+
+          const attendanceRate = totalRecords > 0 
+            ? Math.round((presentRecords / totalRecords) * 100)
+            : 0;
+
+          return {
+            id: student.student_id,
+            name: student.full_name,
+            email: student.email || `@student.edu.vn`,
+            phone: student.phone || '',
+            course: student.course,
+            major: student.major,
+            attendance: attendanceRate,
+            note: ''
+          };
+        })
+      );
       
       res.json({
         success: true,
-        data: formattedAnnouncements,
-        message: "Lấy thông báo lớp học thành công"
+        data: studentsWithAttendance
       });
     } catch (error) {
-      console.error("Error in getClassAnnouncements:", error);
+      console.error('Error in getClassStudents:', error);
       res.status(500).json({
         success: false,
-        message: "Lỗi hệ thống. Không thể lấy thông báo lớp học.",
-        error: error.message
+        message: 'Lỗi khi lấy danh sách sinh viên'
       });
     }
   }
 
-  // API tạo thông báo mới cho lớp
-  static async createClassAnnouncement(req, res) {
+  // API lấy tài liệu của lớp (mock - chưa có bảng materials)
+  static async getClassMaterials(req, res) {
     try {
+      const teacherId = req.user?.userId;
       const { classId } = req.params;
-      const { title, content, teacherId } = req.body;
-      
-      // Validate input
-      if (!classId || !title || !content || !teacherId) {
-        return res.status(400).json({
+
+      if (!teacherId) {
+        return res.status(401).json({
           success: false,
-          message: "Thiếu thông tin bắt buộc"
+          message: 'Không xác định được giảng viên'
         });
       }
 
-      const announcementId = await LopModel.createClassAnnouncement(classId, title, content, teacherId);
-      
+      await prisma.$ready;
+
+      // Kiểm tra quyền truy cập
+      const classInfo = await prisma.classes.findFirst({
+        where: {
+          class_id: classId,
+          teacher_id: teacherId
+        }
+      });
+
+      if (!classInfo) {
+        return res.status(403).json({
+          success: false,
+          message: 'Không có quyền truy cập lớp này'
+        });
+      }
+
+      // Mock data - sau này có thể tạo bảng materials
+      const materials = [
+        { name: 'Đề cương môn học.pdf', size: '320KB', date: '01/09/2025' },
+        { name: 'Slide tuần 1.pptx', size: '2.1MB', date: '05/09/2025' },
+        { name: 'Bài tập 01.pdf', size: '180KB', date: '07/09/2025' },
+      ];
+
       res.json({
         success: true,
-        data: { id: announcementId },
-        message: "Tạo thông báo thành công"
+        data: materials
       });
     } catch (error) {
-      console.error("Error in createClassAnnouncement:", error);
+      console.error('Error in getClassMaterials:', error);
       res.status(500).json({
         success: false,
-        message: "Lỗi hệ thống. Không thể tạo thông báo.",
-        error: error.message
+        message: 'Lỗi khi lấy danh sách tài liệu'
+      });
+    }
+  }
+
+  // API lấy bảng điểm của lớp (mock)
+  static async getClassGrades(req, res) {
+    try {
+      const teacherId = req.user?.userId;
+      const { classId } = req.params;
+
+      if (!teacherId) {
+        return res.status(401).json({
+          success: false,
+          message: 'Không xác định được giảng viên'
+        });
+      }
+
+      await prisma.$ready;
+
+      // Kiểm tra quyền truy cập
+      const classInfo = await prisma.classes.findFirst({
+        where: {
+          class_id: classId,
+          teacher_id: teacherId
+        }
+      });
+
+      if (!classInfo) {
+        return res.status(403).json({
+          success: false,
+          message: 'Không có quyền truy cập lớp này'
+        });
+      }
+
+      // Lấy danh sách sinh viên
+      const students = await prisma.students.findMany({
+        where: {
+          classes: { contains: classId }
+        },
+        select: {
+          student_id: true,
+          full_name: true
+        },
+        orderBy: {
+          student_id: 'asc'
+        }
+      });
+
+      // Mock grades - sau này có thể tạo bảng grades
+      const grades = students.map(student => ({
+        id: student.student_id,
+        name: student.full_name,
+        attendance: Math.floor(7 + Math.random() * 3),
+        assignment: Math.floor(6 + Math.random() * 4),
+        midterm: parseFloat((6 + Math.random() * 4).toFixed(1)),
+        final: parseFloat((6 + Math.random() * 4).toFixed(1))
+      }));
+
+      res.json({
+        success: true,
+        data: grades
+      });
+    } catch (error) {
+      console.error('Error in getClassGrades:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Lỗi khi lấy bảng điểm'
       });
     }
   }
