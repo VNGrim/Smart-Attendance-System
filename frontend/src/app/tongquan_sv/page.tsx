@@ -13,8 +13,15 @@ type Announcement = { id: number; title: string; sender: string; date: string; t
 type ProgressItem = { subject: string; percent: number; note?: string };
 type AttendanceItem = { subject: string; date: string; slot: string; present: boolean };
 type Assignment = { title: string; due: string; remain: string };
+type OverviewSummary = {
+  classCount: number;
+  sessionsToday: number;
+  attendanceRate: number | null;
+  upcomingExamDate: string | null;
+};
 
 const STUDENT_ATTENDANCE_API = makeApiUrl("/api/student-attendance");
+const STUDENT_OVERVIEW_API = makeApiUrl("/api/student/overview");
 type SasSettings = { themeDark?: boolean };
 type SettingsEventDetail = { themeDark: boolean };
 const SETTINGS_CHANGED_EVENT = "sas_settings_changed";
@@ -22,7 +29,6 @@ const SETTINGS_CHANGED_EVENT = "sas_settings_changed";
 export default function StudentDashboardPage() {
   const [student, setStudent] = useState<Student | null>(null);
   const [collapsed, setCollapsed] = useState(false);
-  const [notifCount] = useState(2);
   const [filter, setFilter] = useState<"all"|"teacher"|"school">("all");
   const [selectedAnnouncement, setSelectedAnnouncement] = useState<Announcement | null>(null);
   const [themeDark, setThemeDark] = useState(true);
@@ -33,6 +39,12 @@ export default function StudentDashboardPage() {
   const [qrResult, setQrResult] = useState("");
   const [attendanceLoading, setAttendanceLoading] = useState(false);
   const [attendanceMessage, setAttendanceMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
+  const [summary, setSummary] = useState<OverviewSummary>({
+    classCount: 0,
+    sessionsToday: 0,
+    attendanceRate: null,
+    upcomingExamDate: null,
+  });
 
   useEffect(() => {
     const savedUser = localStorage.getItem("sas_user");
@@ -65,6 +77,25 @@ export default function StudentDashboardPage() {
     };
     window.addEventListener(SETTINGS_CHANGED_EVENT, handler);
     return () => window.removeEventListener(SETTINGS_CHANGED_EVENT, handler);
+  }, []);
+
+  useEffect(() => {
+    let ignore = false;
+    const fetchSummary = async () => {
+      try {
+        const res = await apiFetchJson<{ success: boolean; data: OverviewSummary }>(`${STUDENT_OVERVIEW_API}/summary`);
+        if (!ignore && res?.success && res.data) {
+          setSummary(res.data);
+        }
+      } catch (error) {
+        console.error("student overview summary fetch error:", error);
+      }
+    };
+
+    fetchSummary();
+    return () => {
+      ignore = true;
+    };
   }, []);
   const todayStr = useMemo(() => {
     const now = new Date();
@@ -132,10 +163,10 @@ export default function StudentDashboardPage() {
   };
 
   const stats: Stat[] = [
-    { icon: "🏫", title: "Số lớp đang học", value: "5", color: "stat-blue", href: "/lophoc_sv" },
-    { icon: "📅", title: "Buổi học hôm nay", value: "2", color: "stat-yellow", href: "/lichhoc_sv" },
-    { icon: "🎯", title: "Tỷ lệ điểm danh", value: "92%", color: "stat-green", href: "/lichsu_sv" },
-    { icon: "🧾", title: "Trung bình điểm", value: "8.4 / 10", color: "stat-red", href: "/lichsu_sv" },
+    { icon: "🏫", title: "Số lớp đang học", value: String(summary.classCount ?? 0), color: "stat-blue", href: "/lophoc_sv" },
+    { icon: "📅", title: "Buổi học hôm nay", value: String(summary.sessionsToday ?? 0), color: "stat-yellow", href: "/lichhoc_sv" },
+    { icon: "🎯", title: "Tỷ lệ điểm danh", value: summary.attendanceRate != null ? `${summary.attendanceRate}%` : "Chưa có", color: "stat-green", href: "/lichsu_sv" },
+    { icon: "🗓️", title: "Ngày thi sắp tới", value: summary.upcomingExamDate || "Chưa có", color: "stat-red", href: "/lichsu_sv" },
   ];
 
   const schedule: ScheduleItem[] = [
@@ -193,9 +224,6 @@ export default function StudentDashboardPage() {
           <div className="date">Hôm nay: {todayStr}</div>
         </div>
         <div className="controls">
-          <button className="icon-btn notif" title="Thông báo">
-            🔔{notifCount > 0 && <span className="badge">{notifCount}</span>}
-          </button>
           <div className="attendance-dropdown-wrapper">
             <button className="qr-btn primary" onClick={() => {
               // Show dropdown or modal with QR/Code options

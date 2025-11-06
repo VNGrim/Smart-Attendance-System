@@ -103,14 +103,35 @@ async function findActiveSessionByCode(code) {
   });
 }
 
+const mapSessionWriteData = (data = {}) => {
+  const payload = {};
+  if (data.classId !== undefined) payload.classId = data.classId;
+  if (data.slot !== undefined) payload.slot = data.slot;
+  if (data.date !== undefined) payload.date = data.date;
+  if (data.type !== undefined) {
+    payload.type = data.type;
+  }
+  if (data.code !== undefined) payload.code = data.code;
+  if (data.status !== undefined) payload.status = data.status;
+  if (data.attempts !== undefined) payload.attempts = data.attempts;
+  if (data.expiresAt !== undefined) payload.expiresAt = data.expiresAt;
+  if (data.createdBy !== undefined) payload.createdBy = data.createdBy;
+  if (data.totalStudents !== undefined) payload.totalStudents = data.totalStudents;
+  if (data.endedAt !== undefined) payload.endedAt = data.endedAt;
+  if (data.updatedAt !== undefined) payload.updatedAt = data.updatedAt;
+  return payload;
+};
+
 async function createSession(data) {
   await prisma.$ready;
-  return prisma.attendanceSession.create({ data });
+  return prisma.attendanceSession.create({
+    data: mapSessionWriteData(data),
+  });
 }
 
 async function updateSession(id, data) {
   await prisma.$ready;
-  return prisma.attendanceSession.update({ where: { id }, data });
+  return prisma.attendanceSession.update({ where: { id }, data: mapSessionWriteData(data) });
 }
 
 async function getSessionById(id) {
