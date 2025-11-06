@@ -1,0 +1,182 @@
+const express = require("express");
+const prisma = require("../config/prisma");
+const { auth } = require("../middleware/auth");
+const { requireRole } = require("../middleware/roles");
+
+const router = express.Router();
+
+const DAY_MAP = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+
+const parseClassList = (classes) => {
+  if (!classes || typeof classes !== "string") return [];
+  const tokens = String(classes)
+    .split(/[,;\n]/)
+    .map((item) => item.trim())
+    .filter((item) => item.length > 0);
+
+  const seen = new Set();
+  const result = [];
+  for (const token of tokens) {
+    const key = token.toUpperCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    result.push(token);
+  }
+  return result;
+};
+
+const isActiveClass = (status) => {
+  if (!status) return true;
+  const normalized = String(status).trim();
+  const simplified = normalized
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/\p{Diacritic}/gu, "");
+
+  if (!simplified) return true;
+
+  const ACTIVE_VALUES = new Set([
+    "dang hoat dong",
+    "dang hoc",
+    "dang day",
+    "hoat dong",
+    "hoc",
+    "active",
+    "ongoing",
+    "inprogress",
+  ]);
+
+  if (ACTIVE_VALUES.has(simplified)) return true;
+  if (simplified.includes("dang") || simplified.includes("active") || simplified.includes("hoc")) {
+    return true;
+  }
+  return false;
+};
+
+router.use(auth, requireRole("student"));
+
+router.get("/summary", async (req, res) => {
+  try {
+    const studentId = req.user?.userId;
+    if (!studentId) {
+      return res.status(401).json({ success: false, message: "Không xác định được sinh viên" });
+    }
+
+    const student = await prisma.students.findUnique({
+      where: { student_id: studentId },
+      select: {
+        student_id: true,
+        full_name: true,
+        classes: true,
+      },
+    });
+
+    if (!student) {
+      return res.status(404).json({ success: false, message: "Không tìm thấy thông tin sinh viên" });
+    }
+
+    const classList = parseClassList(student.classes);
+    const classListUpper = Array.from(new Set(classList.map((item) => item.toUpperCase())));
+    const classIdFilters = Array.from(new Set([...classList, ...classListUpper]));
+
+    let activeClassesCount = 0;
+    if (classIdFilters.length) {
+      const classes = await prisma.classes.findMany({
+        where: { class_id: { in: classIdFilters } },
+        select: { class_id: true, status: true },
+      });
+      if (classes.length) {
+        const active = classes.filter((item) => isActiveClass(item.status)).length;
+        activeClassesCount = active > 0 ? active : classList.length;
+      } else {
+        activeClassesCount = classList.length;
+      }
+    }
+
+    let sessionsToday = 0;
+    if (classIdFilters.length) {
+      const now = new Date();
+      const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      const endOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+      const countDistinctSessions = (rows = []) => {
+        const seen = new Set();
+        for (const row of rows) {
+          const classKey = String(row.classes ?? "").trim().toUpperCase();
+          const slotKey = Number(row.slot_id ?? 0);
+          const dayKey = String(row.day_of_week ?? "").trim().toUpperCase();
+          if (!classKey || !slotKey) continue;
+          const key = `${classKey}|${slotKey}|${dayKey}`;
+          if (!seen.has(key)) {
+            seen.add(key);
+          }
+        }
+        return seen.size;
+      };
+
+      const datedSessions = await prisma.timetable.findMany({
+        where: {
+          classes: { in: classIdFilters },
+          date: { gte: startOfDay, lt: endOfDay },
+        },
+        select: {
+          classes: true,
+          slot_id: true,
+          day_of_week: true,
+        },
+      });
+
+      sessionsToday = countDistinctSessions(datedSessions);
+
+      if (sessionsToday === 0) {
+        const dayKey = DAY_MAP[now.getDay()] ?? "Mon";
+        const weeklySessions = await prisma.timetable.findMany({
+          where: {
+            classes: { in: classIdFilters },
+            date: null,
+            day_of_week: dayKey,
+          },
+          select: {
+            classes: true,
+            slot_id: true,
+            day_of_week: true,
+          },
+        });
+        sessionsToday = countDistinctSessions(weeklySessions);
+      }
+    }
+
+    let attendanceRate = null;
+    if (student.student_id) {
+      const records = await prisma.attendanceRecord.findMany({
+        where: {
+          studentId: student.student_id,
+          session: classListUpper.length
+            ? { classId: { in: classListUpper } }
+            : undefined,
+        },
+        select: { status: true },
+      });
+
+      const totalRecords = records.length;
+      if (totalRecords > 0) {
+        const presentRecords = records.filter((item) => item.status === "present").length;
+        attendanceRate = Number(((presentRecords / totalRecords) * 100).toFixed(1));
+      }
+    }
+
+    return res.json({
+      success: true,
+      data: {
+        classCount: activeClassesCount,
+        sessionsToday,
+        attendanceRate,
+        upcomingExamDate: null,
+      },
+    });
+  } catch (error) {
+    console.error("student overview summary error:", error);
+    return res.status(500).json({ success: false, message: "Không thể tải dữ liệu tổng quan" });
+  }
+});
+
+module.exports = router;
