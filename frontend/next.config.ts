@@ -9,6 +9,15 @@ const nextConfig: NextConfig = {
     // Tắt type checking trong build (tạm thời)
     ignoreBuildErrors: true,
   },
+  async redirects() {
+    return [
+      {
+        source: "/",
+        destination: "/home",
+        permanent: false,
+      },
+    ];
+  },
   async rewrites() {
     const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080";
     return [
