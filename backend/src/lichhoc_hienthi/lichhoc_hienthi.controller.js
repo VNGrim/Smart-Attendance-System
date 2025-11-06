@@ -39,7 +39,9 @@ exports.getStudentSchedule = async (req, res) => {
         startTime: r.start_time,
         endTime: r.end_time,
         room: r.room,
-        color: pickColorForClass(r.class_name)
+        color: pickColorForClass(r.class_name),
+        attendanceStatus: r.attendanceStatus ?? r.attendance_status ?? null,
+        status: r.attendanceStatus ?? r.attendance_status ?? null,
       };
     });
 
