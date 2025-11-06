@@ -1,0 +1,32 @@
+services:
+  - type: web
+    name: smart-attendance-api
+    runtime: node
+    region: singapore
+    buildCommand: cd backend && npm install && npx prisma generate
+    startCommand: cd backend && node index.js
+    envVars:
+      - key: DATABASE_URL
+        value: postgresql://postgres.xdxjfxewjtknuhxruxyp:111222333qqqwwweeeASD@aws-1-ap-southeast-1.pooler.supabase.com:6543/postgres?pgbouncer=true
+      - key: DIRECT_URL
+        value: postgresql://postgres.xdxjfxewjtknuhxruxyp:111222333qqqwwweeeASD@aws-1-ap-southeast-1.pooler.supabase.com:5432/postgres
+      - key: DB_HOST
+        value: aws-1-ap-southeast-1.pooler.supabase.com
+      - key: DB_PORT
+        value: 5432
+      - key: DB_USER
+        value: postgres.xdxjfxewjtknuhxruxyp
+      - key: DB_PASSWORD
+        value: 111222333qqqwwweeeASD
+      - key: DB_NAME
+        value: postgres
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 10000
+      - key: JWT_SECRET
+        value: your-super-secret-jwt-key-production-change-this
+      - key: JWT_EXPIRES_IN
+        value: 24h
+      - key: FRONTEND_URL
+        value: https://sas-drab-nine.vercel.app
