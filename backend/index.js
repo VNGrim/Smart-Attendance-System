@@ -16,17 +16,26 @@ app.set("trust proxy", 1);
 // 🧩 Cấu hình middleware chung
 const allowedOrigins = [
   "http://localhost:3000",
-  process.env.FRONTEND_URL || "https://sas-drab-nine.vercel.app"
-];
+  "https://sas-drab-nine.vercel.app",
+  "https://smart-attendance-system-mu.vercel.app",
+  process.env.FRONTEND_URL
+].filter(Boolean); // Loại bỏ undefined
 
 app.use(cors({
   origin: function (origin, callback) {
     // Cho phép requests không có origin (mobile apps, curl, etc.)
     if (!origin) return callback(null, true);
-    if (allowedOrigins.indexOf(origin) === -1) {
-      return callback(new Error('CORS policy violation'), false);
+    
+    // Cho phép tất cả subdomain vercel.app
+    if (origin.includes('.vercel.app')) {
+      return callback(null, true);
     }
-    return callback(null, true);
+    
+    if (allowedOrigins.indexOf(origin) !== -1) {
+      return callback(null, true);
+    }
+    
+    return callback(new Error('CORS policy violation'), false);
   },
   credentials: true, // Cho phép gửi cookie JWT
 }));
