@@ -14,8 +14,20 @@ const PORT = process.env.PORT || 8080;
 app.set("trust proxy", 1);
 
 // 🧩 Cấu hình middleware chung
+const allowedOrigins = [
+  "http://localhost:3000",
+  process.env.FRONTEND_URL || "https://sas-drab-nine.vercel.app"
+];
+
 app.use(cors({
-  origin: "http://localhost:3000",
+  origin: function (origin, callback) {
+    // Cho phép requests không có origin (mobile apps, curl, etc.)
+    if (!origin) return callback(null, true);
+    if (allowedOrigins.indexOf(origin) === -1) {
+      return callback(new Error('CORS policy violation'), false);
+    }
+    return callback(null, true);
+  },
   credentials: true, // Cho phép gửi cookie JWT
 }));
 app.use(bodyParser.json());
