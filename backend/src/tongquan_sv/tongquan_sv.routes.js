@@ -7,24 +7,50 @@ const router = express.Router();
 
 const DAY_MAP = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
-const normalizeClassId = (value) => String(value ?? "").trim().toUpperCase();
-
 const parseClassList = (classes) => {
   if (!classes || typeof classes !== "string") return [];
-  return classes
-    .split(",")
-    .map((item) => normalizeClassId(item))
+  const tokens = String(classes)
+    .split(/[,;\n]/)
+    .map((item) => item.trim())
     .filter((item) => item.length > 0);
+
+  const seen = new Set();
+  const result = [];
+  for (const token of tokens) {
+    const key = token.toUpperCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    result.push(token);
+  }
+  return result;
 };
 
 const isActiveClass = (status) => {
   if (!status) return true;
-  const normalized = String(status).trim().toLowerCase();
-  return [
-    "đang hoạt động",
+  const normalized = String(status).trim();
+  const simplified = normalized
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/\p{Diacritic}/gu, "");
+
+  if (!simplified) return true;
+
+  const ACTIVE_VALUES = new Set([
     "dang hoat dong",
+    "dang hoc",
+    "dang day",
+    "hoat dong",
+    "hoc",
     "active",
-  ].includes(normalized.normalize("NFD").replace(/\p{Diacritic}/gu, ""));
+    "ongoing",
+    "inprogress",
+  ]);
+
+  if (ACTIVE_VALUES.has(simplified)) return true;
+  if (simplified.includes("dang") || simplified.includes("active") || simplified.includes("hoc")) {
+    return true;
+  }
+  return false;
 };
 
 router.use(auth, requireRole("student"));
@@ -50,36 +76,73 @@ router.get("/summary", async (req, res) => {
     }
 
     const classList = parseClassList(student.classes);
+    const classListUpper = Array.from(new Set(classList.map((item) => item.toUpperCase())));
+    const classIdFilters = Array.from(new Set([...classList, ...classListUpper]));
 
     let activeClassesCount = 0;
-    if (classList.length) {
+    if (classIdFilters.length) {
       const classes = await prisma.classes.findMany({
-        where: { class_id: { in: classList } },
+        where: { class_id: { in: classIdFilters } },
         select: { class_id: true, status: true },
       });
       if (classes.length) {
-        activeClassesCount = classes.filter((item) => isActiveClass(item.status)).length;
+        const active = classes.filter((item) => isActiveClass(item.status)).length;
+        activeClassesCount = active > 0 ? active : classList.length;
       } else {
         activeClassesCount = classList.length;
       }
     }
 
     let sessionsToday = 0;
-    if (classList.length) {
+    if (classIdFilters.length) {
       const now = new Date();
       const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
       const endOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
-      const dayKey = DAY_MAP[now.getDay()] ?? "Mon";
+      const countDistinctSessions = (rows = []) => {
+        const seen = new Set();
+        for (const row of rows) {
+          const classKey = String(row.classes ?? "").trim().toUpperCase();
+          const slotKey = Number(row.slot_id ?? 0);
+          const dayKey = String(row.day_of_week ?? "").trim().toUpperCase();
+          if (!classKey || !slotKey) continue;
+          const key = `${classKey}|${slotKey}|${dayKey}`;
+          if (!seen.has(key)) {
+            seen.add(key);
+          }
+        }
+        return seen.size;
+      };
 
-      sessionsToday = await prisma.timetable.count({
+      const datedSessions = await prisma.timetable.findMany({
         where: {
-          classes: { in: classList },
-          OR: [
-            { date: { gte: startOfDay, lt: endOfDay } },
-            { AND: [{ date: null }, { day_of_week: dayKey }] },
-          ],
+          classes: { in: classIdFilters },
+          date: { gte: startOfDay, lt: endOfDay },
+        },
+        select: {
+          classes: true,
+          slot_id: true,
+          day_of_week: true,
         },
       });
+
+      sessionsToday = countDistinctSessions(datedSessions);
+
+      if (sessionsToday === 0) {
+        const dayKey = DAY_MAP[now.getDay()] ?? "Mon";
+        const weeklySessions = await prisma.timetable.findMany({
+          where: {
+            classes: { in: classIdFilters },
+            date: null,
+            day_of_week: dayKey,
+          },
+          select: {
+            classes: true,
+            slot_id: true,
+            day_of_week: true,
+          },
+        });
+        sessionsToday = countDistinctSessions(weeklySessions);
+      }
     }
 
     let attendanceRate = null;
@@ -87,8 +150,8 @@ router.get("/summary", async (req, res) => {
       const records = await prisma.attendanceRecord.findMany({
         where: {
           studentId: student.student_id,
-          session: classList.length
-            ? { classId: { in: classList } }
+          session: classListUpper.length
+            ? { classId: { in: classListUpper } }
             : undefined,
         },
         select: { status: true },
