@@ -4,6 +4,7 @@ const utc = require("dayjs/plugin/utc");
 const prisma = require("../config/prisma");
 const { auth } = require("../middleware/auth");
 const { requireRole } = require("../middleware/roles");
+const ThongBaoController = require("../thongbao_hienthi/thongbao_hienthi.controller");
 
 dayjs.extend(utc);
 
@@ -354,6 +355,74 @@ router.get("/schedule/today", async (req, res) => {
   } catch (error) {
     console.error("student overview today schedule error:", error);
     return res.status(500).json({ success: false, message: "Không thể tải lịch học hôm nay" });
+  }
+});
+
+router.get("/announcements/latest", async (req, res) => {
+  try {
+    const actor = await ThongBaoController.resolveActorFromRequest(req);
+    const classTokens = parseClassList(actor?.class)
+      .map((item) => item.trim())
+      .filter((item) => item.length > 0);
+
+    const targetFilters = [
+      { target: { equals: "Toàn trường", mode: "insensitive" } },
+      { target: { equals: "Sinh viên", mode: "insensitive" } },
+      ...classTokens.map((token) => ({ target: { equals: token, mode: "insensitive" } })),
+    ];
+
+    const recipientFilters = classTokens.map((token) => ({ recipients: { array_contains: token } }));
+
+    const announcements = await prisma.announcements.findMany({
+      where: {
+        OR: [...targetFilters, ...recipientFilters],
+      },
+      orderBy: { created_at: "desc" },
+      take: 100,
+    });
+
+    const normalizeAnnouncementType = (value) => {
+      const text = (value || "").toLowerCase();
+      if (text.includes("giảng") || text.includes("teacher") || text.includes("lecturer")) return "teacher";
+      if (text.includes("trường") || text.includes("school") || text.includes("phòng") || text.includes("ban")) return "school";
+      return "other";
+    };
+
+    const formatRecord = (record) => {
+      const createdAt = record.created_at instanceof Date ? record.created_at : record.created_at ? new Date(record.created_at) : null;
+      const date = createdAt ? dayjs(createdAt) : null;
+      return {
+        id: record.id,
+        title: record.title ?? "",
+        content: record.content ?? "",
+        sender: record.sender ?? "",
+        target: record.target ?? "",
+        category: record.category ?? "",
+        type: normalizeAnnouncementType(record.type ?? record.category ?? ""),
+        createdAt: createdAt ? createdAt.toISOString() : null,
+        createdDate: date?.isValid() ? date.format("DD/MM") : null,
+      };
+    };
+
+    const formatted = announcements.map(formatRecord);
+
+    const takeTop = (items, typeFilter) => {
+      if (typeFilter === "all") return items.slice(0, 3);
+      const normalized = typeFilter === "teacher" ? "teacher" : typeFilter === "school" ? "school" : typeFilter;
+      return items.filter((item) => (item.type || "").toLowerCase() === normalized).slice(0, 3);
+    };
+
+    const all = takeTop(formatted, "all");
+    const teacher = takeTop(formatted, "teacher");
+    const school = takeTop(formatted, "school");
+
+    return res.json({
+      success: true,
+      data: { all, teacher, school },
+    });
+  } catch (error) {
+    console.error("student overview announcements latest error:", error);
+    return res.status(500).json({ success: false, message: "Không thể tải thông báo" });
   }
 });
 

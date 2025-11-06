@@ -8,8 +8,17 @@ import { makeApiUrl } from "../../lib/apiBase";
 
 type Student = { id: string; name: string };
 type Stat = { icon: string; title: string; value: string; color: string; href: string };
-type ScheduleItem = { day: string; time: string; subject: string; room: string; status: "ongoing"|"upcoming"|"done" };
-type Announcement = { id: number; title: string; sender: string; date: string; type: "teacher"|"school"; content: string };
+type AnnouncementTabKey = "all" | "teacher" | "school";
+type LatestAnnouncement = {
+  id: number;
+  title: string;
+  content: string;
+  sender: string;
+  target: string | null;
+  type: AnnouncementTabKey | "other";
+  createdAt: string | null;
+  createdDate: string | null;
+};
 type ProgressItem = { subject: string; percent: number; note?: string };
 type AttendanceItem = { subject: string; date: string; slot: string; present: boolean };
 type Assignment = { title: string; due: string; remain: string };
@@ -27,7 +36,6 @@ type TodayScheduleItem = {
   subjectCode: string | null;
   classId: string;
   className: string;
-  room: string;
   status: "upcoming" | "ongoing" | "finished";
   statusLabel: string;
 };
@@ -42,7 +50,7 @@ export default function StudentDashboardPage() {
   const [student, setStudent] = useState<Student | null>(null);
   const [collapsed, setCollapsed] = useState(false);
   const [filter, setFilter] = useState<"all"|"teacher"|"school">("all");
-  const [selectedAnnouncement, setSelectedAnnouncement] = useState<Announcement | null>(null);
+  const [selectedAnnouncement, setSelectedAnnouncement] = useState<LatestAnnouncement | null>(null);
   const [themeDark, setThemeDark] = useState(true);
   // QR Code Scanner State
   const [showQRScanner, setShowQRScanner] = useState(false);
@@ -58,6 +66,13 @@ export default function StudentDashboardPage() {
     upcomingExamDate: null,
   });
   const [todaySchedule, setTodaySchedule] = useState<TodayScheduleItem[]>([]);
+  const [announcementsData, setAnnouncementsData] = useState<Record<AnnouncementTabKey, LatestAnnouncement[]>>({
+    all: [],
+    teacher: [],
+    school: [],
+  });
+  const [announcementsLoading, setAnnouncementsLoading] = useState(false);
+  const [announcementsError, setAnnouncementsError] = useState<string | null>(null);
 
   useEffect(() => {
     const savedUser = localStorage.getItem("sas_user");
@@ -129,6 +144,61 @@ export default function StudentDashboardPage() {
 
     fetchSchedule();
     const interval = window.setInterval(fetchSchedule, 1000 * 60 * 5);
+    return () => {
+      ignore = true;
+      window.clearInterval(interval);
+    };
+  }, []);
+
+  useEffect(() => {
+    let ignore = false;
+    const normalizeType = (value: string): AnnouncementTabKey | "other" => {
+      const text = (value || "").toLowerCase();
+      if (text.includes("giảng") || text.includes("lecturer") || text.includes("teacher")) return "teacher";
+      if (text.includes("trường") || text.includes("school") || text.includes("phòng") || text.includes("ban")) return "school";
+      return "other";
+    };
+
+    const fetchAnnouncements = async () => {
+      setAnnouncementsLoading(true);
+      setAnnouncementsError(null);
+      try {
+        const res = await apiFetchJson<{ success: boolean; data: Record<AnnouncementTabKey, LatestAnnouncement[]> }>(
+          `${STUDENT_OVERVIEW_API}/announcements/latest`
+        );
+        if (!ignore && res?.success && res.data) {
+          const mapBucket = (items: LatestAnnouncement[]) =>
+            items.map((item) => ({
+              id: Number(item.id ?? 0),
+              title: item.title ?? "",
+              content: item.content ?? "",
+              sender: item.sender ?? "Không xác định",
+              target: item.target ?? null,
+              type: normalizeType((item.type as string) ?? ""),
+              createdAt: item.createdAt ?? null,
+              createdDate: item.createdDate ?? null,
+            }));
+          setAnnouncementsData({
+            all: mapBucket(res.data.all ?? []),
+            teacher: mapBucket(res.data.teacher ?? []),
+            school: mapBucket(res.data.school ?? []),
+          });
+        }
+      } catch (error) {
+        console.error("student overview announcements fetch error:", error);
+        if (!ignore) {
+          setAnnouncementsError("Không thể tải thông báo gần nhất");
+          setAnnouncementsData({ all: [], teacher: [], school: [] });
+        }
+      } finally {
+        if (!ignore) {
+          setAnnouncementsLoading(false);
+        }
+      }
+    };
+
+    fetchAnnouncements();
+    const interval = window.setInterval(fetchAnnouncements, 1000 * 60 * 5);
     return () => {
       ignore = true;
       window.clearInterval(interval);
@@ -206,13 +276,7 @@ export default function StudentDashboardPage() {
     { icon: "🗓️", title: "Ngày thi sắp tới", value: summary.upcomingExamDate || "Chưa có", color: "stat-red", href: "/lichsu_sv" },
   ];
 
-  const announcements: Announcement[] = [
-    { id: 1, title: "Nghỉ học ngày 28/10", sender: "GV. Nguyễn Văn A", date: "26/10", type: "teacher", content: "Lớp .NET nghỉ ngày 28/10 do bận công tác." },
-    { id: 2, title: "Nộp bài tập tuần 5", sender: "GV. Lê Thị B", date: "25/10", type: "teacher", content: "Nhớ nộp bài tập tuần 5 trước 23:00, 29/10." },
-    { id: 3, title: "Thông báo của trường", sender: "Phòng ĐT", date: "24/10", type: "school", content: "Tuần lễ chào đón doanh nghiệp 01-05/11." },
-  ];
-
-  const filteredAnnouncements = announcements.filter(a => filter==='all' ? true : a.type===filter);
+  const displayedAnnouncements = useMemo(() => announcementsData[filter] ?? [], [announcementsData, filter]);
 
   const progresses: ProgressItem[] = [
     { subject: "Lập trình .NET", percent: 80, note: "Còn 2 buổi, 1 bài tập" },
@@ -350,13 +414,21 @@ export default function StudentDashboardPage() {
             </div>
           </div>
           <div className="list">
-            {filteredAnnouncements.map(a => (
-              <div key={a.id} className="ann-item" onClick={()=>setSelectedAnnouncement(a)}>
-                <div className="ann-title">{a.title}</div>
-                <div className="ann-sub">{a.sender}</div>
-                <div className="ann-date">{a.date}</div>
-              </div>
-            ))}
+            {announcementsLoading ? (
+              <div className="ann-empty">Đang tải thông báo...</div>
+            ) : announcementsError ? (
+              <div className="ann-empty">{announcementsError}</div>
+            ) : displayedAnnouncements.length === 0 ? (
+              <div className="ann-empty">Chưa có thông báo phù hợp.</div>
+            ) : (
+              displayedAnnouncements.map((a) => (
+                <div key={a.id} className="ann-item" onClick={() => setSelectedAnnouncement(a)}>
+                  <div className="ann-title">{a.title}</div>
+                  <div className="ann-sub">{a.sender}</div>
+                  <div className="ann-date">{a.createdDate ?? "--"}</div>
+                </div>
+              ))
+            )}
           </div>
         </div>
 
@@ -437,7 +509,7 @@ export default function StudentDashboardPage() {
               <button className="close-btn" onClick={()=>setSelectedAnnouncement(null)}>×</button>
             </div>
             <div className="modal-body">
-              <div className="modal-date">Người gửi: {selectedAnnouncement.sender} – Ngày: {selectedAnnouncement.date}</div>
+              <div className="modal-date">Người gửi: {selectedAnnouncement.sender} – Ngày: {selectedAnnouncement.createdDate ?? "--"}</div>
               <div className="modal-content-text">{selectedAnnouncement.content}</div>
             </div>
           </div>
