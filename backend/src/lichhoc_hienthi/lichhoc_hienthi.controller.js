@@ -34,6 +34,7 @@ exports.getStudentSchedule = async (req, res) => {
 
     rows.forEach(r => {
       grid[r.slot_id][r.day_of_week] = {
+        classId: r.class_id,
         className: r.subject_code || r.class_name,
         subjectCode: r.subject_code,
         subjectName: r.subject_name,

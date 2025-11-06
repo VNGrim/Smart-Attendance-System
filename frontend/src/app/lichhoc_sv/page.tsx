@@ -281,12 +281,14 @@ export default function LichHocPage() {
                         <div className={`class-card ${getSubjectColor(cell.className)}`}>
                           <div style={{ fontSize: 16 }}>{getSubjectIcon(cell.className)}</div>
                           <div style={{ fontSize: 13, fontWeight: 900, lineHeight: 1.15, textShadow: '0 1px 0 rgba(0,0,0,0.15)' }}>{cell.className}</div>
+                          {cell.classId && <div style={{ fontSize: 11, opacity: 0.9, marginTop: 2 }}>{cell.classId}</div>}
                           <div className="class-time" style={{ fontSize: 12 }}>{cell.startTime?.slice(0,5)} - {cell.endTime?.slice(0,5)}</div>
                           <div className="class-lecturer" style={{ fontSize: 12 }}>{cell.teacherName}</div>
                           {cell.room && <div className="class-room" style={{ fontSize: 12 }}>Phòng {cell.room}</div>}
                         </div>
                         <div className="pop">
                           <h4>{cell.subjectName || cell.className}</h4>
+                          {cell.classId && <p><strong>Lớp:</strong> {cell.classId}</p>}
                           <p><strong>Thời gian:</strong> {cell.startTime?.slice(0,5)} - {cell.endTime?.slice(0,5)}</p>
                           <p><strong>Giảng viên:</strong> {cell.teacherName}</p>
                           <p><strong>Trạng thái điểm danh:</strong> {getAttendanceStatusText(cell)}</p>
