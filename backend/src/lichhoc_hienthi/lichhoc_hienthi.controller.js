@@ -34,12 +34,14 @@ exports.getStudentSchedule = async (req, res) => {
 
     rows.forEach(r => {
       grid[r.slot_id][r.day_of_week] = {
-        className: r.class_name,
+        className: r.subject_code || r.class_name,
+        subjectCode: r.subject_code,
+        subjectName: r.subject_name,
         teacherName: r.teacher_name,
         startTime: r.start_time,
         endTime: r.end_time,
         room: r.room,
-        color: pickColorForClass(r.class_name)
+        color: pickColorForClass(r.subject_code || r.class_name)
       };
     });
 
