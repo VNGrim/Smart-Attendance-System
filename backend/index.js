@@ -39,6 +39,7 @@ const adminLecturerRoutes = require("./src/giangvien_ad/giangvien_ad.routes");
 const adminClassRoutes = require("./src/lophoc_ad/lophoc_ad.routes");
 const adminStudentRoutes = require("./src/sinhvien_ad/sinhvien_ad.routes");
 const adminAccountsRoutes = require("./src/taikhoan_ad.routes");
+const tongquanGVRoutes = require("./src/tongquan_gv/tongquan_gv.routes");
 
 // 🧩 Route upload avatar
 const studentRoutes = require("./src/routes/student.routes");
@@ -63,6 +64,7 @@ app.use("/api/admin/lecturers", adminLecturerRoutes);
 app.use("/api/admin/classes", adminClassRoutes);
 app.use("/api/admin/students", adminStudentRoutes);
 app.use("/api/admin/accounts", adminAccountsRoutes);
+app.use("/api/teacher/dashboard", tongquanGVRoutes);
 
 // 🌱 Route test
 app.get("/api/classes", (req, res) => {

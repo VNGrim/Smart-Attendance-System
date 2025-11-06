@@ -88,3 +88,127 @@ body { margin: 0; font-family: 'Inter', sans-serif; background: var(--background
 .layout.light-theme .row .muted {
   color: #64748b;
 }
+
+/* 3 Days Schedule Grid */
+.three-days-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+  margin-top: 12px;
+}
+
+.day-col {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.day-header {
+  padding: 12px;
+  border-radius: 12px;
+  text-align: center;
+  font-weight: 700;
+}
+
+.day-header.past {
+  background: linear-gradient(135deg, #94a3b8 0%, #64748b 100%);
+  color: white;
+}
+
+.day-header.today {
+  background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
+  color: white;
+  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+}
+
+.day-header.future {
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+  color: white;
+}
+
+.day-label {
+  font-size: 14px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.day-date {
+  font-size: 12px;
+  margin-top: 4px;
+  opacity: 0.95;
+}
+
+.day-classes {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.class-card {
+  background: var(--card-bg);
+  border: 2px solid var(--card-border);
+  border-radius: 12px;
+  padding: 12px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+}
+
+.class-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.1);
+  border-color: #3b82f6;
+}
+
+.class-code {
+  font-weight: 900;
+  font-size: 16px;
+  color: #3b82f6;
+  margin-bottom: 4px;
+}
+
+.class-time {
+  font-weight: 700;
+  font-size: 14px;
+  color: var(--foreground);
+  margin-bottom: 2px;
+}
+
+.class-room {
+  font-weight: 600;
+  font-size: 13px;
+  color: #64748b;
+}
+
+.no-class {
+  padding: 20px;
+  text-align: center;
+  color: #94a3b8;
+  font-weight: 600;
+  font-size: 14px;
+  background: rgba(0, 0, 0, 0.02);
+  border: 1px dashed var(--card-border);
+  border-radius: 12px;
+}
+
+/* Light Theme for 3 Days */
+.layout.light-theme .class-card {
+  background: #ffffff;
+  border: 2px solid #e2e8f0;
+}
+
+.layout.light-theme .class-card:hover {
+  border-color: #3b82f6;
+}
+
+.layout.light-theme .no-class {
+  background: #f8fafc;
+  border-color: #cbd5e1;
+}
+
+@media (max-width: 1024px) {
+  .three-days-grid {
+    grid-template-columns: 1fr;
+  }
+}
