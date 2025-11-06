@@ -19,11 +19,23 @@ type OverviewSummary = {
   attendanceRate: number | null;
   upcomingExamDate: string | null;
 };
+type TodayScheduleItem = {
+  slot: number | null;
+  startTime: string | null;
+  endTime: string | null;
+  subjectName: string;
+  subjectCode: string | null;
+  classId: string;
+  className: string;
+  room: string;
+  status: "upcoming" | "ongoing" | "finished";
+  statusLabel: string;
+};
+type SasSettings = { themeDark?: boolean };
+type SettingsEventDetail = { themeDark: boolean };
 
 const STUDENT_ATTENDANCE_API = makeApiUrl("/api/student-attendance");
 const STUDENT_OVERVIEW_API = makeApiUrl("/api/student/overview");
-type SasSettings = { themeDark?: boolean };
-type SettingsEventDetail = { themeDark: boolean };
 const SETTINGS_CHANGED_EVENT = "sas_settings_changed";
 
 export default function StudentDashboardPage() {
@@ -45,6 +57,7 @@ export default function StudentDashboardPage() {
     attendanceRate: null,
     upcomingExamDate: null,
   });
+  const [todaySchedule, setTodaySchedule] = useState<TodayScheduleItem[]>([]);
 
   useEffect(() => {
     const savedUser = localStorage.getItem("sas_user");
@@ -95,6 +108,30 @@ export default function StudentDashboardPage() {
     fetchSummary();
     return () => {
       ignore = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    let ignore = false;
+    const fetchSchedule = async () => {
+      try {
+        const res = await apiFetchJson<{ success: boolean; data: TodayScheduleItem[] }>(`${STUDENT_OVERVIEW_API}/schedule/today`);
+        if (!ignore && res?.success && Array.isArray(res.data)) {
+          setTodaySchedule(res.data);
+        }
+      } catch (error) {
+        console.error("student overview schedule fetch error:", error);
+        if (!ignore) {
+          setTodaySchedule([]);
+        }
+      }
+    };
+
+    fetchSchedule();
+    const interval = window.setInterval(fetchSchedule, 1000 * 60 * 5);
+    return () => {
+      ignore = true;
+      window.clearInterval(interval);
     };
   }, []);
   const todayStr = useMemo(() => {
@@ -167,12 +204,6 @@ export default function StudentDashboardPage() {
     { icon: "📅", title: "Buổi học hôm nay", value: String(summary.sessionsToday ?? 0), color: "stat-yellow", href: "/lichhoc_sv" },
     { icon: "🎯", title: "Tỷ lệ điểm danh", value: summary.attendanceRate != null ? `${summary.attendanceRate}%` : "Chưa có", color: "stat-green", href: "/lichsu_sv" },
     { icon: "🗓️", title: "Ngày thi sắp tới", value: summary.upcomingExamDate || "Chưa có", color: "stat-red", href: "/lichsu_sv" },
-  ];
-
-  const schedule: ScheduleItem[] = [
-    { day: "Thứ 2", time: "08:00–10:00", subject: "Lập trình .NET", room: "A304", status: "ongoing" },
-    { day: "Thứ 3", time: "10:00–12:00", subject: "CSDL nâng cao", room: "B201", status: "upcoming" },
-    { day: "Thứ 5", time: "13:00–15:00", subject: "CTDL & GT", room: "B202", status: "upcoming" },
   ];
 
   const announcements: Announcement[] = [
@@ -264,17 +295,47 @@ export default function StudentDashboardPage() {
         </div>
 
         <div className="panel">
-          <div className="section-title">Lịch học trong tuần</div>
-          <div className="schedule-list">
-            {schedule.map((c, i) => (
-              <div key={i} className={`sched ${c.status}`}>
-                <div className="day">{c.day}</div>
-                <div className="time">{c.time}</div>
-                <div className="subject">{c.subject}</div>
-                <div className="room">{c.room}</div>
-                <div className="status">{c.status==="ongoing"?"🟢 Đang học": c.status==="upcoming"?"⏳ Sắp diễn ra":""}</div>
-              </div>
-            ))}
+          <div className="section-title">Lịch học trong ngày</div>
+          <div className="table-wrap">
+            <table className="schedule-table">
+              <thead>
+                <tr>
+                  <th>Slot</th>
+                  <th>Giờ học</th>
+                  <th>Môn học</th>
+                  <th>Lớp</th>
+                  <th>Trạng thái</th>
+                </tr>
+              </thead>
+              <tbody>
+                {todaySchedule.length === 0 ? (
+                  <tr>
+                    <td colSpan={5} style={{ textAlign: "center", padding: "16px" }}>Hôm nay bạn không có lịch học.</td>
+                  </tr>
+                ) : (
+                  todaySchedule.map((item, index) => {
+                    const slotLabel = item.slot != null ? `Slot ${item.slot}` : `Slot ${index + 1}`;
+                    const timeLabel = item.startTime && item.endTime ? `${item.startTime} – ${item.endTime}` : "Không xác định";
+                    return (
+                      <tr key={`${item.classId}|${item.slot ?? index}`} className={`schedule-row status-${item.status}`}>
+                        <td>{slotLabel}</td>
+                        <td>{timeLabel}</td>
+                        <td>
+                          <div className="subject-name">{item.subjectName}</div>
+                          {item.subjectCode ? <div className="subject-code">({item.subjectCode})</div> : null}
+                        </td>
+                        <td>{item.classId}</td>
+                        <td>
+                          {item.status === "ongoing" && <span className="badge badge-success">🟢 {item.statusLabel}</span>}
+                          {item.status === "upcoming" && <span className="badge badge-warning">⏳ {item.statusLabel}</span>}
+                          {item.status === "finished" && <span className="badge badge-muted">✔️ {item.statusLabel}</span>}
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
           </div>
           <div className="actions end"><Link href="/lichhoc_sv" className="btn-outline">Xem toàn bộ lịch học</Link></div>
         </div>
