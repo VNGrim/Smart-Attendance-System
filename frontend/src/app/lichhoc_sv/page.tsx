@@ -156,6 +156,26 @@ export default function LichHocPage() {
     return '📚';
   };
 
+  const getAttendanceStatusText = (cell?: { attendanceStatus?: string; status?: string }) => {
+    const raw = (cell?.attendanceStatus ?? cell?.status ?? '').toString().trim().toLowerCase();
+
+    switch (raw) {
+      case 'present':
+      case 'attended':
+        return '✅ Đã điểm danh';
+      case 'absent':
+        return '❌ Vắng mặt';
+      case 'excused':
+        return '📝 Có phép';
+      case 'ongoing':
+        return '🟢 Đang diễn ra';
+      case 'upcoming':
+        return '⏳ Sắp diễn ra';
+      default:
+        return '⏳ Chưa điểm danh';
+    }
+  };
+
   const Shell = ({ children }: { children: React.ReactNode }) => (
     <div className={`layout ${collapsed ? 'collapsed' : ''}`}>
       <aside className="sidebar">
@@ -269,6 +289,7 @@ export default function LichHocPage() {
                           <h4>{cell.subjectName || cell.className}</h4>
                           <p><strong>Thời gian:</strong> {cell.startTime?.slice(0,5)} - {cell.endTime?.slice(0,5)}</p>
                           <p><strong>Giảng viên:</strong> {cell.teacherName}</p>
+                          <p><strong>Trạng thái điểm danh:</strong> {getAttendanceStatusText(cell)}</p>
                           {cell.room && <p><strong>Phòng:</strong> {cell.room}</p>}
                         </div>
                       </>
