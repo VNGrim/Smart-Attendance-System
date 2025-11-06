@@ -28,16 +28,35 @@ export default function LecturerClassesPage() {
   const [materials, setMaterials] = useState<Material[]>([]);
   const [grades, setGrades] = useState<Grade[]>([]);
   const [search, setSearch] = useState("");
+  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    const mock: ClassInfo[] = [
-      { id: "CN201", code: "CN201", subject: "Lập trình .NET", size: 50, schedule: "Thứ 2 – 08:00", room: "A304" },
-      { id: "CN202", code: "CN202", subject: "Cơ sở dữ liệu", size: 45, schedule: "Thứ 3 – 13:00", room: "B206" },
-      { id: "CN203", code: "CN203", subject: "Cấu trúc dữ liệu", size: 48, schedule: "Thứ 4 – 09:00", room: "B202" },
-    ];
-    setClasses(mock);
-    setActiveClass(mock[0]);
+    fetchClasses();
   }, []);
+
+  const fetchClasses = async () => {
+    try {
+      setLoading(true);
+      const res = await fetch('http://localhost:8080/api/lop/classes', {
+        credentials: 'include'
+      });
+      if (!res.ok) {
+        console.error('Failed to fetch classes');
+        return;
+      }
+      const json = await res.json();
+      if (json.success && json.data) {
+        setClasses(json.data);
+        if (json.data.length > 0) {
+          setActiveClass(json.data[0]);
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching classes:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
     try {
@@ -64,23 +83,58 @@ export default function LecturerClassesPage() {
 
   useEffect(() => {
     if (!activeClass) return;
-    const ss: Student[] = Array.from({ length: activeClass.size }).map((_, i) => ({
-      id: `SV${(i + 1).toString().padStart(3, "0")}`,
-      name: `Sinh viên ${i + 1}`,
-      email: `sv${i + 1}@example.edu.vn`,
-      attendance: Math.floor(75 + Math.random() * 25),
-      note: "",
-    }));
-    const mm: Material[] = [
-      { name: "Đề cương môn học.pdf", size: "320KB", date: "01/09/2025" },
-      { name: "Slide tuần 1.pptx", size: "2.1MB", date: "05/09/2025" },
-      { name: "Bài tập 01.pdf", size: "180KB", date: "07/09/2025" },
-    ];
-    const gg: Grade[] = ss.map((s) => ({ id: s.id, name: s.name, attendance: 9, assignment: 8, midterm: 7.5, final: 8 }));
-    setStudents(ss);
-    setMaterials(mm);
-    setGrades(gg);
+    fetchStudents();
+    fetchMaterials();
+    fetchGrades();
   }, [activeClass]);
+
+  const fetchStudents = async () => {
+    if (!activeClass) return;
+    try {
+      const res = await fetch(`http://localhost:8080/api/lop/classes/${activeClass.id}/students`, {
+        credentials: 'include'
+      });
+      if (!res.ok) return;
+      const json = await res.json();
+      if (json.success && json.data) {
+        setStudents(json.data);
+      }
+    } catch (error) {
+      console.error('Error fetching students:', error);
+    }
+  };
+
+  const fetchMaterials = async () => {
+    if (!activeClass) return;
+    try {
+      const res = await fetch(`http://localhost:8080/api/lop/classes/${activeClass.id}/materials`, {
+        credentials: 'include'
+      });
+      if (!res.ok) return;
+      const json = await res.json();
+      if (json.success && json.data) {
+        setMaterials(json.data);
+      }
+    } catch (error) {
+      console.error('Error fetching materials:', error);
+    }
+  };
+
+  const fetchGrades = async () => {
+    if (!activeClass) return;
+    try {
+      const res = await fetch(`http://localhost:8080/api/lop/classes/${activeClass.id}/grades`, {
+        credentials: 'include'
+      });
+      if (!res.ok) return;
+      const json = await res.json();
+      if (json.success && json.data) {
+        setGrades(json.data);
+      }
+    } catch (error) {
+      console.error('Error fetching grades:', error);
+    }
+  };
 
   const toggleDark = () => {
     const next = !dark;

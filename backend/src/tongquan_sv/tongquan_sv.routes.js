@@ -1,7 +1,11 @@
 const express = require("express");
+const dayjs = require("dayjs");
+const utc = require("dayjs/plugin/utc");
 const prisma = require("../config/prisma");
 const { auth } = require("../middleware/auth");
 const { requireRole } = require("../middleware/roles");
+
+dayjs.extend(utc);
 
 const router = express.Router();
 
@@ -23,6 +27,23 @@ const parseClassList = (classes) => {
     result.push(token);
   }
   return result;
+};
+
+const formatTime = (value) => {
+  if (!value) return null;
+  return dayjs(value).utc().format("HH:mm");
+};
+
+const buildDateTime = (dateValue, timeValue, fallbackDate) => {
+  if (!timeValue) return null;
+  const time = dayjs(timeValue).utc();
+  const base = dateValue ? dayjs(dateValue) : dayjs(fallbackDate);
+  if (!base.isValid()) return null;
+  return base
+    .hour(time.hour())
+    .minute(time.minute())
+    .second(0)
+    .millisecond(0);
 };
 
 const isActiveClass = (status) => {
@@ -176,6 +197,163 @@ router.get("/summary", async (req, res) => {
   } catch (error) {
     console.error("student overview summary error:", error);
     return res.status(500).json({ success: false, message: "Không thể tải dữ liệu tổng quan" });
+  }
+});
+
+router.get("/schedule/today", async (req, res) => {
+  try {
+    const studentId = req.user?.userId;
+    if (!studentId) {
+      return res.status(401).json({ success: false, message: "Không xác định được sinh viên" });
+    }
+
+    const student = await prisma.students.findUnique({
+      where: { student_id: studentId },
+      select: {
+        student_id: true,
+        classes: true,
+      },
+    });
+
+    if (!student) {
+      return res.status(404).json({ success: false, message: "Không tìm thấy thông tin sinh viên" });
+    }
+
+    const classList = parseClassList(student.classes);
+    const classListUpper = Array.from(new Set(classList.map((item) => item.toUpperCase())));
+    const classIdFilters = Array.from(new Set([...classList, ...classListUpper]));
+
+    if (!classIdFilters.length) {
+      return res.json({ success: true, data: [] });
+    }
+
+    const now = new Date();
+    const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const endOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+
+    const dayKey = DAY_MAP[now.getDay()] ?? "Mon";
+
+    const [datedSessions, weeklySessions] = await Promise.all([
+      prisma.timetable.findMany({
+        where: {
+          classes: { in: classIdFilters },
+          date: { gte: startOfDay, lt: endOfDay },
+        },
+        include: { time_slots: true },
+        orderBy: [
+          { slot_id: "asc" },
+          { classes: "asc" },
+        ],
+      }),
+      prisma.timetable.findMany({
+        where: {
+          classes: { in: classIdFilters },
+          date: null,
+          day_of_week: dayKey,
+        },
+        include: { time_slots: true },
+        orderBy: [
+          { slot_id: "asc" },
+          { classes: "asc" },
+        ],
+      }),
+    ]);
+
+    const sessionMap = new Map();
+    const addSession = (row) => {
+      if (!row) return;
+      const key = `${String(row.classes || "").trim().toUpperCase()}|${row.slot_id}`;
+      const existing = sessionMap.get(key);
+      if (!existing) {
+        sessionMap.set(key, row);
+        return;
+      }
+      if (!existing.date && row.date) {
+        sessionMap.set(key, row);
+      }
+    };
+
+    datedSessions.forEach(addSession);
+    weeklySessions.forEach(addSession);
+
+    const sessions = Array.from(sessionMap.values());
+    const todayIso = dayjs(startOfDay).format("YYYY-MM-DD");
+    if (!sessions.length) {
+      return res.json({ success: true, data: [] });
+    }
+
+    const classIds = Array.from(new Set(sessions.map((item) => String(item.classes || "").trim())));
+    const classesData = classIds.length
+      ? await prisma.classes.findMany({
+          where: { class_id: { in: classIds } },
+          select: {
+            class_id: true,
+            class_name: true,
+            subject_name: true,
+            subject_code: true,
+          },
+        })
+      : [];
+    const classMap = new Map(classesData.map((item) => [String(item.class_id).trim().toUpperCase(), item]));
+
+    const nowMoment = dayjs();
+    const fallbackBase = dayjs(startOfDay);
+    const data = sessions
+      .map((row) => {
+        const classKey = String(row.classes || "").trim().toUpperCase();
+        const classInfo = classMap.get(classKey) || null;
+        const startTime = formatTime(row.time_slots?.start_time);
+        const endTime = formatTime(row.time_slots?.end_time);
+
+        const startMoment = buildDateTime(row.date, row.time_slots?.start_time, startOfDay) || fallbackBase;
+        const endMoment = buildDateTime(row.date, row.time_slots?.end_time, startOfDay) || fallbackBase;
+        const scheduleIso = row.date ? dayjs(row.date).format("YYYY-MM-DD") : null;
+
+        if (scheduleIso && scheduleIso !== todayIso) {
+          return null;
+        }
+        if (!row.date) {
+          const rowDay = String(row.day_of_week || "").trim();
+          if (rowDay && rowDay !== dayKey) {
+            return null;
+          }
+        }
+
+        let status = "upcoming";
+        if (startMoment && endMoment) {
+          if (nowMoment.isAfter(endMoment)) status = "finished";
+          else if (nowMoment.isBefore(startMoment)) status = "upcoming";
+          else status = "ongoing";
+        }
+
+        let statusLabel = "Sắp diễn ra";
+        if (status === "ongoing") statusLabel = "Đang học";
+        else if (status === "finished") statusLabel = "Đã kết thúc";
+
+        return {
+          slot: Number(row.slot_id) || null,
+          startTime,
+          endTime,
+          subjectName: classInfo?.subject_name || row.subject_name || classKey,
+          subjectCode: classInfo?.subject_code || null,
+          classId: classKey,
+          className: classInfo?.class_name || classKey,
+          status,
+          statusLabel,
+        };
+      })
+      .filter(Boolean)
+      .sort((a, b) => {
+        if (a.slot == null && b.slot == null) return 0;
+        if (a.slot == null) return 1;
+        if (b.slot == null) return -1;
+        return a.slot - b.slot;
+      });
+
+    return res.json({ success: true, data });
+  } catch (error) {
+    console.error("student overview today schedule error:", error);
+    return res.status(500).json({ success: false, message: "Không thể tải lịch học hôm nay" });
   }
 });
 
