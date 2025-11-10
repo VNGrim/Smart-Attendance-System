@@ -152,8 +152,6 @@ const Shell = ({ collapsed, setCollapsed, dark, toggleDark, notifCount, tab, set
           <button className={`tab ${tab==='inbox'?'active':''}`} onClick={()=>setTab('inbox')}>Nhận thông báo</button>
           <button className={`tab ${tab==='send'?'active':''}`} onClick={()=>setTab('send')}>Gửi thông báo</button>
         </div>
-        <button className="icon-btn" onClick={toggleDark} title="Chuyển giao diện">{dark?"🌙":"🌞"}</button>
-        <button className="icon-btn notif" title="Thông báo">🔔{notifCount>0 && <span className="badge">{notifCount}</span>}</button>
         <button className="qr-btn" onClick={async ()=>{ 
           if (confirm('Bạn có chắc muốn đăng xuất?')) {
             try { await fetch('http://localhost:8080/api/auth/logout', { method: 'POST', credentials: 'include' }); } catch {}

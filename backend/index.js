@@ -21,24 +21,35 @@ const allowedOrigins = [
   process.env.FRONTEND_URL
 ].filter(Boolean); // Loại bỏ undefined
 
-app.use(cors({
-  origin: function (origin, callback) {
-    // Cho phép requests không có origin (mobile apps, curl, etc.)
-    if (!origin) return callback(null, true);
-    
-    // Cho phép tất cả subdomain vercel.app
-    if (origin.includes('.vercel.app')) {
-      return callback(null, true);
+// Cấu hình CORS mềm dẻo hơn cho môi trường phát triển
+const corsOptions = process.env.NODE_ENV === 'production' 
+  ? {
+      origin: function (origin, callback) {
+        if (!origin) return callback(null, true);
+        
+        // Cho phép tất cả subdomain vercel.app
+        if (origin.includes('.vercel.app')) {
+          return callback(null, true);
+        }
+        
+        if (allowedOrigins.includes(origin)) {
+          return callback(null, true);
+        }
+        
+        console.warn('Blocked by CORS:', origin);
+        return callback(new Error('CORS policy violation'), false);
+      },
+      credentials: true,
     }
-    
-    if (allowedOrigins.indexOf(origin) !== -1) {
-      return callback(null, true);
-    }
-    
-    return callback(new Error('CORS policy violation'), false);
-  },
-  credentials: true, // Cho phép gửi cookie JWT
-}));
+  : {
+      // Trong môi trường development, cho phép tất cả các origin
+      origin: true,
+      credentials: true,
+      methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+      allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
+    };
+
+app.use(cors(corsOptions));
 app.use(bodyParser.json());
 app.use(cookieParser());
 

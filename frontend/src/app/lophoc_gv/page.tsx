@@ -190,8 +190,6 @@ export default function LecturerClassesPage() {
       <header className="topbar">
         <div className="page-title">Lớp học</div>
         <div className="controls">
-          <button className="icon-btn" onClick={toggleDark}>{dark ? "🌙" : "🌞"}</button>
-          <button className="icon-btn notif">🔔{notifCount > 0 && <span className="badge">{notifCount}</span>}</button>
           <button className="qr-btn" onClick={async ()=>{ 
             if (confirm('Bạn có chắc muốn đăng xuất?')) {
               try { await fetch('http://localhost:8080/api/auth/logout', { method: 'POST', credentials: 'include' }); } catch {}
