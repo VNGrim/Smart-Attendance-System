@@ -76,17 +76,21 @@ body { margin: 0; font-family: 'Inter', sans-serif; background: var(--background
   .ann-item { grid-template-columns: 1fr 120px 90px; gap: 8px; }
 }
 
-.progress-list { display: grid; gap: 12px; }
-.prog-row { display: grid; grid-template-columns: 220px 1fr 220px; gap: 10px; align-items: center; min-height: 56px; }
-.prog-subject { font-weight: 900; }
-.prog-bar { background: rgba(2,6,23,0.06); border: 1px solid var(--card-border); border-radius: 9999px; height: 12px; overflow: hidden; }
-.prog-bar .bar { height: 100%; border-radius: 9999px; }
-.prog-bar .bar.low { background: #ef4444; }
-.prog-bar .bar.mid { background: #f59e0b; }
-.prog-bar .bar.high { background: #10b981; }
-.prog-note { color: #64748b; font-weight: 700; }
+.progress-list { display: grid; gap: 10px; }
+.prog-row { display: grid; grid-template-columns: 180px 1fr 180px; gap: 8px; align-items: center; min-height: 48px; border: 1px solid var(--card-border); border-radius: 12px; padding: 8px 12px; transition: all .2s ease; }
+.prog-row:hover { background: rgba(2,6,23,0.04); transform: translateY(-1px); box-shadow: 0 6px 16px rgba(2,6,23,0.08); }
+.prog-subject { font-weight: 900; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.prog-bar { background: rgba(2,6,23,0.06); border: 1px solid var(--card-border); border-radius: 9999px; height: 12px; overflow: hidden; width: 100%; margin-left: 0; margin-right: auto; }
+.prog-bar .bar { position: relative; height: 100%; border-radius: 9999px; transition: width .6s ease-out; }
+/* Gradient sheen overlay */
+.prog-bar .bar::after { content: ""; position: absolute; inset: 0; border-radius: 9999px; background-image: linear-gradient(90deg, rgba(96,165,250,.5), rgba(139,92,246,.5)); background-size: 200% 100%; animation: progress-sheen 2.2s ease-in-out infinite; pointer-events: none; mix-blend-mode: overlay; }
+@keyframes progress-sheen { 0% { background-position: 0% 0; } 50% { background-position: 100% 0; } 100% { background-position: 0% 0; } }
+.prog-bar .bar.low { background: #f87171; }
+.prog-bar .bar.mid { background: #fbbf24; }
+.prog-bar .bar.high { background: #34d399; }
+.prog-note { color: #64748b; font-weight: 700; text-align: right; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
-.progress-scroll { overflow-y: auto; max-height: calc(3 * 56px + 2 * 12px + 6px); }
+.progress-scroll { overflow-y: auto; max-height: calc(3 * 48px + 2 * 12px + 6px); }
 .progress-scroll { scrollbar-width: thin; scrollbar-color: transparent transparent; }
 .progress-scroll:hover { scrollbar-color: rgba(100,116,139,0.6) transparent; }
 .progress-scroll::-webkit-scrollbar { width: 6px; }

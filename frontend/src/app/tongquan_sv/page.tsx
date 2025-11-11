@@ -319,6 +319,18 @@ export default function StudentDashboardPage() {
     return `${r} buổi còn lại`;
   };
 
+  // Tạm thời ước lượng tổng số buổi = 15 nếu chưa có schema tổng buổi
+  const DEFAULT_TOTAL_SESSIONS = 15;
+  const calcPercent = (item: ProgressApiItem) => {
+    const r = Math.max(0, Number(item.remainingSessions || 0));
+    const total = Math.max(r, DEFAULT_TOTAL_SESSIONS);
+    const done = Math.max(0, total - r);
+    const pct = Math.round((done / total) * 100);
+    return Math.max(0, Math.min(100, pct));
+  };
+  const barLevel = (pct: number) => (pct < 50 ? 'low' : pct <= 80 ? 'mid' : 'high');
+  const statusIcon = (item: ProgressApiItem) => (Number(item.remainingSessions || 0) <= 2 ? '🧾' : '⏳');
+
   const recents: AttendanceItem[] = [
     { subject: ".NET", date: "25/10", slot: "8", present: true },
     { subject: "CSDL nâng cao", date: "23/10", slot: "6", present: false },
@@ -507,13 +519,17 @@ export default function StudentDashboardPage() {
             {progressItems.length === 0 ? (
               <div className="ann-empty">Chưa có dữ liệu.</div>
             ) : (
-              progressItems.map((p,i)=> (
-                <div key={p.classId || i} className="prog-row">
-                  <div className="prog-subject">{p.subjectCode || p.subjectName}</div>
-                  <div className="prog-bar"><div className="bar" style={{ width: `0%` }} /></div>
-                  <div className="prog-note">{formatProgressNote(p)}</div>
-                </div>
-              ))
+              progressItems.map((p,i)=> {
+                const pct = calcPercent(p);
+                const level = barLevel(pct);
+                return (
+                  <div key={p.classId || i} className="prog-row">
+                    <div className="prog-subject">{statusIcon(p)} {p.subjectCode || p.subjectName}</div>
+                    <div className="prog-bar"><div className={`bar ${level}`} style={{ width: `${pct}%` }} /></div>
+                    <div className="prog-note">{formatProgressNote(p)}</div>
+                  </div>
+                );
+              })
             )}
           </div>
         </div>
