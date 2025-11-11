@@ -1,209 +1,252 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { format, startOfWeek, endOfWeek, eachWeekOfInterval } from "date-fns";
 import { useRouter } from "next/navigation";
 
-type ViewMode = "week" | "month";
+const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+const SLOT_IDS = [1, 2, 3, 4];
+const WEEK_START_OPTS = { weekStartsOn: 1 as const };
 
-type TeachEvent = {
-  id: string;
-  classCode: string;
-  subject: string;
-  teacher: string;
-  room: string;
-  day: number;
-  slotStart: number;
-  slotEnd: number;
-  color: string;
+const weekKeyFromDate = (date: Date) => format(startOfWeek(date, WEEK_START_OPTS), "RRRR-'W'II");
+const weekLabelFromDate = (date: Date) => {
+  const start = startOfWeek(date, WEEK_START_OPTS);
+  const end = endOfWeek(start, WEEK_START_OPTS);
+  return `${format(start, "dd/MM")} - ${format(end, "dd/MM")}`;
 };
+
+type WeekOption = { value: string; label: string };
 
 export default function LecturerSchedulePage() {
   const router = useRouter();
   const [collapsed, setCollapsed] = useState(false);
-  const [dark, setDark] = useState(true);
-  const [notifCount] = useState(2);
-  const [view, setView] = useState<ViewMode>("week");
-  const [search, setSearch] = useState("");
-  const [filterSemester, setFilterSemester] = useState("HK1 2025-2026");
-  const [filterWeek, setFilterWeek] = useState("Tuần 8");
-  const [filterClass, setFilterClass] = useState("Tất cả lớp");
-  const [filterSubject, setFilterSubject] = useState("Tất cả môn");
+  const currentYear = new Date().getFullYear();
+  const [selectedYear, setSelectedYear] = useState(currentYear);
+  const [selectedWeekKey, setSelectedWeekKey] = useState(() => weekKeyFromDate(new Date()));
 
-  const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
-  const SLOTS = [1,2,3,4,5,6];
+  const [lecturer, setLecturer] = useState<{ teacher_id: string; full_name: string } | null>(null);
+  const [grid, setGrid] = useState<Record<number, Record<string, any>>>({});
+  const [flat, setFlat] = useState<any[]>([]);
+  const [loading, setLoading] = useState<boolean>(true);
+  const [error, setError] = useState<string>("");
+  const [themeDark, setThemeDark] = useState(true);
 
-  const [events, setEvents] = useState<TeachEvent[]>([]);
-  const [drawer, setDrawer] = useState<TeachEvent | null>(null);
+  const teacherId = (() => {
+    if (typeof window === "undefined") return "";
+    try {
+      const raw = localStorage.getItem("sas_user");
+      if (!raw) return "";
+      const u = JSON.parse(raw);
+      if (u?.role === "teacher" && typeof u?.userId === "string") return u.userId;
+      return "";
+    } catch {
+      return "";
+    }
+  })();
+
+  const yearOptions = useMemo(() => [currentYear - 1, currentYear, currentYear + 1], [currentYear]);
+  const weekOptions = useMemo<WeekOption[]>(() => {
+    const yearStart = new Date(selectedYear, 0, 1);
+    const yearEnd = new Date(selectedYear, 11, 31);
+    const weeks = eachWeekOfInterval({ start: yearStart, end: yearEnd }, WEEK_START_OPTS);
+    return weeks.map((ws) => ({ value: weekKeyFromDate(ws), label: weekLabelFromDate(ws) }));
+  }, [selectedYear]);
+
+  const fetchData = useCallback(async () => {
+    if (!teacherId) return;
+    try {
+      setLoading(true);
+      setError("");
+      const base = process.env.NEXT_PUBLIC_API_BASE || "http://localhost:8080";
+      const [infoRes, scheduleRes] = await Promise.all([
+        fetch(`${base}/api/lichday/teachers/${teacherId}`),
+        fetch(`${base}/api/lichday/schedule/${teacherId}?week=${selectedWeekKey}`),
+      ]);
+      if (!infoRes.ok) throw new Error("Không lấy được thông tin giảng viên");
+      if (!scheduleRes.ok) throw new Error("Không lấy được lịch giảng dạy");
+      const infoJson = await infoRes.json();
+      const scheduleJson = await scheduleRes.json();
+      setLecturer(infoJson.data);
+      setGrid(scheduleJson.data.grid || {});
+      setFlat(scheduleJson.data.flat || []);
+    } catch (e: any) {
+      setError(e.message || "Lỗi tải dữ liệu");
+    } finally {
+      setLoading(false);
+    }
+  }, [teacherId, selectedWeekKey]);
 
   useEffect(() => {
-    setEvents([
-      { id: "t1", classCode: "CN201", subject: ".NET", teacher: "Bạn", room: "A304", day: 1, slotStart: 1, slotEnd: 2, color: "#3B82F6" },
-      { id: "t2", classCode: "CN202", subject: "CSDL", teacher: "Bạn", room: "B206", day: 1, slotStart: 4, slotEnd: 5, color: "#10B981" },
-      { id: "t3", classCode: "CN203", subject: "CTDL", teacher: "Bạn", room: "B202", day: 3, slotStart: 2, slotEnd: 3, color: "#F59E0B" },
-      { id: "t4", classCode: "CN204", subject: "Web", teacher: "Bạn", room: "C101", day: 5, slotStart: 1, slotEnd: 2, color: "#6366F1" },
-    ]);
+    fetchData();
+  }, [fetchData]);
+
+  useEffect(() => {
     try {
       const saved = localStorage.getItem("sas_settings");
       if (saved) {
         const s = JSON.parse(saved);
-        const darkTheme = s.themeDark ?? true;
-        setDark(darkTheme);
-        document.documentElement.classList.toggle("dark-theme", darkTheme);
-        document.documentElement.classList.toggle("light-theme", !darkTheme);
+        setThemeDark(s.themeDark ?? true);
+        document.documentElement.classList.toggle("dark-theme", s.themeDark);
+        document.documentElement.classList.toggle("light-theme", !s.themeDark);
       }
     } catch {}
-  }, []);
-
-  useEffect(() => {
-    const handler = (event: Event) => {
-      const detail = (event as CustomEvent<{ themeDark: boolean }>).detail;
-      if (!detail) return;
-      setDark(detail.themeDark);
-      document.documentElement.classList.toggle("dark-theme", detail.themeDark);
-      document.documentElement.classList.toggle("light-theme", !detail.themeDark);
+    const handler = (e: any) => {
+      const s = e.detail;
+      if (!s) return;
+      setThemeDark(s.themeDark);
+      document.documentElement.classList.toggle("dark-theme", s.themeDark);
+      document.documentElement.classList.toggle("light-theme", !s.themeDark);
     };
     window.addEventListener("sas_settings_changed", handler);
     return () => window.removeEventListener("sas_settings_changed", handler);
   }, []);
 
-  const toggleDark = () => {
-    const next = !dark;
-    setDark(next);
-    try {
-      const saved = localStorage.getItem("sas_settings");
-      const prev = saved ? JSON.parse(saved) : {};
-      const merged = { ...prev, themeDark: next };
-      localStorage.setItem("sas_settings", JSON.stringify(merged));
-      document.documentElement.classList.toggle("dark-theme", next);
-      document.documentElement.classList.toggle("light-theme", !next);
-      window.dispatchEvent(new CustomEvent("sas_settings_changed" as any, { detail: merged }));
-    } catch {}
-  };
+  const slotTimeById = useMemo(() => {
+    const map: Record<number, { start: string; end: string }> = {
+      1: { start: "07:00", end: "09:15" },
+      2: { start: "09:30", end: "11:45" },
+      3: { start: "12:30", end: "14:45" },
+      4: { start: "15:00", end: "17:15" },
+    };
+    for (const r of flat) {
+      if (r.slot_id && (!map[r.slot_id] || (!r.start_time && !r.end_time))) {
+        map[r.slot_id] = { start: r.start_time?.slice(0, 5) || map[r.slot_id]?.start, end: r.end_time?.slice(0, 5) || map[r.slot_id]?.end };
+      }
+    }
+    return map;
+  }, [flat]);
 
-  const filteredEvents = useMemo(() => {
-    return events.filter(e =>
-      (filterClass === "Tất cả lớp" || e.classCode === filterClass) &&
-      (filterSubject === "Tất cả môn" || e.subject === filterSubject) &&
-      (search === "" || `${e.classCode} ${e.subject} ${e.room}`.toLowerCase().includes(search.toLowerCase()))
-    );
-  }, [events, filterClass, filterSubject, search]);
-
-  const autoArrange = () => {
-    alert("Sắp xếp tự động (demo): sẽ gợi ý lịch tối ưu nếu có trùng giờ.");
+  const getSubjectColor = (key: string) => {
+    const colors = ["card-blue", "card-teal", "card-purple", "card-green", "card-orange", "card-pink", "card-indigo", "card-red"];
+    const hash = key.split("").reduce((a, b) => a + b.charCodeAt(0), 0);
+    return colors[hash % colors.length];
   };
 
   const Shell = ({ children }: { children: React.ReactNode }) => (
-    <div className={`layout ${collapsed ? "collapsed" : ""} ${dark ? '' : 'light-theme'}`}>
+    <div className={`layout ${collapsed ? "collapsed" : ""}`}>
       <aside className="sidebar">
         <div className="side-header">
-          <button className="collapse-btn" onClick={() => setCollapsed(!collapsed)} title={collapsed ? "Mở rộng" : "Thu gọn"}>
+          <button className="collapse-btn" onClick={() => setCollapsed((v) => !v)} title={collapsed ? "Mở rộng" : "Thu gọn"}>
             {collapsed ? "⮞" : "⮜"}
           </button>
-          {!collapsed && <div className="side-name">Smart Attendance</div>}
+          <div className="side-name">Giảng viên</div>
         </div>
         <nav className="side-nav">
-          <Link href="/tongquan_gv" className="side-link">🏠 {!collapsed && "Dashboard"}</Link>
-          <Link href="/thongbao_gv" className="side-link">📢 {!collapsed && "Thông báo"}</Link>
-          <Link href="/lichday_gv" className="side-link active">📅 {!collapsed && "Lịch giảng dạy"}</Link>
+          <Link href="/tongquan_gv" className="side-link">🏠 {!collapsed && "Trang tổng quan"}</Link>
+          <Link href="/thongbao_gv" className="side-link">🔔 {!collapsed && "Thông báo"}</Link>
+          <div className="side-link active">📅 {!collapsed && "Lịch giảng dạy"}</div>
           <Link href="/lophoc_gv" className="side-link">🏫 {!collapsed && "Lớp học"}</Link>
           <Link href="/diemdanh_gv" className="side-link">🧍‍♂️ {!collapsed && "Điểm danh"}</Link>
           <Link href="/caidat_gv" className="side-link">⚙️ {!collapsed && "Cài đặt"}</Link>
         </nav>
       </aside>
-
       <header className="topbar">
-        <div className="page-title">Lịch giảng dạy</div>
+        <div className="welcome">
+          <div className="hello">Xin chào, {lecturer?.full_name || "Giảng viên"} 👋</div>
+          <div className="date">Hôm nay: {new Date().toLocaleDateString("vi-VN", { weekday: "long", day: "2-digit", month: "2-digit", year: "numeric" })}</div>
+        </div>
         <div className="controls">
-          <button className="qr-btn" onClick={async ()=>{ 
-            if (confirm('Bạn có chắc muốn đăng xuất?')) {
-              try { await fetch('http://localhost:8080/api/auth/logout', { method: 'POST', credentials: 'include' }); } catch {}
-              try { localStorage.removeItem('sas_user'); } catch {}
-              window.location.href = '/login';
+          <button className="qr-btn" onClick={() => {
+            if (confirm("Bạn có chắc muốn đăng xuất?")) {
+              try { localStorage.removeItem("sas_user"); } catch {}
+              window.location.href = "/login";
             }
           }}>🚪 Đăng xuất</button>
         </div>
       </header>
-
-      <main className="main">{children}</main>
+      <main className={`main ${themeDark ? "dark-theme" : "light-theme"}`}>{children}</main>
     </div>
   );
 
-  const WeekView = () => (
-    <div className="calendar">
-      <div className="cal-head">
-        <div></div>
-        {DAYS.map(d=> <div key={d} className="col-head">{d}</div>)}
-      </div>
-      <div className="cal-grid">
-        <div className="slot-col">
-          {SLOTS.map(s => <div key={`s-${s}`} className="slot-head">Tiết {s}</div>)}
+  if (loading) {
+    return (
+      <Shell>
+        <div className="schedule-shell">
+          <div>Đang tải lịch giảng dạy...</div>
         </div>
-        {DAYS.map((d, di) => (
-          <div key={d} className="day-col">
-            {SLOTS.map(s => <div key={`${d}-${s}`} className="cell"></div>)}
-            {filteredEvents.filter(e=> e.day===di+1).map(e => {
-              const top = ((e.slotStart-1) * 100) / SLOTS.length;
-              const height = ((e.slotEnd - e.slotStart + 1) * 100) / SLOTS.length;
-              return (
-                <div key={e.id} className="event" style={{ top: `${top}%`, height: `${height}%`, background: e.color }} onClick={()=>setDrawer(e)}>
-                  <div className="evt-title">[{e.classCode} - {e.subject}]</div>
-                  <div className="evt-sub">Phòng: {e.room} | Tiết {e.slotStart}-{e.slotEnd}</div>
-                  <button className="evt-btn" onClick={(ev)=>{ev.stopPropagation(); router.push('/lophoc_gv');}}>Chi tiết</button>
-                </div>
-              );
-            })}
-          </div>
-        ))}
-      </div>
-    </div>
-  );
+      </Shell>
+    );
+  }
 
-  const MonthView = () => (
-    <div className="month">
-      <div className="month-head">
-        {DAYS.map(d => <div key={`mh-${d}`} className="m-col-head">{d}</div>)}
-      </div>
-      <div className="month-grid">
-        {Array.from({length: 35}).map((_,i)=> (
-          <div key={`md-${i}`} className="m-cell">
-            <div className="m-date">{i+1 <= 31 ? (i+1) : ''}</div>
-            <div className="m-badges">
-              {i%5===0 && <span className="badge-dot" style={{background:'#3B82F6'}} />}
-              {i%7===0 && <span className="badge-dot" style={{background:'#10B981'}} />}
-            </div>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
+  if (error) {
+    return (
+      <Shell>
+        <div className="schedule-shell" style={{ color: "red" }}>{error}</div>
+      </Shell>
+    );
+  }
 
   return (
     <Shell>
-      {view==='week' && <WeekView />}
-      {view==='month' && <MonthView />}
-
-      {drawer && (
-        <div className="drawer" onClick={()=>setDrawer(null)}>
-          <div className="drawer-panel" onClick={(e)=>e.stopPropagation()}>
-            <div className="drawer-head">
-              <div className="title">{drawer.classCode} - {drawer.subject}</div>
-              <button className="icon-btn" onClick={()=>setDrawer(null)}>✖</button>
-            </div>
-            <div className="drawer-body">
-              <div className="kv"><span className="k">Lớp</span><span className="v">{drawer.classCode}</span></div>
-              <div className="kv"><span className="k">Môn</span><span className="v">{drawer.subject}</span></div>
-              <div className="kv"><span className="k">Phòng</span><span className="v">{drawer.room}</span></div>
-              <div className="kv"><span className="k">Thời gian</span><span className="v">Thứ {drawer.day+1}, Tiết {drawer.slotStart}-{drawer.slotEnd}</span></div>
-              <div className="actions-row">
-                <button className="qr-btn" onClick={()=>router.push('/lophoc_gv')}>Chi tiết lớp</button>
-                <button className="qr-btn" onClick={()=>alert('Dời lịch (demo)')}>🕓 Dời lịch</button>
-                <button className="qr-btn" onClick={()=>alert('Đổi phòng (demo)')}>🔁 Đổi phòng</button>
-              </div>
-            </div>
-          </div>
+      <div className="schedule-shell">
+        <div className="filters" style={{ display: "flex", gap: 12, alignItems: "center", marginBottom: 8 }}>
+          <select className="select" value={selectedYear} onChange={(e) => setSelectedYear(Number(e.target.value))}>
+            {yearOptions.map((y) => (
+              <option key={y} value={y}>{y}</option>
+            ))}
+          </select>
+          <select className="select" value={selectedWeekKey} onChange={(e) => setSelectedWeekKey(e.target.value)}>
+            {weekOptions.map((w) => (
+              <option key={w.value} value={w.value}>{w.label}</option>
+            ))}
+          </select>
         </div>
-      )}
+
+        <div className="grid" style={{ marginBottom: 6 }}>
+          <div></div>
+          {DAYS.map((d) => (
+            <div key={d} className="col-header">{d}</div>
+          ))}
+        </div>
+
+        <div className="grid">
+          {SLOT_IDS.map((slotId) => (
+            <React.Fragment key={slotId}>
+              <div className="row-header">
+                <div className="slot-badge">Slot {slotId}</div>
+                {slotTimeById[slotId] && (
+                  <div style={{ fontSize: 11, color: "#64748b", marginTop: 2 }}>
+                    {slotTimeById[slotId].start} - {slotTimeById[slotId].end}
+                  </div>
+                )}
+              </div>
+              {DAYS.map((day) => {
+                const cell = grid?.[slotId]?.[day] || null;
+                return (
+                  <div key={`${day}-${slotId}`} className="cell">
+                    {cell ? (
+                      <>
+                        <div
+                          className={`class-card ${getSubjectColor(cell.subjectCode || cell.classId || cell.className || "CLS")}`}
+                          onClick={() => {
+                            const clsId = cell.classId || "";
+                            if (clsId) {
+                              router.push(`/diemdanh_gv?class=${encodeURIComponent(clsId)}&slot=${slotId}`);
+                            }
+                          }}
+                        >
+                          <div style={{ fontSize: 13, fontWeight: 900, lineHeight: 1.15 }}>{cell.subjectCode || ""}</div>
+                          <div style={{ fontSize: 12, opacity: 0.9 }}>{cell.classId || ""}</div>
+                          <div className="class-time" style={{ fontSize: 12 }}>{(cell.startTime || slotTimeById[slotId]?.start)?.slice(0,5)} - {(cell.endTime || slotTimeById[slotId]?.end)?.slice(0,5)}</div>
+                          <div className="class-lecturer" style={{ fontSize: 12 }}>{cell.teacherName || lecturer?.full_name || ""}</div>
+                          <div className="class-room" style={{ fontSize: 12 }}>{cell.room ? `Phòng ${cell.room}` : ""}</div>
+                        </div>
+                        <div className="pop">
+                          <h4>{cell.subjectName || cell.subjectCode || cell.className || cell.classId}</h4>
+                          {cell.classId && <p><strong>Lớp:</strong> {cell.classId}</p>}
+                          <p><strong>Thời gian:</strong> {(cell.startTime || slotTimeById[slotId]?.start)?.slice(0,5)} - {(cell.endTime || slotTimeById[slotId]?.end)?.slice(0,5)}</p>
+                          {cell.room && <p><strong>Phòng:</strong> {cell.room}</p>}
+                        </div>
+                      </>
+                    ) : null}
+                  </div>
+                );
+              })}
+            </React.Fragment>
+          ))}
+        </div>
+      </div>
     </Shell>
   );
 }
