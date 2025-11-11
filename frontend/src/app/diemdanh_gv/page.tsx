@@ -337,6 +337,12 @@ export default function LecturerAttendancePage() {
 
   const countdownDisplay = useMemo(() => formatCountdown(timeLeft), [timeLeft]);
 
+  // Đã có phiên kết thúc/đóng cho lớp + slot hôm nay?
+  const finalizedToday = useMemo(() => {
+    if (!history?.length) return false;
+    return history.some((h) => (h.status === "ended" || h.status === "closed") && (slot == null || h.slotId === slot));
+  }, [history, slot]);
+
   const resetStats = useMemo(() => {
     if (!session || session.type === "manual") {
       return { used: 0, total: 0, remaining: 0 };
@@ -607,6 +613,10 @@ export default function LecturerAttendancePage() {
       try {
         setSessionLoading(true);
         setError(null);
+        if (finalizedToday) {
+          setError("Đã hoàn thành phiên điểm danh. Chỉ có thể chỉnh thủ công nếu có thay đổi.");
+          return;
+        }
         const today = new Date().toISOString().slice(0, 10);
         const payload = await fetchJson<{ success: boolean; data: SessionSummary; reused?: boolean }>(
           `${API_BASE}/sessions`,
@@ -620,12 +630,17 @@ export default function LecturerAttendancePage() {
         fetchHistory({ classId, date: historyDate, slotId });
         setSessionNotice(null);
       } catch (err: any) {
-        setError(err.message || "Không thể tạo buổi điểm danh");
+        const msg = err.message || "Không thể tạo buổi điểm danh";
+        if (msg.includes("Đã hoàn thành phiên điểm danh")) {
+          setError("Đã hoàn thành phiên điểm danh. Chỉ có thể chỉnh thủ công nếu có thay đổi.");
+        } else {
+          setError(msg);
+        }
       } finally {
         setSessionLoading(false);
       }
     },
-    [fetchHistory, historyDate, refreshSessionData]
+    [fetchHistory, historyDate, refreshSessionData, finalizedToday]
   );
 
   const handleClassChange = useCallback(
@@ -1126,10 +1141,10 @@ export default function LecturerAttendancePage() {
         </div>
       </div>
 
-      <div className="panel" style={{ marginTop: 16 }}>
-        <div className="section-title">Lịch sử điểm danh</div>
-        <div className="history-filters" style={{ display: "flex", gap: 12, alignItems: "center", marginBottom: 12, flexWrap: "wrap" }}>
-          <label style={{ display: "flex", flexDirection: "column", fontSize: 12, color: "#475569" }}>
+      <div className="panel history-panel">
+        <div className="history-title">Lịch sử điểm danh</div>
+        <div className="history-filters">
+          <label style={{ display: "flex", flexDirection: "column", fontSize: 12, color: "#A0AEC0" }}>
             Ngày
             <input
               type="date"
@@ -1141,16 +1156,18 @@ export default function LecturerAttendancePage() {
             />
           </label>
           <button
-            className="btn-secondary"
+            className="btn-icon"
             onClick={() => cls && fetchHistory({ classId: cls, date: historyDate, slotId: slot })}
             disabled={!cls || historyLoading}
+            title="Làm mới"
+            aria-label="Làm mới lịch sử"
           >
-            🔄 Làm mới
+            <i className="fa-solid fa-arrows-rotate" />
           </button>
         </div>
         {historyLoading && <div className="loading-row">Đang tải lịch sử...</div>}
         <div className="table-wrap">
-          <table>
+          <table className="history-table history-list">
             <thead>
               <tr>
                 <th>Ngày</th>
@@ -1169,20 +1186,25 @@ export default function LecturerAttendancePage() {
                   <tr
                     key={h.id}
                     onClick={() => setSelectedHistoryId(h.id)}
-                    style={{ cursor: "pointer", background: isSelected ? "#eef2ff" : undefined }}
+                    className={`history-row ${isSelected ? "selected" : ""}`}
+                    style={{ cursor: "pointer" }}
                   >
                     <td>
-                      <div>{formatDateOrFallback(dayValue)}</div>
-                      <div style={{ fontSize: 12, color: "#64748b" }}>{formatWeekdayOrFallback(dayValue)}</div>
+                      <div className="cell-main">{formatDateOrFallback(dayValue)}</div>
+                      <div className="cell-sub">{formatWeekdayOrFallback(dayValue)}</div>
                     </td>
-                    <td>{h.slotId ?? "--"}</td>
-                    <td>{MODE_LABELS[h.type]}</td>
-                    <td>{STATUS_LABELS[h.status] || h.status}</td>
+                    <td className="cell-main">{h.slotId ?? "--"}</td>
+                    <td className="cell-main">{MODE_LABELS[h.type]}</td>
                     <td>
-                      <strong>{h.ratio}%</strong>
-                      <div style={{ fontSize: 12, color: "#64748b" }}>
-                        {summary.present}/{summary.total}
-                      </div>
+                      {h.status === "closed" ? (
+                        <span className="status-pill status-closed">{STATUS_LABELS[h.status] || h.status}</span>
+                      ) : (
+                        <span className="cell-main">{STATUS_LABELS[h.status] || h.status}</span>
+                      )}
+                    </td>
+                    <td>
+                      <div className="cell-main">{h.ratio}%</div>
+                      <div className="cell-sub">{summary.present}/{summary.total}</div>
                     </td>
                   </tr>
                 );
@@ -1199,99 +1221,129 @@ export default function LecturerAttendancePage() {
         </div>
 
         {selectedHistoryId && (
-          <div className="history-detail" style={{ marginTop: 16 }}>
-            <div className="section-title" style={{ marginBottom: 8 }}>Chi tiết buổi điểm danh</div>
-            {historyDetailLoading && <div className="loading-row">Đang tải chi tiết...</div>}
-            {historyDetailError && <div className="error-banner">⚠️ {historyDetailError}</div>}
-            {historyDetail && !historyDetailLoading && !historyDetailError && (
-              <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-                <div className="history-meta" style={{ display: "flex", flexWrap: "wrap", gap: 24 }}>
-                  <div>
-                    <div style={{ fontSize: 12, color: "#64748b" }}>Lớp</div>
-                    <div style={{ fontWeight: 600 }}>{historyDetail.session.className || historyDetail.session.classId}</div>
-                  </div>
-                  <div>
-                    <div style={{ fontSize: 12, color: "#64748b" }}>Môn học</div>
-                    <div>{historyDetail.session.subjectName || "--"}</div>
-                  </div>
-                  <div>
-                    <div style={{ fontSize: 12, color: "#64748b" }}>Ngày</div>
-                    <div>{formatDateOrFallback(getSessionDisplayDate(historyDetail.session))}</div>
-                  </div>
-                  <div>
-                    <div style={{ fontSize: 12, color: "#64748b" }}>Hình thức</div>
-                    <div>{MODE_LABELS[historyDetail.session.type]}</div>
-                  </div>
-                  <div>
-                    <div style={{ fontSize: 12, color: "#64748b" }}>Tỉ lệ</div>
-                    <div>
-                      <strong>{computeRatio(historyDetail.summary)}%</strong>
-                      <span style={{ marginLeft: 6, fontSize: 12, color: "#64748b" }}>
-                        {historyDetail.summary.present}/{historyDetail.summary.total}
-                      </span>
+          <div
+            className="modal-backdrop"
+            onClick={() => {
+              setSelectedHistoryId(null);
+              setHistoryDetail(null);
+              setHistoryDetailError(null);
+            }}
+          >
+            <div
+              className="modal"
+              onClick={(e) => e.stopPropagation()}
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="history-detail-title"
+            >
+              <div className="modal-header">
+                <div id="history-detail-title" className="history-subtitle">Chi tiết buổi điểm danh</div>
+                <button
+                  className="modal-close"
+                  onClick={() => {
+                    setSelectedHistoryId(null);
+                    setHistoryDetail(null);
+                    setHistoryDetailError(null);
+                  }}
+                  aria-label="Đóng"
+                >
+                  Đóng
+                </button>
+              </div>
+              <div className="modal-body">
+                {historyDetailLoading && <div className="loading-row">Đang tải chi tiết...</div>}
+                {historyDetailError && <div className="error-banner">⚠️ {historyDetailError}</div>}
+                {historyDetail && !historyDetailLoading && !historyDetailError && (
+                  <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+                    <div className="history-meta" style={{ display: "flex", flexWrap: "wrap", gap: 24 }}>
+                      <div>
+                        <div className="label">Lớp</div>
+                        <div className="value">{historyDetail.session.className || historyDetail.session.classId}</div>
+                      </div>
+                      <div>
+                        <div className="label">Môn học</div>
+                        <div className="value">{historyDetail.session.subjectName || "--"}</div>
+                      </div>
+                      <div>
+                        <div className="label">Ngày</div>
+                        <div className="value">{formatDateOrFallback(getSessionDisplayDate(historyDetail.session))}</div>
+                      </div>
+                      <div>
+                        <div className="label">Hình thức</div>
+                        <div className="value">{MODE_LABELS[historyDetail.session.type]}</div>
+                      </div>
+                      <div>
+                        <div className="label">Tỉ lệ</div>
+                        <div className="value">
+                          {computeRatio(historyDetail.summary)}%
+                          <span className="cell-sub" style={{ marginLeft: 6 }}>
+                            {historyDetail.summary.present}/{historyDetail.summary.total}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="table-wrap">
+                      <table className="history-table">
+                        <thead>
+                          <tr>
+                            <th>Mã SV</th>
+                            <th>Họ tên</th>
+                            <th>Trạng thái</th>
+                            <th>Ghi chú</th>
+                            <th>Thời gian</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {historyDetail.records.map((row) => {
+                            const recordId = row.recordId;
+                            const disabled = !recordId || updatingRecordId === recordId;
+                            return (
+                              <tr key={`${row.studentId}-${recordId ?? "noid"}`}>
+                                <td>{row.studentId}</td>
+                                <td>{row.fullName || "--"}</td>
+                                <td>
+                                  <select
+                                    className="input"
+                                    value={row.status}
+                                    disabled={disabled}
+                                    onChange={(event) => {
+                                      if (!recordId) return;
+                                      const nextStatus = event.target.value as AttendanceStatus;
+                                      patchHistoryRecord({
+                                        sessionId: historyDetail.session.id,
+                                        recordId,
+                                        status: nextStatus,
+                                        note: row.note ?? null,
+                                      });
+                                    }}
+                                  >
+                                    {ATTENDANCE_STATUS_OPTIONS.map((option) => (
+                                      <option key={option.value} value={option.value}>
+                                        {option.label}
+                                      </option>
+                                    ))}
+                                  </select>
+                                </td>
+                                <td>{row.note || "--"}</td>
+                                <td>{row.markedAt ? formatVietnamTime(row.markedAt) : "--"}</td>
+                              </tr>
+                            );
+                          })}
+                          {!historyDetail.records.length && (
+                            <tr>
+                              <td colSpan={5} style={{ textAlign: "center", padding: 16, color: "#64748b" }}>
+                                Không có bản ghi điểm danh
+                              </td>
+                            </tr>
+                          )}
+                        </tbody>
+                      </table>
                     </div>
                   </div>
-                </div>
-
-                <div className="table-wrap">
-                  <table>
-                    <thead>
-                      <tr>
-                        <th>Mã SV</th>
-                        <th>Họ tên</th>
-                        <th>Trạng thái</th>
-                        <th>Ghi chú</th>
-                        <th>Thời gian</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {historyDetail.records.map((row) => {
-                        const recordId = row.recordId;
-                        const disabled = !recordId || updatingRecordId === recordId;
-                        return (
-                          <tr key={`${row.studentId}-${recordId ?? "noid"}`}>
-                            <td>{row.studentId}</td>
-                            <td>{row.fullName || "--"}</td>
-                            <td>
-                              <select
-                                className="input"
-                                value={row.status}
-                                disabled={disabled}
-                                onChange={(event) => {
-                                  if (!recordId) return;
-                                  const nextStatus = event.target.value as AttendanceStatus;
-                                  patchHistoryRecord({
-                                    sessionId: historyDetail.session.id,
-                                    recordId,
-                                    status: nextStatus,
-                                    note: row.note ?? null,
-                                  });
-                                }}
-                              >
-                                {ATTENDANCE_STATUS_OPTIONS.map((option) => (
-                                  <option key={option.value} value={option.value}>
-                                    {option.label}
-                                  </option>
-                                ))}
-                              </select>
-                            </td>
-                            <td>{row.note || "--"}</td>
-                            <td>{row.markedAt ? formatVietnamTime(row.markedAt) : "--"}</td>
-                          </tr>
-                        );
-                      })}
-                      {!historyDetail.records.length && (
-                        <tr>
-                          <td colSpan={5} style={{ textAlign: "center", padding: 16, color: "#64748b" }}>
-                            Không có bản ghi điểm danh
-                          </td>
-                        </tr>
-                      )}
-                    </tbody>
-                  </table>
-                </div>
+                )}
               </div>
-            )}
+            </div>
           </div>
         )}
       </div>
