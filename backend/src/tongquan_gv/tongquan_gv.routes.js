@@ -19,6 +19,9 @@ router.get("/three-days", controller.getThreeDaysSchedule);
 // GET /api/teacher/dashboard/notifications - Thông báo gần nhất
 router.get("/notifications", controller.getRecentNotifications);
 
+// GET /api/teacher/dashboard/latest-notification - Thông báo đơn mới nhất
+router.get("/latest-notification", controller.getLatestNotification);
+
 // GET /api/teacher/dashboard/attendance-note - Ghi chú điểm danh gần nhất
 router.get("/attendance-note", controller.getLatestAttendanceNote);
 
