@@ -64,6 +64,7 @@ const thongbaoGVRoutes = require("./src/thongbao_gv/thongbao_gv.routes");
 const lopRoutes = require("./src/lop_gv/lop_gv.routes");
 const attendanceRoutes = require("./src/diemdanh_gv");
 const studentAttendanceRoutes = require("./src/diemdanh_sv");
+const studentHistoryRoutes = require("./src/lichsu_sv/lichsu_sv.routes");
 const authRoutes = require("./src/routes/auth.routes");
 const userRoutes = require("./src/routes/user.routes");
 const adminOverviewRoutes = require("./src/tongquan_ad/tongquan_ad.routes");
@@ -82,7 +83,6 @@ app.use("/api/students", studentRoutes);
 const teacherRoutes = require("./src/teachers/teachers.routes");
 app.use("/api/teachers", teacherRoutes);
 
-
 // 🧱 Mount các route hiện có
 app.use("/api/lichhoc", lichhocRoutes);
 app.use("/api/lichday", lichdayRoutes);
@@ -91,6 +91,7 @@ app.use("/api/teacher/notifications", thongbaoGVRoutes);
 app.use("/api/lop", lopRoutes);
 app.use("/api/attendances", attendanceRoutes);
 app.use("/api/student-attendance", studentAttendanceRoutes);
+app.use("/api/lichsu_sv", studentHistoryRoutes);
 app.use("/api/auth", authRoutes);
 app.use("/api", userRoutes);
 app.use("/api/admin/overview", adminOverviewRoutes);
