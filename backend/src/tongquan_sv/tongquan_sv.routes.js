@@ -12,6 +12,18 @@ const router = express.Router();
 
 const DAY_MAP = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
+const extractStudentId = (req) => {
+  const user = req.user ?? {};
+  return (
+    user.userId ||
+    user.user_id ||
+    user.user_code ||
+    user.userCode ||
+    user.studentId ||
+    null
+  );
+};
+
 const parseClassList = (classes) => {
   if (!classes || typeof classes !== "string") return [];
   const tokens = String(classes)
@@ -79,7 +91,7 @@ router.use(auth, requireRole("student"));
 
 router.get("/summary", async (req, res) => {
   try {
-    const studentId = req.user?.userId;
+    const studentId = extractStudentId(req);
     if (!studentId) {
       return res.status(401).json({ success: false, message: "Không xác định được sinh viên" });
     }
@@ -203,7 +215,7 @@ router.get("/summary", async (req, res) => {
 
 router.get("/schedule/today", async (req, res) => {
   try {
-    const studentId = req.user?.userId;
+    const studentId = extractStudentId(req);
     if (!studentId) {
       return res.status(401).json({ success: false, message: "Không xác định được sinh viên" });
     }
@@ -365,12 +377,19 @@ router.get("/announcements/latest", async (req, res) => {
       .map((item) => item.trim())
       .filter((item) => item.length > 0);
 
-    const targetFilters = [
-      { target: { equals: "Toàn trường", mode: "insensitive" } },
-      { target: { equals: "Sinh viên", mode: "insensitive" } },
-      ...classTokens.map((token) => ({ target: { equals: token, mode: "insensitive" } })),
+      const targetFilters = [
+      // Global/all-school announcements
+      { target: { contains: "Toàn", mode: "insensitive" } },
+      { target: { contains: "All", mode: "insensitive" } },
+      // Student-targeted announcements
+      { target: { contains: "Sinh", mode: "insensitive" } },
+      { target: { contains: "student", mode: "insensitive" } },
+      // Class-specific matches (target contains class code)
+      ...classTokens.map((token) => ({ target: { contains: token, mode: "insensitive" } })),
     ];
 
+    // If recipients column is an array (e.g., Postgres text[]), array_contains will work.
+    // If it's stored differently, target-based filters above should still surface most relevant records.
     const recipientFilters = classTokens.map((token) => ({ recipients: { array_contains: token } }));
 
     const announcements = await prisma.announcements.findMany({
@@ -379,6 +398,17 @@ router.get("/announcements/latest", async (req, res) => {
       },
       orderBy: { created_at: "desc" },
       take: 100,
+      select: {
+        id: true,
+        title: true,
+        content: true,
+        created_at: true,
+        sender: true,
+        target: true,
+        category: true,
+        type: true,
+        allow_reply: true,
+      },
     });
 
     const normalizeAnnouncementType = (value) => {
@@ -401,6 +431,7 @@ router.get("/announcements/latest", async (req, res) => {
         type: normalizeAnnouncementType(record.type ?? record.category ?? ""),
         createdAt: createdAt ? createdAt.toISOString() : null,
         createdDate: date?.isValid() ? date.format("DD/MM") : null,
+        allowReply: Boolean(record.allow_reply),
       };
     };
 
@@ -423,6 +454,167 @@ router.get("/announcements/latest", async (req, res) => {
   } catch (error) {
     console.error("student overview announcements latest error:", error);
     return res.status(500).json({ success: false, message: "Không thể tải thông báo" });
+  }
+});
+
+// Tiến độ học tập: số buổi còn lại và số bài tập (tạm thời 0 nếu không có bảng bài tập)
+router.get("/progress", async (req, res) => {
+  try {
+    const studentId = extractStudentId(req);
+    if (!studentId) {
+      return res.status(401).json({ success: false, message: "Không xác định được sinh viên" });
+    }
+
+    const student = await prisma.students.findUnique({
+      where: { student_id: studentId },
+      select: { classes: true },
+    });
+
+    if (!student) {
+      return res.status(404).json({ success: false, message: "Không tìm thấy thông tin sinh viên" });
+    }
+
+    const classList = parseClassList(student.classes);
+    const classListUpper = Array.from(new Set(classList.map((item) => item.toUpperCase())));
+    const classIdFilters = Array.from(new Set([...
+      classList,
+      ...classListUpper,
+    ]));
+
+    if (!classIdFilters.length) {
+      return res.json({ success: true, data: [] });
+    }
+
+    const now = new Date();
+    const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const todayIndex = now.getDay(); // 0-6 Sun..Sat
+    const remainingDays = DAY_MAP.slice(todayIndex); // include today -> weekend
+
+    const [futureDated, weekly] = await Promise.all([
+      prisma.timetable.findMany({
+        where: {
+          classes: { in: classIdFilters },
+          date: { gte: startOfDay },
+        },
+        select: { classes: true, date: true, day_of_week: true, slot_id: true },
+        orderBy: [{ date: "asc" }, { slot_id: "asc" }],
+      }),
+      prisma.timetable.findMany({
+        where: {
+          classes: { in: classIdFilters },
+          date: null,
+          day_of_week: { in: remainingDays },
+        },
+        select: { classes: true, date: true, day_of_week: true, slot_id: true },
+        orderBy: [{ day_of_week: "asc" }, { slot_id: "asc" }],
+      }),
+    ]);
+
+    // Distinct sessions per class by (class|date|day|slot)
+    const keyOf = (row) => {
+      const cls = String(row.classes || "").trim().toUpperCase();
+      const dateKey = row.date instanceof Date ? dayjs(row.date).format("YYYY-MM-DD") : "";
+      const dayKey = String(row.day_of_week || "").trim().toUpperCase();
+      const slotKey = Number(row.slot_id || 0);
+      return `${cls}|${dateKey}|${dayKey}|${slotKey}`;
+    };
+
+    const byClass = new Map();
+    const addRow = (row) => {
+      const cls = String(row.classes || "").trim().toUpperCase();
+      if (!cls) return;
+      let set = byClass.get(cls);
+      if (!set) {
+        set = new Set();
+        byClass.set(cls, set);
+      }
+      set.add(keyOf(row));
+    };
+    futureDated.forEach(addRow);
+    weekly.forEach(addRow);
+
+    const classesData = await prisma.classes.findMany({
+      where: { class_id: { in: Array.from(byClass.keys()) } },
+      select: { class_id: true, class_name: true, subject_name: true, subject_code: true },
+    });
+    const classInfoMap = new Map(classesData.map((c) => [String(c.class_id).trim().toUpperCase(), c]));
+
+    const data = Array.from(byClass.entries()).map(([classId, set]) => {
+      const info = classInfoMap.get(classId) || {};
+      const remainingSessions = set.size;
+      const assignmentsCount = 0; // chưa có bảng bài tập
+      return {
+        classId,
+        className: info.class_name || classId,
+        subjectName: info.subject_name || classId,
+        subjectCode: info.subject_code || null,
+        remainingSessions,
+        assignmentsCount,
+      };
+    }).sort((a, b) => (a.subjectCode || '').localeCompare(b.subjectCode || ''));
+
+    return res.json({ success: true, data });
+  } catch (error) {
+    console.error("student overview progress error:", error);
+    return res.status(500).json({ success: false, message: "Không thể tải tiến độ học tập" });
+  }
+});
+
+// Lịch sử điểm danh gần đây
+router.get("/history/recent", async (req, res) => {
+  try {
+    const studentId = extractStudentId(req);
+    if (!studentId) {
+      return res.status(401).json({ success: false, message: "Không xác định được sinh viên" });
+    }
+
+    // Lấy các bản ghi điểm danh mới nhất của SV, kèm session
+    const records = await prisma.attendanceRecord.findMany({
+      where: { studentId },
+      include: {
+        session: { select: { classId: true, date: true, slot: true } },
+      },
+      orderBy: [{ recordedAt: "desc" }],
+      take: 10,
+    });
+
+    if (!records.length) return res.json({ success: true, data: [] });
+
+    const classIds = Array.from(
+      new Set(
+        records
+          .map((r) => String(r.session?.classId || "").trim())
+          .filter((v) => v.length > 0)
+      )
+    );
+
+    const classesData = classIds.length
+      ? await prisma.classes.findMany({
+          where: { class_id: { in: classIds } },
+          select: { class_id: true, subject_name: true, subject_code: true },
+        })
+      : [];
+    const classMap = new Map(classesData.map((c) => [String(c.class_id).trim(), c]));
+
+    const data = records.map((r) => {
+      const clsKey = String(r.session?.classId || "").trim();
+      const info = classMap.get(clsKey);
+      const d = r.session?.date ? dayjs(r.session.date) : null;
+      return {
+        classId: clsKey || null,
+        subjectName: info?.subject_name || clsKey || "",
+        subjectCode: info?.subject_code || null,
+        date: d?.isValid() ? d.format("DD/MM") : "--",
+        slot: r.session?.slot ?? null,
+        status: r.status || "unknown",
+        present: String(r.status || "").toLowerCase() === "present",
+      };
+    });
+
+    return res.json({ success: true, data });
+  } catch (error) {
+    console.error("student overview recent history error:", error);
+    return res.status(500).json({ success: false, message: "Không thể tải lịch sử điểm danh" });
   }
 });
 

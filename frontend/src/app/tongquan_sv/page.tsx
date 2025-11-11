@@ -18,10 +18,27 @@ type LatestAnnouncement = {
   type: AnnouncementTabKey | "other";
   createdAt: string | null;
   createdDate: string | null;
+  allowReply?: boolean;
 };
 type ProgressItem = { subject: string; percent: number; note?: string };
+type ProgressApiItem = {
+  classId: string;
+  subjectCode: string | null;
+  subjectName: string;
+  remainingSessions: number;
+  assignmentsCount: number;
+};
 type AttendanceItem = { subject: string; date: string; slot: string; present: boolean };
 type Assignment = { title: string; due: string; remain: string };
+type RecentHistoryItem = {
+  classId: string | null;
+  subjectName: string;
+  subjectCode: string | null;
+  date: string; // DD/MM
+  slot: number | null;
+  status: string;
+  present: boolean;
+};
 type OverviewSummary = {
   classCount: number;
   sessionsToday: number;
@@ -49,7 +66,6 @@ const SETTINGS_CHANGED_EVENT = "sas_settings_changed";
 export default function StudentDashboardPage() {
   const [student, setStudent] = useState<Student | null>(null);
   const [collapsed, setCollapsed] = useState(false);
-  const [filter, setFilter] = useState<"all"|"teacher"|"school">("all");
   const [selectedAnnouncement, setSelectedAnnouncement] = useState<LatestAnnouncement | null>(null);
   const [themeDark, setThemeDark] = useState(true);
   // QR Code Scanner State
@@ -73,6 +89,8 @@ export default function StudentDashboardPage() {
   });
   const [announcementsLoading, setAnnouncementsLoading] = useState(false);
   const [announcementsError, setAnnouncementsError] = useState<string | null>(null);
+  const [progressItems, setProgressItems] = useState<ProgressApiItem[]>([]);
+  const [recentHistory, setRecentHistory] = useState<RecentHistoryItem[]>([]);
 
   useEffect(() => {
     const savedUser = localStorage.getItem("sas_user");
@@ -105,6 +123,27 @@ export default function StudentDashboardPage() {
     };
     window.addEventListener(SETTINGS_CHANGED_EVENT, handler);
     return () => window.removeEventListener(SETTINGS_CHANGED_EVENT, handler);
+  }, []);
+
+  useEffect(() => {
+    let ignore = false;
+    const fetchProgress = async () => {
+      try {
+        const res = await apiFetchJson<{ success: boolean; data: ProgressApiItem[] }>(`${STUDENT_OVERVIEW_API}/progress`);
+        if (!ignore && res?.success && Array.isArray(res.data)) {
+          setProgressItems(res.data);
+        }
+      } catch (error) {
+        console.error("student overview progress fetch error:", error);
+        if (!ignore) setProgressItems([]);
+      }
+    };
+    fetchProgress();
+    const interval = window.setInterval(fetchProgress, 1000 * 60 * 10);
+    return () => {
+      ignore = true;
+      window.clearInterval(interval);
+    };
   }, []);
 
   useEffect(() => {
@@ -177,6 +216,7 @@ export default function StudentDashboardPage() {
               type: normalizeType((item.type as string) ?? ""),
               createdAt: item.createdAt ?? null,
               createdDate: item.createdDate ?? null,
+              allowReply: Boolean((item as any).allowReply),
             }));
           setAnnouncementsData({
             all: mapBucket(res.data.all ?? []),
@@ -204,6 +244,25 @@ export default function StudentDashboardPage() {
       window.clearInterval(interval);
     };
   }, []);
+
+  useEffect(() => {
+    let ignore = false;
+    const fetchRecent = async () => {
+      try {
+        const res = await apiFetchJson<{ success: boolean; data: RecentHistoryItem[] }>(`${STUDENT_OVERVIEW_API}/history/recent`);
+        if (!ignore && res?.success && Array.isArray(res.data)) {
+          setRecentHistory(res.data);
+        }
+      } catch (error) {
+        console.error("student overview recent history fetch error:", error);
+        if (!ignore) setRecentHistory([]);
+      }
+    };
+    fetchRecent();
+    const interval = window.setInterval(fetchRecent, 1000 * 60 * 5);
+    return () => { ignore = true; window.clearInterval(interval); };
+  }, []);
+
   const todayStr = useMemo(() => {
     const now = new Date();
     const weekday = ["Chủ nhật","Thứ Hai","Thứ Ba","Thứ Tư","Thứ Năm","Thứ Sáu","Thứ Bảy"][now.getDay()];
@@ -276,19 +335,32 @@ export default function StudentDashboardPage() {
     { icon: "🗓️", title: "Ngày thi sắp tới", value: summary.upcomingExamDate || "Chưa có", color: "stat-red", href: "/lichsu_sv" },
   ];
 
-  const displayedAnnouncements = useMemo(() => announcementsData[filter] ?? [], [announcementsData, filter]);
+  const displayedAnnouncements = useMemo(() => announcementsData.all ?? [], [announcementsData]);
 
-  const progresses: ProgressItem[] = [
-    { subject: "Lập trình .NET", percent: 80, note: "Còn 2 buổi, 1 bài tập" },
-    { subject: "Cơ sở dữ liệu", percent: 60, note: "3 buổi còn lại" },
-    { subject: "Cấu trúc dữ liệu", percent: 90, note: "Sắp thi cuối kỳ" },
-  ];
+  const formatProgressNote = (item: ProgressApiItem) => {
+    const r = Number(item.remainingSessions || 0);
+    const a = Number(item.assignmentsCount || 0);
+    if (r <= 2) {
+      if (a > 0) return `Sắp thi cuối kì, ${a} bài tập`;
+      return `Sắp thi cuối kỳ`;
+    }
+    if (a > 0) return `Còn ${r} buổi, ${a} bài tập`;
+    return `${r} buổi còn lại`;
+  };
 
-  const recents: AttendanceItem[] = [
-    { subject: ".NET", date: "25/10", slot: "8", present: true },
-    { subject: "CSDL nâng cao", date: "23/10", slot: "6", present: false },
-    { subject: "Cấu trúc dữ liệu", date: "22/10", slot: "5", present: true },
-  ];
+  // Tạm thời ước lượng tổng số buổi = 15 nếu chưa có schema tổng buổi
+  const DEFAULT_TOTAL_SESSIONS = 15;
+  const calcPercent = (item: ProgressApiItem) => {
+    const r = Math.max(0, Number(item.remainingSessions || 0));
+    const total = Math.max(r, DEFAULT_TOTAL_SESSIONS);
+    const done = Math.max(0, total - r);
+    const pct = Math.round((done / total) * 100);
+    return Math.max(0, Math.min(100, pct));
+  };
+  const barLevel = (pct: number) => (pct < 50 ? 'low' : pct <= 80 ? 'mid' : 'high');
+  const statusIcon = (item: ProgressApiItem) => (Number(item.remainingSessions || 0) <= 2 ? '🧾' : '⏳');
+
+  const recents: AttendanceItem[] = [];
 
   const assignments: Assignment[] = [
     { title: "Bài tập .NET", due: "29/10", remain: "Còn 2 ngày" },
@@ -346,21 +418,51 @@ export default function StudentDashboardPage() {
   return (
     <Shell>
       <div className="dashboard-grid">
-        <div className="quick-stats">
-          {stats.map((s, i) => (
-            <Link key={i} className={`stat ${s.color}`} href={s.href}>
-              <div className="icon">{s.icon}</div>
-              <div className="meta">
-                <div className="title">{s.title}</div>
-                <div className="value">{s.value}</div>
+        <div className="panel">
+          <div className="stats-attendance">
+            <div className="quick-stats">
+              {stats.map((s, i) => (
+                <Link key={i} className={`stat ${s.color}`} href={s.href}>
+                  <div className="icon">{s.icon}</div>
+                  <div className="meta">
+                    <div className="title">{s.title}</div>
+                    <div className="value">{s.value}</div>
+                  </div>
+                </Link>
+              ))}
+            </div>
+            <div className="widget big">
+              <div className="title">📷 Điểm danh bằng QR hoặc mã</div>
+              <div className="sub">Nếu đang trong khung giờ học, hệ thống sẽ gợi ý lớp hiện tại.</div>
+              <div className="attendance-buttons">
+                <button className="btn-qr-scan" onClick={() => setShowQRScanner(true)} disabled={attendanceLoading}>
+                  📷 Quét QR
+                </button>
+                <button className="btn-code-input" onClick={() => setShowCodeInput(true)} disabled={attendanceLoading}>
+                  🔢 Nhập mã
+                </button>
               </div>
-            </Link>
-          ))}
+              {attendanceMessage && (
+                <div
+                  style={{
+                    marginTop: 12,
+                    padding: "10px 12px",
+                    borderRadius: 12,
+                    fontWeight: 700,
+                    background: attendanceMessage.type === "success" ? "rgba(16,185,129,0.12)" : "rgba(239,68,68,0.12)",
+                    color: attendanceMessage.type === "success" ? "#047857" : "#b91c1c",
+                  }}
+                >
+                  {attendanceMessage.text}
+                </div>
+              )}
+            </div>
+          </div>
         </div>
 
-        <div className="panel">
+        <div className="panel schedule-panel">
           <div className="section-title">Lịch học trong ngày</div>
-          <div className="table-wrap">
+          <div className="table-wrap schedule-scroll">
             <table className="schedule-table">
               <thead>
                 <tr>
@@ -401,92 +503,87 @@ export default function StudentDashboardPage() {
               </tbody>
             </table>
           </div>
-          <div className="actions end"><Link href="/lichhoc_sv" className="btn-outline">Xem toàn bộ lịch học</Link></div>
+          <div className="schedule-view-all"><Link href="/lichhoc_sv" className="btn-outline">Xem toàn bộ lịch học</Link></div>
         </div>
 
         <div className="panel">
-          <div className="row-actions">
-            <div className="section-title" style={{ marginBottom:0 }}>Thông báo gần nhất</div>
-            <div className="seg">
-              <button className={`seg-btn ${filter==='all'?'active':''}`} onClick={()=>setFilter('all')}>Tất cả</button>
-              <button className={`seg-btn ${filter==='teacher'?'active':''}`} onClick={()=>setFilter('teacher')}>Từ giảng viên</button>
-              <button className={`seg-btn ${filter==='school'?'active':''}`} onClick={()=>setFilter('school')}>Từ nhà trường</button>
+          <div className="section-title">Thông báo gần nhất</div>
+          {announcementsLoading ? (
+            <div className="ann-empty">Đang tải thông báo...</div>
+          ) : announcementsError ? (
+            <div className="ann-empty">{announcementsError}</div>
+          ) : displayedAnnouncements.length === 0 ? (
+            <div className="ann-empty">Chưa có thông báo phù hợp.</div>
+          ) : (
+            <div className="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Nội dung</th>
+                    <th>Người gửi</th>
+                    <th>Ngày gửi</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {displayedAnnouncements.slice(0,1).map((a) => (
+                    <tr key={a.id} style={{ cursor: 'pointer' }} onClick={() => (window.location.href = '/thongbao_sv')}>
+                      <td className="one-line">{a.title}</td>
+                      <td className="one-line">{a.sender}</td>
+                      <td className="one-line">{a.createdDate ?? "--"} {a.allowReply ? <span className="ann-reply-flag" title="Cho phép phản hồi">↩</span> : null}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
-          </div>
-          <div className="list">
-            {announcementsLoading ? (
-              <div className="ann-empty">Đang tải thông báo...</div>
-            ) : announcementsError ? (
-              <div className="ann-empty">{announcementsError}</div>
-            ) : displayedAnnouncements.length === 0 ? (
-              <div className="ann-empty">Chưa có thông báo phù hợp.</div>
+          )}
+        </div>
+
+        <div className="panel progress-panel">
+          <div className="section-title">Tiến độ học tập</div>
+          <div className="progress-list progress-scroll">
+            {progressItems.length === 0 ? (
+              <div className="ann-empty">Chưa có dữ liệu.</div>
             ) : (
-              displayedAnnouncements.map((a) => (
-                <div key={a.id} className="ann-item" onClick={() => setSelectedAnnouncement(a)}>
-                  <div className="ann-title">{a.title}</div>
-                  <div className="ann-sub">{a.sender}</div>
-                  <div className="ann-date">{a.createdDate ?? "--"}</div>
-                </div>
-              ))
+              progressItems.map((p,i)=> {
+                const pct = calcPercent(p);
+                const level = barLevel(pct);
+                return (
+                  <div key={p.classId || i} className="prog-row">
+                    <div className="prog-subject">{statusIcon(p)} {p.subjectCode || p.subjectName}</div>
+                    <div className="prog-bar"><div className={`bar ${level}`} style={{ width: `${pct}%` }} /></div>
+                    <div className="prog-note">{formatProgressNote(p)}</div>
+                  </div>
+                );
+              })
             )}
           </div>
         </div>
 
-        <div className="panel">
-          <div className="section-title">Tiến độ học tập</div>
-          <div className="progress-list">
-            {progresses.map((p,i)=> (
-              <div key={i} className="prog-row">
-                <div className="prog-subject">{p.subject}</div>
-                <div className="prog-bar"><div className={`bar ${p.percent<70?'low':p.percent<85?'mid':'high'}`} style={{ width: `${p.percent}%` }} /></div>
-                <div className="prog-note">{p.note}</div>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        <div className="panel">
+        <div className="panel history-panel">
           <div className="section-title">Lịch sử điểm danh gần đây</div>
-          <div className="table-wrap">
+          <div className="table-wrap history-scroll">
             <table>
               <thead><tr><th>Môn học</th><th>Ngày</th><th>Slot</th><th>Trạng thái</th></tr></thead>
               <tbody>
-                {recents.map((r,i)=> (
-                  <tr key={i}><td>{r.subject}</td><td>{r.date}</td><td>Slot {r.slot}</td><td>{r.present?'✅ Có mặt':'❌ Vắng'}</td></tr>
-                ))}
+                {recentHistory.length === 0 ? (
+                  <tr><td colSpan={4} style={{ textAlign: 'center', padding: '12px' }}>Chưa có dữ liệu.</td></tr>
+                ) : (
+                  recentHistory.map((r,i)=> (
+                    <tr key={`${r.classId || i}-${r.date}-${r.slot || ''}`}>
+                      <td>{r.subjectCode || r.subjectName}</td>
+                      <td>{r.date}</td>
+                      <td>{r.slot != null ? `Slot ${r.slot}` : '--'}</td>
+                      <td>{r.present ? '✅ Có mặt' : '❌ Vắng'}</td>
+                    </tr>
+                  ))
+                )}
               </tbody>
             </table>
           </div>
-          <div className="actions end"><Link href="/lichsu_sv" className="btn-outline">Xem toàn bộ lịch sử điểm danh</Link></div>
+          <div className="history-view-all"><Link href="/lichsu_sv" className="btn-outline">Xem toàn bộ lịch sử điểm danh</Link></div>
         </div>
 
         <div className="widgets">
-          <div className="widget big">
-            <div className="title">📷 Điểm danh bằng QR hoặc mã</div>
-            <div className="sub">Nếu đang trong khung giờ học, hệ thống sẽ gợi ý lớp hiện tại.</div>
-            <div className="attendance-buttons">
-              <button className="btn-qr-scan" onClick={() => setShowQRScanner(true)} disabled={attendanceLoading}>
-                📷 Quét QR
-              </button>
-              <button className="btn-code-input" onClick={() => setShowCodeInput(true)} disabled={attendanceLoading}>
-                🔢 Nhập mã
-              </button>
-            </div>
-            {attendanceMessage && (
-              <div
-                style={{
-                  marginTop: 12,
-                  padding: "10px 12px",
-                  borderRadius: 12,
-                  fontWeight: 700,
-                  background: attendanceMessage.type === "success" ? "rgba(16,185,129,0.12)" : "rgba(239,68,68,0.12)",
-                  color: attendanceMessage.type === "success" ? "#047857" : "#b91c1c",
-                }}
-              >
-                {attendanceMessage.text}
-              </div>
-            )}
-          </div>
           <div className="widget">
             <div className="title">📚 Bài tập & hạn nộp</div>
             <div className="list">

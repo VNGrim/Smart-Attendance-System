@@ -58,7 +58,21 @@ export async function apiFetchJson<T = unknown>(input: string, init?: RequestIni
   const response = await apiFetch(input, init);
   if (!response.ok) {
     const text = await response.text();
-    throw new Error(text || `Request failed with status ${response.status}`);
+    const message = (() => {
+      try {
+        const parsed = JSON.parse(text || '{}') as { message?: string };
+        return parsed.message || text;
+      } catch {
+        return text;
+      }
+    })();
+    if (response.status === 401 || /invalid token/i.test(message)) {
+      if (typeof window !== 'undefined') {
+        try { localStorage.removeItem('sas_user'); } catch {}
+        try { window.location.href = '/login'; } catch {}
+      }
+    }
+    throw new Error(message || `Request failed with status ${response.status}`);
   }
   if (response.status === 204) {
     return undefined as T;
@@ -70,7 +84,21 @@ export async function apiFetchMaybeJson<T = unknown>(input: string, init?: Reque
   const response = await apiFetch(input, init);
   if (!response.ok) {
     const text = await response.text();
-    throw new Error(text || `Request failed with status ${response.status}`);
+    const message = (() => {
+      try {
+        const parsed = JSON.parse(text || '{}') as { message?: string };
+        return parsed.message || text;
+      } catch {
+        return text;
+      }
+    })();
+    if (response.status === 401 || /invalid token/i.test(message)) {
+      if (typeof window !== 'undefined') {
+        try { localStorage.removeItem('sas_user'); } catch {}
+        try { window.location.href = '/login'; } catch {}
+      }
+    }
+    throw new Error(message || `Request failed with status ${response.status}`);
   }
   if (response.status === 204) {
     return null;
@@ -86,7 +114,21 @@ export async function apiFetchForReplies<T = unknown>(input: string, init?: Requ
   const response = await apiFetch(input, init);
   if (!response.ok) {
     const text = await response.text();
-    throw new Error(text || `Request failed with status ${response.status}`);
+    const message = (() => {
+      try {
+        const parsed = JSON.parse(text || '{}') as { message?: string };
+        return parsed.message || text;
+      } catch {
+        return text;
+      }
+    })();
+    if (response.status === 401 || /invalid token/i.test(message)) {
+      if (typeof window !== 'undefined') {
+        try { localStorage.removeItem('sas_user'); } catch {}
+        try { window.location.href = '/login'; } catch {}
+      }
+    }
+    throw new Error(message || `Request failed with status ${response.status}`);
   }
   if (response.status === 204) {
     return null;

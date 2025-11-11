@@ -1,8 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import QRButton from "@/app/components/QRButton";
 import { useState, useEffect, useMemo } from "react";
+import { apiFetchJson } from "../../lib/authClient";
+import { makeApiUrl } from "../../lib/apiBase";
 
 interface AttendanceRecord {
   id: number;
@@ -11,7 +12,7 @@ interface AttendanceRecord {
   class_name: string;
   teacher_name: string;
   date: string;
-  slot: number;
+  slot: number | null;
   attendance_code: string;
   status: 'attended' | 'absent' | 'late';
 }
@@ -48,7 +49,6 @@ export default function LichSuPage() {
 
   useEffect(() => {
     fetchData();
-    // Theme from settings
     try {
       const saved = localStorage.getItem('sas_settings');
       if (saved) {
@@ -70,21 +70,40 @@ export default function LichSuPage() {
     return () => window.removeEventListener('sas_settings_changed', handler);
   }, []);
 
+  const HISTORY_API = makeApiUrl('/api/lichsu_sv');
   const fetchData = async () => {
     try {
       setLoading(true);
       setError(null);
 
-      const studentResponse = await fetch(`http://localhost:8080/api/thongbao/students/${studentId}`);
-      const studentData = await studentResponse.json();
-      if (studentData.success) { setStudentInfo(studentData.data); }
+      // Load student basic info if needed
+      if (!studentInfo) {
+        const infoRes = await apiFetchJson<{ success: boolean; data?: any }>(makeApiUrl(`/api/thongbao/students/${studentId}`));
+        if (infoRes && (infoRes as any).success) {
+          setStudentInfo((infoRes as any).data ?? null);
+        }
+      }
 
-      const mockRecords: AttendanceRecord[] = [
-        { id: 1, student_id: studentId, student_name: studentData.data?.full_name || "Sinh viên", class_name: "PRN 212", teacher_name: "Phong", date: "2025-10-08", slot: 2, attendance_code: "CT08", status: "attended" },
-        { id: 2, student_id: studentId, student_name: studentData.data?.full_name || "Sinh viên", class_name: "SWT 301", teacher_name: "Vinh", date: "2025-10-08", slot: 1, attendance_code: "CT01", status: "attended" },
-        { id: 3, student_id: studentId, student_name: studentData.data?.full_name || "Sinh viên", class_name: "SWP391", teacher_name: "Phuc", date: "2025-10-07", slot: 1, attendance_code: "CT13", status: "absent" }
-      ];
-      setAttendanceRecords(mockRecords);
+      const params: Record<string, any> = {};
+      if (dateFilter) params.date = dateFilter;
+      if (statusFilter && statusFilter !== 'all') {
+        params.status = statusFilter === 'present' ? 'present' : 'absent';
+      }
+      const res = await apiFetchJson<{ success: boolean; data: { items: any[]; page: number; pageSize: number; total: number } }>(`${HISTORY_API}/history`, { method: 'GET', headers: { 'Content-Type': 'application/json' }, params });
+
+      const items = Array.isArray(res?.data?.items) ? res.data.items : [];
+      const mapped: AttendanceRecord[] = items.map((it: any) => ({
+        id: it.id,
+        student_id: it.student_id,
+        student_name: studentInfo?.full_name || 'Sinh viên',
+        class_name: it.class_name || it.class_id || '',
+        teacher_name: '',
+        date: it.date,
+        slot: it.slot ?? null,
+        attendance_code: it.attendance_code || '',
+        status: it.status === 'present' ? 'attended' : (it.status || 'absent'),
+      }));
+      setAttendanceRecords(mapped);
 
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Có lỗi xảy ra khi tải dữ liệu');
@@ -92,6 +111,12 @@ export default function LichSuPage() {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    // Refetch when filters change
+    fetchData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [statusFilter, dateFilter]);
 
   const filtered = useMemo(() => {
     return attendanceRecords.filter(r => {
@@ -131,7 +156,6 @@ export default function LichSuPage() {
           <div className="date">Hôm nay: {new Date().toLocaleDateString('vi-VN', { weekday: 'long', day: '2-digit', month: '2-digit', year: 'numeric' })}</div>
         </div>
         <div className="controls">
-          <button className="qr-btn">📷 Quét QR</button>
           <button className="qr-btn" onClick={() => {
             if (confirm('Bạn có chắc muốn đăng xuất?')) {
               localStorage.removeItem('sas_user');

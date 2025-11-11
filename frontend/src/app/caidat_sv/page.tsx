@@ -52,7 +52,6 @@ function Shell({ children, collapsed, setCollapsed, student, themeDark }: PropsW
           <div className="date">Hôm nay: {new Date().toLocaleDateString('vi-VN', { weekday: 'long', day: '2-digit', month: '2-digit', year: 'numeric' })}</div>
         </div>
         <div className="controls">
-          <button className="qr-btn">📷 Quét QR</button>
           <button className="qr-btn" onClick={() => {
             if (confirm('Bạn có chắc muốn đăng xuất?')) {
               localStorage.removeItem('sas_user');
