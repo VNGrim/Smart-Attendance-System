@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import QRCode from "qrcode";
 import { makeApiUrl } from "../../lib/apiBase";
 import { formatVietnamDate, formatVietnamTime, formatVietnamWeekday } from "../../lib/timezone";
@@ -271,6 +272,10 @@ const formatCountdown = (secondsLeft: number | null) => {
 };
 
 export default function LecturerAttendancePage() {
+  const searchParams = useSearchParams();
+  const paramClass = (searchParams?.get("class") || "").trim();
+  const paramSlotRaw = (searchParams?.get("slot") || "").trim();
+  const paramSlot = paramSlotRaw && !Number.isNaN(Number(paramSlotRaw)) ? Number(paramSlotRaw) : null;
   const [collapsed, setCollapsed] = useState(false);
   const [dark, setDark] = useState(true);
   const [notifCount] = useState(2);
@@ -391,9 +396,11 @@ export default function LecturerAttendancePage() {
   useEffect(() => {
     fetchJson<{ success: boolean; data: ClassInfo[] }>(`${API_BASE}/classes`)
       .then((payload) => {
-        setClasses(payload.data || []);
-        if (payload.data?.length) {
-          setCls(payload.data[0].id);
+        const list = payload.data || [];
+        setClasses(list);
+        if (list.length) {
+          const found = paramClass && list.find((c) => c.id === paramClass)?.id;
+          setCls(found || list[0].id);
         }
       })
       .catch((err) => {
@@ -449,10 +456,12 @@ export default function LecturerAttendancePage() {
         const payload = await fetchJson<{ success: boolean; data: SlotInfo[] }>(
           `${API_BASE}/classes/${classId}/slots?date=${today}`
         );
-        setSlots(payload.data || []);
+        const list = payload.data || [];
+        setSlots(list);
         setError(null);
-        if (payload.data?.length) {
-          setSlot(payload.data[0].slotId);
+        if (list.length) {
+          const desired = (paramSlot && list.find((s) => s.slotId === paramSlot)?.slotId) || null;
+          setSlot(desired ?? list[0].slotId);
         }
       } catch (err: any) {
         console.error("fetch slots error", err);
@@ -460,7 +469,7 @@ export default function LecturerAttendancePage() {
         setError(err.message || "Không thể tải slot lớp");
       }
     },
-    []
+    [paramSlot]
   );
 
   const fetchHistory = useCallback(
