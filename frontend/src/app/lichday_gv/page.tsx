@@ -115,41 +115,6 @@ export default function LecturerSchedulePage() {
       <header className="topbar">
         <div className="page-title">Lịch giảng dạy</div>
         <div className="controls">
-          <div className="chip-group">
-            <button className={`chip ${view==='week'?'active':''}`} onClick={()=>setView('week')}>🗓 Tuần</button>
-            <button className={`chip ${view==='month'?'active':''}`} onClick={()=>setView('month')}>🗂 Tháng</button>
-          </div>
-          <div className="search">
-            <i className="fas fa-search" />
-            <input value={search} onChange={(e)=>setSearch(e.target.value)} placeholder="Tìm lớp/môn/phòng" />
-          </div>
-          <div className="filter-line">
-            <select className="input" value={filterSemester} onChange={(e)=>setFilterSemester(e.target.value)}>
-              <option>HK1 2025-2026</option>
-              <option>HK2 2025-2026</option>
-              <option>Hè 2026</option>
-            </select>
-            <select className="input" value={filterWeek} onChange={(e)=>setFilterWeek(e.target.value)}>
-              <option>Tuần 7</option>
-              <option>Tuần 8</option>
-              <option>Tuần 9</option>
-            </select>
-            <select className="input" value={filterClass} onChange={(e)=>setFilterClass(e.target.value)}>
-              <option>Tất cả lớp</option>
-              <option>CN201</option>
-              <option>CN202</option>
-              <option>CN203</option>
-            </select>
-            <select className="input" value={filterSubject} onChange={(e)=>setFilterSubject(e.target.value)}>
-              <option>Tất cả môn</option>
-              <option>.NET</option>
-              <option>CSDL</option>
-              <option>CTDL</option>
-            </select>
-          </div>
-          <button className="btn-outline" onClick={autoArrange}>⚙️ Sắp xếp tự động</button>
-          <button className="icon-btn" onClick={toggleDark} title="Chuyển giao diện">{dark?"🌙":"🌞"}</button>
-          <button className="icon-btn notif" title="Thông báo">🔔{notifCount>0 && <span className="badge">{notifCount}</span>}</button>
           <button className="qr-btn" onClick={async ()=>{ 
             if (confirm('Bạn có chắc muốn đăng xuất?')) {
               try { await fetch('http://localhost:8080/api/auth/logout', { method: 'POST', credentials: 'include' }); } catch {}

@@ -196,8 +196,8 @@ exports.getRecentNotifications = async (req, res) => {
     const notifications = await prisma.announcements.findMany({
       where: {
         OR: [
-          { sender_id: teacherId },
-          { target_type: 'teacher' }
+          { sender: teacherId },
+          { target: 'Giảng viên' }
         ]
       },
       orderBy: {

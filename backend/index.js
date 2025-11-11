@@ -21,24 +21,35 @@ const allowedOrigins = [
   process.env.FRONTEND_URL
 ].filter(Boolean); // Loại bỏ undefined
 
-app.use(cors({
-  origin: function (origin, callback) {
-    // Cho phép requests không có origin (mobile apps, curl, etc.)
-    if (!origin) return callback(null, true);
-    
-    // Cho phép tất cả subdomain vercel.app
-    if (origin.includes('.vercel.app')) {
-      return callback(null, true);
+// Cấu hình CORS mềm dẻo hơn cho môi trường phát triển
+const corsOptions = process.env.NODE_ENV === 'production' 
+  ? {
+      origin: function (origin, callback) {
+        if (!origin) return callback(null, true);
+        
+        // Cho phép tất cả subdomain vercel.app
+        if (origin.includes('.vercel.app')) {
+          return callback(null, true);
+        }
+        
+        if (allowedOrigins.includes(origin)) {
+          return callback(null, true);
+        }
+        
+        console.warn('Blocked by CORS:', origin);
+        return callback(new Error('CORS policy violation'), false);
+      },
+      credentials: true,
     }
-    
-    if (allowedOrigins.indexOf(origin) !== -1) {
-      return callback(null, true);
-    }
-    
-    return callback(new Error('CORS policy violation'), false);
-  },
-  credentials: true, // Cho phép gửi cookie JWT
-}));
+  : {
+      // Trong môi trường development, cho phép tất cả các origin
+      origin: true,
+      credentials: true,
+      methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+      allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
+    };
+
+app.use(cors(corsOptions));
 app.use(bodyParser.json());
 app.use(cookieParser());
 
@@ -48,6 +59,7 @@ app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 // 🧱 Import tất cả các route module
 const lichhocRoutes = require("./src/lichhoc_hienthi/lichhoc_hienthi.routes");
 const thongbaoRoutes = require("./src/thongbao_hienthi/thongbao_hienthi.routes");
+const lichdayRoutes = require("./src/lichday_gv/lichday_gv.routes");
 const thongbaoGVRoutes = require("./src/thongbao_gv/thongbao_gv.routes");
 const lopRoutes = require("./src/lop_gv/lop_gv.routes");
 const attendanceRoutes = require("./src/diemdanh_gv");
@@ -73,6 +85,7 @@ app.use("/api/teachers", teacherRoutes);
 
 // 🧱 Mount các route hiện có
 app.use("/api/lichhoc", lichhocRoutes);
+app.use("/api/lichday", lichdayRoutes);
 app.use("/api/thongbao", thongbaoRoutes);
 app.use("/api/teacher/notifications", thongbaoGVRoutes);
 app.use("/api/lop", lopRoutes);
