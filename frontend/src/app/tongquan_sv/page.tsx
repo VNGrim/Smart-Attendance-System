@@ -18,6 +18,7 @@ type LatestAnnouncement = {
   type: AnnouncementTabKey | "other";
   createdAt: string | null;
   createdDate: string | null;
+  allowReply?: boolean;
 };
 type ProgressItem = { subject: string; percent: number; note?: string };
 type AttendanceItem = { subject: string; date: string; slot: string; present: boolean };
@@ -49,7 +50,6 @@ const SETTINGS_CHANGED_EVENT = "sas_settings_changed";
 export default function StudentDashboardPage() {
   const [student, setStudent] = useState<Student | null>(null);
   const [collapsed, setCollapsed] = useState(false);
-  const [filter, setFilter] = useState<"all"|"teacher"|"school">("all");
   const [selectedAnnouncement, setSelectedAnnouncement] = useState<LatestAnnouncement | null>(null);
   const [themeDark, setThemeDark] = useState(true);
   // QR Code Scanner State
@@ -177,6 +177,7 @@ export default function StudentDashboardPage() {
               type: normalizeType((item.type as string) ?? ""),
               createdAt: item.createdAt ?? null,
               createdDate: item.createdDate ?? null,
+              allowReply: Boolean((item as any).allowReply),
             }));
           setAnnouncementsData({
             all: mapBucket(res.data.all ?? []),
@@ -276,7 +277,7 @@ export default function StudentDashboardPage() {
     { icon: "🗓️", title: "Ngày thi sắp tới", value: summary.upcomingExamDate || "Chưa có", color: "stat-red", href: "/lichsu_sv" },
   ];
 
-  const displayedAnnouncements = useMemo(() => announcementsData[filter] ?? [], [announcementsData, filter]);
+  const displayedAnnouncements = useMemo(() => announcementsData.all ?? [], [announcementsData]);
 
   const progresses: ProgressItem[] = [
     { subject: "Lập trình .NET", percent: 80, note: "Còn 2 buổi, 1 bài tập" },
@@ -346,16 +347,46 @@ export default function StudentDashboardPage() {
   return (
     <Shell>
       <div className="dashboard-grid">
-        <div className="quick-stats">
-          {stats.map((s, i) => (
-            <Link key={i} className={`stat ${s.color}`} href={s.href}>
-              <div className="icon">{s.icon}</div>
-              <div className="meta">
-                <div className="title">{s.title}</div>
-                <div className="value">{s.value}</div>
+        <div className="panel">
+          <div className="stats-attendance">
+            <div className="quick-stats">
+              {stats.map((s, i) => (
+                <Link key={i} className={`stat ${s.color}`} href={s.href}>
+                  <div className="icon">{s.icon}</div>
+                  <div className="meta">
+                    <div className="title">{s.title}</div>
+                    <div className="value">{s.value}</div>
+                  </div>
+                </Link>
+              ))}
+            </div>
+            <div className="widget big">
+              <div className="title">📷 Điểm danh bằng QR hoặc mã</div>
+              <div className="sub">Nếu đang trong khung giờ học, hệ thống sẽ gợi ý lớp hiện tại.</div>
+              <div className="attendance-buttons">
+                <button className="btn-qr-scan" onClick={() => setShowQRScanner(true)} disabled={attendanceLoading}>
+                  📷 Quét QR
+                </button>
+                <button className="btn-code-input" onClick={() => setShowCodeInput(true)} disabled={attendanceLoading}>
+                  🔢 Nhập mã
+                </button>
               </div>
-            </Link>
-          ))}
+              {attendanceMessage && (
+                <div
+                  style={{
+                    marginTop: 12,
+                    padding: "10px 12px",
+                    borderRadius: 12,
+                    fontWeight: 700,
+                    background: attendanceMessage.type === "success" ? "rgba(16,185,129,0.12)" : "rgba(239,68,68,0.12)",
+                    color: attendanceMessage.type === "success" ? "#047857" : "#b91c1c",
+                  }}
+                >
+                  {attendanceMessage.text}
+                </div>
+              )}
+            </div>
+          </div>
         </div>
 
         <div className="panel">
@@ -405,31 +436,35 @@ export default function StudentDashboardPage() {
         </div>
 
         <div className="panel">
-          <div className="row-actions">
-            <div className="section-title" style={{ marginBottom:0 }}>Thông báo gần nhất</div>
-            <div className="seg">
-              <button className={`seg-btn ${filter==='all'?'active':''}`} onClick={()=>setFilter('all')}>Tất cả</button>
-              <button className={`seg-btn ${filter==='teacher'?'active':''}`} onClick={()=>setFilter('teacher')}>Từ giảng viên</button>
-              <button className={`seg-btn ${filter==='school'?'active':''}`} onClick={()=>setFilter('school')}>Từ nhà trường</button>
+          <div className="section-title">Thông báo gần nhất</div>
+          {announcementsLoading ? (
+            <div className="ann-empty">Đang tải thông báo...</div>
+          ) : announcementsError ? (
+            <div className="ann-empty">{announcementsError}</div>
+          ) : displayedAnnouncements.length === 0 ? (
+            <div className="ann-empty">Chưa có thông báo phù hợp.</div>
+          ) : (
+            <div className="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Nội dung</th>
+                    <th>Người gửi</th>
+                    <th>Ngày gửi</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {displayedAnnouncements.slice(0,1).map((a) => (
+                    <tr key={a.id} style={{ cursor: 'pointer' }} onClick={() => (window.location.href = '/thongbao_sv')}>
+                      <td className="one-line">{a.title}</td>
+                      <td className="one-line">{a.sender}</td>
+                      <td className="one-line">{a.createdDate ?? "--"} {a.allowReply ? <span className="ann-reply-flag" title="Cho phép phản hồi">↩</span> : null}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
-          </div>
-          <div className="list">
-            {announcementsLoading ? (
-              <div className="ann-empty">Đang tải thông báo...</div>
-            ) : announcementsError ? (
-              <div className="ann-empty">{announcementsError}</div>
-            ) : displayedAnnouncements.length === 0 ? (
-              <div className="ann-empty">Chưa có thông báo phù hợp.</div>
-            ) : (
-              displayedAnnouncements.map((a) => (
-                <div key={a.id} className="ann-item" onClick={() => setSelectedAnnouncement(a)}>
-                  <div className="ann-title">{a.title}</div>
-                  <div className="ann-sub">{a.sender}</div>
-                  <div className="ann-date">{a.createdDate ?? "--"}</div>
-                </div>
-              ))
-            )}
-          </div>
+          )}
         </div>
 
         <div className="panel">
@@ -461,32 +496,6 @@ export default function StudentDashboardPage() {
         </div>
 
         <div className="widgets">
-          <div className="widget big">
-            <div className="title">📷 Điểm danh bằng QR hoặc mã</div>
-            <div className="sub">Nếu đang trong khung giờ học, hệ thống sẽ gợi ý lớp hiện tại.</div>
-            <div className="attendance-buttons">
-              <button className="btn-qr-scan" onClick={() => setShowQRScanner(true)} disabled={attendanceLoading}>
-                📷 Quét QR
-              </button>
-              <button className="btn-code-input" onClick={() => setShowCodeInput(true)} disabled={attendanceLoading}>
-                🔢 Nhập mã
-              </button>
-            </div>
-            {attendanceMessage && (
-              <div
-                style={{
-                  marginTop: 12,
-                  padding: "10px 12px",
-                  borderRadius: 12,
-                  fontWeight: 700,
-                  background: attendanceMessage.type === "success" ? "rgba(16,185,129,0.12)" : "rgba(239,68,68,0.12)",
-                  color: attendanceMessage.type === "success" ? "#047857" : "#b91c1c",
-                }}
-              >
-                {attendanceMessage.text}
-              </div>
-            )}
-          </div>
           <div className="widget">
             <div className="title">📚 Bài tập & hạn nộp</div>
             <div className="list">

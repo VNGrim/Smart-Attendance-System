@@ -365,12 +365,19 @@ router.get("/announcements/latest", async (req, res) => {
       .map((item) => item.trim())
       .filter((item) => item.length > 0);
 
-    const targetFilters = [
-      { target: { equals: "Toàn trường", mode: "insensitive" } },
-      { target: { equals: "Sinh viên", mode: "insensitive" } },
-      ...classTokens.map((token) => ({ target: { equals: token, mode: "insensitive" } })),
+      const targetFilters = [
+      // Global/all-school announcements
+      { target: { contains: "Toàn", mode: "insensitive" } },
+      { target: { contains: "All", mode: "insensitive" } },
+      // Student-targeted announcements
+      { target: { contains: "Sinh", mode: "insensitive" } },
+      { target: { contains: "student", mode: "insensitive" } },
+      // Class-specific matches (target contains class code)
+      ...classTokens.map((token) => ({ target: { contains: token, mode: "insensitive" } })),
     ];
 
+    // If recipients column is an array (e.g., Postgres text[]), array_contains will work.
+    // If it's stored differently, target-based filters above should still surface most relevant records.
     const recipientFilters = classTokens.map((token) => ({ recipients: { array_contains: token } }));
 
     const announcements = await prisma.announcements.findMany({
@@ -379,6 +386,17 @@ router.get("/announcements/latest", async (req, res) => {
       },
       orderBy: { created_at: "desc" },
       take: 100,
+      select: {
+        id: true,
+        title: true,
+        content: true,
+        created_at: true,
+        sender: true,
+        target: true,
+        category: true,
+        type: true,
+        allow_reply: true,
+      },
     });
 
     const normalizeAnnouncementType = (value) => {
@@ -401,6 +419,7 @@ router.get("/announcements/latest", async (req, res) => {
         type: normalizeAnnouncementType(record.type ?? record.category ?? ""),
         createdAt: createdAt ? createdAt.toISOString() : null,
         createdDate: date?.isValid() ? date.format("DD/MM") : null,
+        allowReply: Boolean(record.allow_reply),
       };
     };
 
