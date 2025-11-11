@@ -30,6 +30,15 @@ type ProgressApiItem = {
 };
 type AttendanceItem = { subject: string; date: string; slot: string; present: boolean };
 type Assignment = { title: string; due: string; remain: string };
+type RecentHistoryItem = {
+  classId: string | null;
+  subjectName: string;
+  subjectCode: string | null;
+  date: string; // DD/MM
+  slot: number | null;
+  status: string;
+  present: boolean;
+};
 type OverviewSummary = {
   classCount: number;
   sessionsToday: number;
@@ -81,6 +90,7 @@ export default function StudentDashboardPage() {
   const [announcementsLoading, setAnnouncementsLoading] = useState(false);
   const [announcementsError, setAnnouncementsError] = useState<string | null>(null);
   const [progressItems, setProgressItems] = useState<ProgressApiItem[]>([]);
+  const [recentHistory, setRecentHistory] = useState<RecentHistoryItem[]>([]);
 
   useEffect(() => {
     const savedUser = localStorage.getItem("sas_user");
@@ -234,6 +244,25 @@ export default function StudentDashboardPage() {
       window.clearInterval(interval);
     };
   }, []);
+
+  useEffect(() => {
+    let ignore = false;
+    const fetchRecent = async () => {
+      try {
+        const res = await apiFetchJson<{ success: boolean; data: RecentHistoryItem[] }>(`${STUDENT_OVERVIEW_API}/history/recent`);
+        if (!ignore && res?.success && Array.isArray(res.data)) {
+          setRecentHistory(res.data);
+        }
+      } catch (error) {
+        console.error("student overview recent history fetch error:", error);
+        if (!ignore) setRecentHistory([]);
+      }
+    };
+    fetchRecent();
+    const interval = window.setInterval(fetchRecent, 1000 * 60 * 5);
+    return () => { ignore = true; window.clearInterval(interval); };
+  }, []);
+
   const todayStr = useMemo(() => {
     const now = new Date();
     const weekday = ["Chủ nhật","Thứ Hai","Thứ Ba","Thứ Tư","Thứ Năm","Thứ Sáu","Thứ Bảy"][now.getDay()];
@@ -331,11 +360,7 @@ export default function StudentDashboardPage() {
   const barLevel = (pct: number) => (pct < 50 ? 'low' : pct <= 80 ? 'mid' : 'high');
   const statusIcon = (item: ProgressApiItem) => (Number(item.remainingSessions || 0) <= 2 ? '🧾' : '⏳');
 
-  const recents: AttendanceItem[] = [
-    { subject: ".NET", date: "25/10", slot: "8", present: true },
-    { subject: "CSDL nâng cao", date: "23/10", slot: "6", present: false },
-    { subject: "Cấu trúc dữ liệu", date: "22/10", slot: "5", present: true },
-  ];
+  const recents: AttendanceItem[] = [];
 
   const assignments: Assignment[] = [
     { title: "Bài tập .NET", due: "29/10", remain: "Còn 2 ngày" },
@@ -534,19 +559,28 @@ export default function StudentDashboardPage() {
           </div>
         </div>
 
-        <div className="panel">
+        <div className="panel history-panel">
           <div className="section-title">Lịch sử điểm danh gần đây</div>
-          <div className="table-wrap">
+          <div className="table-wrap history-scroll">
             <table>
               <thead><tr><th>Môn học</th><th>Ngày</th><th>Slot</th><th>Trạng thái</th></tr></thead>
               <tbody>
-                {recents.map((r,i)=> (
-                  <tr key={i}><td>{r.subject}</td><td>{r.date}</td><td>Slot {r.slot}</td><td>{r.present?'✅ Có mặt':'❌ Vắng'}</td></tr>
-                ))}
+                {recentHistory.length === 0 ? (
+                  <tr><td colSpan={4} style={{ textAlign: 'center', padding: '12px' }}>Chưa có dữ liệu.</td></tr>
+                ) : (
+                  recentHistory.map((r,i)=> (
+                    <tr key={`${r.classId || i}-${r.date}-${r.slot || ''}`}>
+                      <td>{r.subjectCode || r.subjectName}</td>
+                      <td>{r.date}</td>
+                      <td>{r.slot != null ? `Slot ${r.slot}` : '--'}</td>
+                      <td>{r.present ? '✅ Có mặt' : '❌ Vắng'}</td>
+                    </tr>
+                  ))
+                )}
               </tbody>
             </table>
           </div>
-          <div className="actions end"><Link href="/lichsu_sv" className="btn-outline">Xem toàn bộ lịch sử điểm danh</Link></div>
+          <div className="history-view-all"><Link href="/lichsu_sv" className="btn-outline">Xem toàn bộ lịch sử điểm danh</Link></div>
         </div>
 
         <div className="widgets">

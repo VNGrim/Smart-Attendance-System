@@ -12,6 +12,18 @@ const router = express.Router();
 
 const DAY_MAP = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
+const extractStudentId = (req) => {
+  const user = req.user ?? {};
+  return (
+    user.userId ||
+    user.user_id ||
+    user.user_code ||
+    user.userCode ||
+    user.studentId ||
+    null
+  );
+};
+
 const parseClassList = (classes) => {
   if (!classes || typeof classes !== "string") return [];
   const tokens = String(classes)
@@ -79,7 +91,7 @@ router.use(auth, requireRole("student"));
 
 router.get("/summary", async (req, res) => {
   try {
-    const studentId = req.user?.userId;
+    const studentId = extractStudentId(req);
     if (!studentId) {
       return res.status(401).json({ success: false, message: "Không xác định được sinh viên" });
     }
@@ -203,7 +215,7 @@ router.get("/summary", async (req, res) => {
 
 router.get("/schedule/today", async (req, res) => {
   try {
-    const studentId = req.user?.userId;
+    const studentId = extractStudentId(req);
     if (!studentId) {
       return res.status(401).json({ success: false, message: "Không xác định được sinh viên" });
     }
@@ -448,7 +460,7 @@ router.get("/announcements/latest", async (req, res) => {
 // Tiến độ học tập: số buổi còn lại và số bài tập (tạm thời 0 nếu không có bảng bài tập)
 router.get("/progress", async (req, res) => {
   try {
-    const studentId = req.user?.userId;
+    const studentId = extractStudentId(req);
     if (!studentId) {
       return res.status(401).json({ success: false, message: "Không xác định được sinh viên" });
     }
@@ -545,6 +557,64 @@ router.get("/progress", async (req, res) => {
   } catch (error) {
     console.error("student overview progress error:", error);
     return res.status(500).json({ success: false, message: "Không thể tải tiến độ học tập" });
+  }
+});
+
+// Lịch sử điểm danh gần đây
+router.get("/history/recent", async (req, res) => {
+  try {
+    const studentId = extractStudentId(req);
+    if (!studentId) {
+      return res.status(401).json({ success: false, message: "Không xác định được sinh viên" });
+    }
+
+    // Lấy các bản ghi điểm danh mới nhất của SV, kèm session
+    const records = await prisma.attendanceRecord.findMany({
+      where: { studentId },
+      include: {
+        session: { select: { classId: true, date: true, slot: true } },
+      },
+      orderBy: [{ recordedAt: "desc" }],
+      take: 10,
+    });
+
+    if (!records.length) return res.json({ success: true, data: [] });
+
+    const classIds = Array.from(
+      new Set(
+        records
+          .map((r) => String(r.session?.classId || "").trim())
+          .filter((v) => v.length > 0)
+      )
+    );
+
+    const classesData = classIds.length
+      ? await prisma.classes.findMany({
+          where: { class_id: { in: classIds } },
+          select: { class_id: true, subject_name: true, subject_code: true },
+        })
+      : [];
+    const classMap = new Map(classesData.map((c) => [String(c.class_id).trim(), c]));
+
+    const data = records.map((r) => {
+      const clsKey = String(r.session?.classId || "").trim();
+      const info = classMap.get(clsKey);
+      const d = r.session?.date ? dayjs(r.session.date) : null;
+      return {
+        classId: clsKey || null,
+        subjectName: info?.subject_name || clsKey || "",
+        subjectCode: info?.subject_code || null,
+        date: d?.isValid() ? d.format("DD/MM") : "--",
+        slot: r.session?.slot ?? null,
+        status: r.status || "unknown",
+        present: String(r.status || "").toLowerCase() === "present",
+      };
+    });
+
+    return res.json({ success: true, data });
+  } catch (error) {
+    console.error("student overview recent history error:", error);
+    return res.status(500).json({ success: false, message: "Không thể tải lịch sử điểm danh" });
   }
 });
 
