@@ -59,6 +59,7 @@ app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 // 🧱 Import tất cả các route module
 const lichhocRoutes = require("./src/lichhoc_hienthi/lichhoc_hienthi.routes");
 const thongbaoRoutes = require("./src/thongbao_hienthi/thongbao_hienthi.routes");
+const lichdayRoutes = require("./src/lichday_gv/lichday_gv.routes");
 const thongbaoGVRoutes = require("./src/thongbao_gv/thongbao_gv.routes");
 const lopRoutes = require("./src/lop_gv/lop_gv.routes");
 const attendanceRoutes = require("./src/diemdanh_gv");
@@ -84,6 +85,7 @@ app.use("/api/teachers", teacherRoutes);
 
 // 🧱 Mount các route hiện có
 app.use("/api/lichhoc", lichhocRoutes);
+app.use("/api/lichday", lichdayRoutes);
 app.use("/api/thongbao", thongbaoRoutes);
 app.use("/api/teacher/notifications", thongbaoGVRoutes);
 app.use("/api/lop", lopRoutes);
