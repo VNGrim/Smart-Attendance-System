@@ -445,4 +445,107 @@ router.get("/announcements/latest", async (req, res) => {
   }
 });
 
+// Tiến độ học tập: số buổi còn lại và số bài tập (tạm thời 0 nếu không có bảng bài tập)
+router.get("/progress", async (req, res) => {
+  try {
+    const studentId = req.user?.userId;
+    if (!studentId) {
+      return res.status(401).json({ success: false, message: "Không xác định được sinh viên" });
+    }
+
+    const student = await prisma.students.findUnique({
+      where: { student_id: studentId },
+      select: { classes: true },
+    });
+
+    if (!student) {
+      return res.status(404).json({ success: false, message: "Không tìm thấy thông tin sinh viên" });
+    }
+
+    const classList = parseClassList(student.classes);
+    const classListUpper = Array.from(new Set(classList.map((item) => item.toUpperCase())));
+    const classIdFilters = Array.from(new Set([...
+      classList,
+      ...classListUpper,
+    ]));
+
+    if (!classIdFilters.length) {
+      return res.json({ success: true, data: [] });
+    }
+
+    const now = new Date();
+    const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const todayIndex = now.getDay(); // 0-6 Sun..Sat
+    const remainingDays = DAY_MAP.slice(todayIndex); // include today -> weekend
+
+    const [futureDated, weekly] = await Promise.all([
+      prisma.timetable.findMany({
+        where: {
+          classes: { in: classIdFilters },
+          date: { gte: startOfDay },
+        },
+        select: { classes: true, date: true, day_of_week: true, slot_id: true },
+        orderBy: [{ date: "asc" }, { slot_id: "asc" }],
+      }),
+      prisma.timetable.findMany({
+        where: {
+          classes: { in: classIdFilters },
+          date: null,
+          day_of_week: { in: remainingDays },
+        },
+        select: { classes: true, date: true, day_of_week: true, slot_id: true },
+        orderBy: [{ day_of_week: "asc" }, { slot_id: "asc" }],
+      }),
+    ]);
+
+    // Distinct sessions per class by (class|date|day|slot)
+    const keyOf = (row) => {
+      const cls = String(row.classes || "").trim().toUpperCase();
+      const dateKey = row.date instanceof Date ? dayjs(row.date).format("YYYY-MM-DD") : "";
+      const dayKey = String(row.day_of_week || "").trim().toUpperCase();
+      const slotKey = Number(row.slot_id || 0);
+      return `${cls}|${dateKey}|${dayKey}|${slotKey}`;
+    };
+
+    const byClass = new Map();
+    const addRow = (row) => {
+      const cls = String(row.classes || "").trim().toUpperCase();
+      if (!cls) return;
+      let set = byClass.get(cls);
+      if (!set) {
+        set = new Set();
+        byClass.set(cls, set);
+      }
+      set.add(keyOf(row));
+    };
+    futureDated.forEach(addRow);
+    weekly.forEach(addRow);
+
+    const classesData = await prisma.classes.findMany({
+      where: { class_id: { in: Array.from(byClass.keys()) } },
+      select: { class_id: true, class_name: true, subject_name: true, subject_code: true },
+    });
+    const classInfoMap = new Map(classesData.map((c) => [String(c.class_id).trim().toUpperCase(), c]));
+
+    const data = Array.from(byClass.entries()).map(([classId, set]) => {
+      const info = classInfoMap.get(classId) || {};
+      const remainingSessions = set.size;
+      const assignmentsCount = 0; // chưa có bảng bài tập
+      return {
+        classId,
+        className: info.class_name || classId,
+        subjectName: info.subject_name || classId,
+        subjectCode: info.subject_code || null,
+        remainingSessions,
+        assignmentsCount,
+      };
+    }).sort((a, b) => (a.subjectCode || '').localeCompare(b.subjectCode || ''));
+
+    return res.json({ success: true, data });
+  } catch (error) {
+    console.error("student overview progress error:", error);
+    return res.status(500).json({ success: false, message: "Không thể tải tiến độ học tập" });
+  }
+});
+
 module.exports = router;

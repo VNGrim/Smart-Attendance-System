@@ -21,6 +21,13 @@ type LatestAnnouncement = {
   allowReply?: boolean;
 };
 type ProgressItem = { subject: string; percent: number; note?: string };
+type ProgressApiItem = {
+  classId: string;
+  subjectCode: string | null;
+  subjectName: string;
+  remainingSessions: number;
+  assignmentsCount: number;
+};
 type AttendanceItem = { subject: string; date: string; slot: string; present: boolean };
 type Assignment = { title: string; due: string; remain: string };
 type OverviewSummary = {
@@ -73,6 +80,7 @@ export default function StudentDashboardPage() {
   });
   const [announcementsLoading, setAnnouncementsLoading] = useState(false);
   const [announcementsError, setAnnouncementsError] = useState<string | null>(null);
+  const [progressItems, setProgressItems] = useState<ProgressApiItem[]>([]);
 
   useEffect(() => {
     const savedUser = localStorage.getItem("sas_user");
@@ -105,6 +113,27 @@ export default function StudentDashboardPage() {
     };
     window.addEventListener(SETTINGS_CHANGED_EVENT, handler);
     return () => window.removeEventListener(SETTINGS_CHANGED_EVENT, handler);
+  }, []);
+
+  useEffect(() => {
+    let ignore = false;
+    const fetchProgress = async () => {
+      try {
+        const res = await apiFetchJson<{ success: boolean; data: ProgressApiItem[] }>(`${STUDENT_OVERVIEW_API}/progress`);
+        if (!ignore && res?.success && Array.isArray(res.data)) {
+          setProgressItems(res.data);
+        }
+      } catch (error) {
+        console.error("student overview progress fetch error:", error);
+        if (!ignore) setProgressItems([]);
+      }
+    };
+    fetchProgress();
+    const interval = window.setInterval(fetchProgress, 1000 * 60 * 10);
+    return () => {
+      ignore = true;
+      window.clearInterval(interval);
+    };
   }, []);
 
   useEffect(() => {
@@ -279,11 +308,16 @@ export default function StudentDashboardPage() {
 
   const displayedAnnouncements = useMemo(() => announcementsData.all ?? [], [announcementsData]);
 
-  const progresses: ProgressItem[] = [
-    { subject: "Lập trình .NET", percent: 80, note: "Còn 2 buổi, 1 bài tập" },
-    { subject: "Cơ sở dữ liệu", percent: 60, note: "3 buổi còn lại" },
-    { subject: "Cấu trúc dữ liệu", percent: 90, note: "Sắp thi cuối kỳ" },
-  ];
+  const formatProgressNote = (item: ProgressApiItem) => {
+    const r = Number(item.remainingSessions || 0);
+    const a = Number(item.assignmentsCount || 0);
+    if (r <= 2) {
+      if (a > 0) return `Sắp thi cuối kì, ${a} bài tập`;
+      return `Sắp thi cuối kỳ`;
+    }
+    if (a > 0) return `Còn ${r} buổi, ${a} bài tập`;
+    return `${r} buổi còn lại`;
+  };
 
   const recents: AttendanceItem[] = [
     { subject: ".NET", date: "25/10", slot: "8", present: true },
@@ -389,9 +423,9 @@ export default function StudentDashboardPage() {
           </div>
         </div>
 
-        <div className="panel">
+        <div className="panel schedule-panel">
           <div className="section-title">Lịch học trong ngày</div>
-          <div className="table-wrap">
+          <div className="table-wrap schedule-scroll">
             <table className="schedule-table">
               <thead>
                 <tr>
@@ -432,7 +466,7 @@ export default function StudentDashboardPage() {
               </tbody>
             </table>
           </div>
-          <div className="actions end"><Link href="/lichhoc_sv" className="btn-outline">Xem toàn bộ lịch học</Link></div>
+          <div className="schedule-view-all"><Link href="/lichhoc_sv" className="btn-outline">Xem toàn bộ lịch học</Link></div>
         </div>
 
         <div className="panel">
@@ -467,16 +501,20 @@ export default function StudentDashboardPage() {
           )}
         </div>
 
-        <div className="panel">
+        <div className="panel progress-panel">
           <div className="section-title">Tiến độ học tập</div>
-          <div className="progress-list">
-            {progresses.map((p,i)=> (
-              <div key={i} className="prog-row">
-                <div className="prog-subject">{p.subject}</div>
-                <div className="prog-bar"><div className={`bar ${p.percent<70?'low':p.percent<85?'mid':'high'}`} style={{ width: `${p.percent}%` }} /></div>
-                <div className="prog-note">{p.note}</div>
-              </div>
-            ))}
+          <div className="progress-list progress-scroll">
+            {progressItems.length === 0 ? (
+              <div className="ann-empty">Chưa có dữ liệu.</div>
+            ) : (
+              progressItems.map((p,i)=> (
+                <div key={p.classId || i} className="prog-row">
+                  <div className="prog-subject">{p.subjectCode || p.subjectName}</div>
+                  <div className="prog-bar"><div className="bar" style={{ width: `0%` }} /></div>
+                  <div className="prog-note">{formatProgressNote(p)}</div>
+                </div>
+              ))
+            )}
           </div>
         </div>
 
