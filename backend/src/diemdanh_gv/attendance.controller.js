@@ -227,7 +227,7 @@ const createOrGetSession = async (req, res) => {
         existing.status = "expired";
       }
       if (["ended", "closed"].includes(existing.status)) {
-        return res.status(409).json({ success: false, message: "Buổi điểm danh hôm nay đã được lưu" });
+        return res.status(409).json({ success: false, message: "Đã hoàn thành phiên điểm danh" });
       }
       if (existing.status === "active" && existing.type === type) {
         return jsonResponse(res, { success: true, data: serializeSession(existing), reused: true });

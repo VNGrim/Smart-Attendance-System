@@ -29,10 +29,36 @@ export default function LecturerClassesPage() {
   const [grades, setGrades] = useState<Grade[]>([]);
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(false);
+  const [teacher, setTeacher] = useState<{ teacher_id: string; full_name: string } | null>(null);
+
+  const teacherId = (() => {
+    if (typeof window === "undefined") return "";
+    try {
+      const raw = localStorage.getItem("sas_user");
+      if (!raw) return "";
+      const u = JSON.parse(raw);
+      if (u?.role === "teacher" && typeof u?.userId === "string") return u.userId;
+      return "";
+    } catch { return ""; }
+  })();
 
   useEffect(() => {
     fetchClasses();
   }, []);
+
+  useEffect(() => {
+    const fetchTeacher = async () => {
+      if (!teacherId) return;
+      try {
+        const base = process.env.NEXT_PUBLIC_API_BASE || "http://localhost:8080";
+        const res = await fetch(`${base}/api/lichday/teachers/${teacherId}`);
+        if (!res.ok) return;
+        const json = await res.json();
+        if (json?.success && json?.data) setTeacher(json.data);
+      } catch {}
+    };
+    fetchTeacher();
+  }, [teacherId]);
 
   const fetchClasses = async () => {
     try {
@@ -224,7 +250,7 @@ export default function LecturerClassesPage() {
             <>
               <div className="class-info">
                 <div className="title">{activeClass.code} – {activeClass.subject}</div>
-                <div className="meta">Giảng viên: Bạn • Lịch: {activeClass.schedule}, Phòng {activeClass.room} • Số SV: {activeClass.size}</div>
+                <div className="meta">Giảng viên: {teacher?.full_name || ""} - Lớp: {activeClass.id}</div>
               </div>
 
               <div className="tabs">
