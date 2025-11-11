@@ -3,7 +3,7 @@
 import Link from "next/link";
 import React, { useEffect, useMemo, useState, useCallback } from "react";
 import QRButton from "@/app/components/QRButton";
-import { format, startOfWeek, endOfWeek, addWeeks, eachWeekOfInterval } from "date-fns";
+import { format, startOfWeek, endOfWeek, addWeeks, eachWeekOfInterval, parse, getISOWeekYear } from "date-fns";
 
 const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 const SLOT_IDS = [1, 2, 3, 4];
@@ -18,6 +18,9 @@ const weekLabelFromDate = (date: Date) => {
   const end = endOfWeek(start, WEEK_START_OPTS);
   return `${format(start, "dd/MM")} - ${format(end, "dd/MM")}`;
 };
+
+// Parse từ week_key về một ngày đại diện của tuần
+const dateFromWeekKey = (weekKey: string) => parse(weekKey, "RRRR-'W'II", new Date());
 
 type WeekOption = {
   value: string; // week_key: "2025-W45"
@@ -70,6 +73,30 @@ export default function LichHocPage() {
   const weekOptions = useMemo(() => {
     return generateWeekOptions(selectedYear);
   }, [selectedYear]);
+
+  // Điều hướng tuần
+  const goToPrevWeek = () => {
+    const curDate = dateFromWeekKey(selectedWeekKey);
+    const target = addWeeks(curDate, -1);
+    setSelectedWeekKey(weekKeyFromDate(target));
+    const isoYear = getISOWeekYear(target);
+    if (isoYear !== selectedYear) setSelectedYear(isoYear);
+  };
+
+  const goToCurrentWeek = () => {
+    const now = new Date();
+    setSelectedWeekKey(weekKeyFromDate(now));
+    const isoYear = getISOWeekYear(now);
+    if (isoYear !== selectedYear) setSelectedYear(isoYear);
+  };
+
+  const goToNextWeek = () => {
+    const curDate = dateFromWeekKey(selectedWeekKey);
+    const target = addWeeks(curDate, 1);
+    setSelectedWeekKey(weekKeyFromDate(target));
+    const isoYear = getISOWeekYear(target);
+    if (isoYear !== selectedYear) setSelectedYear(isoYear);
+  };
 
   // Fetch dữ liệu khi studentId hoặc selectedWeekKey thay đổi
   const fetchData = useCallback(async () => {
@@ -250,6 +277,17 @@ export default function LichHocPage() {
               <option key={w.value} value={w.value}>{w.label}</option>
             ))}
           </select>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button className="qr-btn" title="Tuần trước" onClick={goToPrevWeek}>
+              <i className="fa-solid fa-chevron-left" />
+            </button>
+            <button className="qr-btn" title="Tuần hiện tại" onClick={goToCurrentWeek}>
+              <i className="fa-solid fa-calendar-day" />
+            </button>
+            <button className="qr-btn" title="Tuần tiếp theo" onClick={goToNextWeek}>
+              <i className="fa-solid fa-chevron-right" />
+            </button>
+          </div>
         </div>
 
         {/* Headers */}
