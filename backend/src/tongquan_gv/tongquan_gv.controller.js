@@ -180,7 +180,7 @@ exports.getWeekSchedule = async (req, res) => {
   }
 };
 
-// Lấy thông báo gần nhất
+// Lấy danh sách thông báo gần nhất (mặc định 5)
 exports.getRecentNotifications = async (req, res) => {
   try {
     const teacherId = req.user?.userId;
@@ -192,26 +192,56 @@ exports.getRecentNotifications = async (req, res) => {
 
     const limit = parseInt(req.query.limit) || 5;
 
-    // Lấy thông báo gửi đến giảng viên hoặc do giảng viên tạo
-    const notifications = await prisma.announcements.findMany({
-      where: {
-        OR: [
-          { sender: teacherId },
-          { target: 'Giảng viên' }
-        ]
+    // Thông báo liên quan: do GV gửi (sender) hoặc hướng tới nhóm Giảng viên / toàn trường
+    const baseWhere = {
+      OR: [
+        { sender: teacherId },
+        { target: { contains: 'Giảng viên', mode: 'insensitive' } },
+        { target: { contains: 'Toàn trường', mode: 'insensitive' } },
+        { target: { contains: 'Toàn bộ', mode: 'insensitive' } },
+        { target: { contains: 'All', mode: 'insensitive' } },
+      ],
+    };
+
+    let notifications = await prisma.announcements.findMany({
+      where: baseWhere,
+      orderBy: { created_at: 'desc' },
+      take: limit,
+      select: {
+        id: true,
+        title: true,
+        content: true,
+        created_at: true,
+        sender: true,
+        target: true,
+        allow_reply: true,
       },
-      orderBy: {
-        created_at: 'desc'
-      },
-      take: limit
     });
 
-    const mapped = notifications.map(n => ({
-      id: n.id.toString(),
+    // Fallback: nếu không có thông báo phù hợp, lấy mới nhất toàn cục
+    if (!notifications || notifications.length === 0) {
+      notifications = await prisma.announcements.findMany({
+        orderBy: { created_at: 'desc' },
+        take: limit,
+        select: {
+          id: true,
+          title: true,
+          content: true,
+          created_at: true,
+          sender: true,
+          target: true,
+          allow_reply: true,
+        },
+      });
+    }
+
+    const mapped = notifications.map((n) => ({
+      id: String(n.id),
       title: n.title,
-      from: n.sender_id === teacherId ? "Bạn" : n.sender_name || "Hệ thống",
-      date: dayjs(n.created_at).format("DD/MM/YYYY"),
-      content: n.content || ""
+      from: n.sender || 'Hệ thống',
+      date: dayjs(n.created_at).format('DD/MM/YYYY'),
+      content: n.content || '',
+      allowReply: Boolean(n.allow_reply),
     }));
 
     return res.json({
@@ -221,6 +251,76 @@ exports.getRecentNotifications = async (req, res) => {
   } catch (err) {
     console.error("Teacher notifications error:", err);
     return res.status(500).json({ success: false, message: "Lỗi server" });
+  }
+};
+
+// Lấy thông báo đơn gần nhất cho giảng viên
+exports.getLatestNotification = async (req, res) => {
+  try {
+    const teacherId = req.user?.userId;
+    if (!teacherId) {
+      return res.status(401).json({ success: false, message: 'Không xác định được giảng viên' });
+    }
+
+    await prisma.$ready;
+
+    const baseWhere = {
+      OR: [
+        { sender: teacherId },
+        { target: { contains: 'Giảng viên', mode: 'insensitive' } },
+        { target: { contains: 'Toàn trường', mode: 'insensitive' } },
+        { target: { contains: 'Toàn bộ', mode: 'insensitive' } },
+        { target: { contains: 'All', mode: 'insensitive' } },
+      ],
+    };
+
+    let notification = await prisma.announcements.findFirst({
+      where: baseWhere,
+      orderBy: { created_at: 'desc' },
+      select: {
+        id: true,
+        title: true,
+        content: true,
+        created_at: true,
+        sender: true,
+        target: true,
+        allow_reply: true,
+      },
+    });
+
+    // Fallback: nếu không có, lấy thông báo mới nhất toàn cục
+    if (!notification) {
+      notification = await prisma.announcements.findFirst({
+        orderBy: { created_at: 'desc' },
+        select: {
+          id: true,
+          title: true,
+          content: true,
+          created_at: true,
+          sender: true,
+          target: true,
+          allow_reply: true,
+        },
+      });
+    }
+
+    if (!notification) {
+      return res.json({ success: true, data: null });
+    }
+
+    const payload = {
+      id: String(notification.id),
+      title: notification.title,
+      from: notification.sender || 'Hệ thống',
+      date: dayjs(notification.created_at).format('DD/MM/YYYY'),
+      content: notification.content || '',
+      allowReply: Boolean(notification.allow_reply),
+    };
+
+    return res.json({ success: true, data: payload });
+  } catch (err) {
+    console.error('Teacher latest notification error:', err);
+    return res.status(500).json({ success: false, message: 'Lỗi server' });
   }
 };
 

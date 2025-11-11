@@ -7,7 +7,7 @@ import { useRouter } from "next/navigation";
 type MiniClass = { id: string; classId: string; subjectCode: string; subjectName: string; time: string; room: string };
 type DaySchedule = { date: string; dayName: string; classes: MiniClass[] };
 type ThreeDaysData = { yesterday: DaySchedule; today: DaySchedule; tomorrow: DaySchedule };
-type NoteItem = { id: string; title: string; from: string; date: string };
+type NoteItem = { id: string; title: string; from: string; date: string; allowReply?: boolean };
 
 type SettingsEventDetail = { themeDark: boolean };
 const SETTINGS_CHANGED_EVENT = "sas_settings_changed";
@@ -23,6 +23,7 @@ export default function LecturerDashboardPage() {
   const [stats, setStats] = useState({ classes: 0, sessionsToday: 0, students: 0, notifications: 0 });
   const [threeDays, setThreeDays] = useState<ThreeDaysData | null>(null);
   const [notes, setNotes] = useState<NoteItem[]>([]);
+  const [latestNote, setLatestNote] = useState<NoteItem | null>(null);
   const [attendanceNote, setAttendanceNote] = useState("");
   const [loading, setLoading] = useState(true);
 
@@ -39,10 +40,11 @@ export default function LecturerDashboardPage() {
         setName(user.name || "Giảng viên");
 
         // Gọi API song song
-        const [statsRes, threeDaysRes, notificationsRes, attendanceRes] = await Promise.all([
+        const [statsRes, threeDaysRes, notificationsRes, latestNotifRes, attendanceRes] = await Promise.all([
           fetch(`${API_BASE}/teacher/dashboard/stats`, { credentials: "include" }),
           fetch(`${API_BASE}/teacher/dashboard/three-days`, { credentials: "include" }),
           fetch(`${API_BASE}/teacher/dashboard/notifications`, { credentials: "include" }),
+          fetch(`${API_BASE}/teacher/dashboard/latest-notification`, { credentials: "include" }),
           fetch(`${API_BASE}/teacher/dashboard/attendance-note`, { credentials: "include" }),
         ]);
 
@@ -68,7 +70,18 @@ export default function LecturerDashboardPage() {
         if (notificationsRes.ok) {
           const res = await notificationsRes.json();
           if (res.success && res.data) {
-            setNotes(res.data);
+            // Map danh sách để có allowReply (nếu BE trả về)
+            const list = (res.data as any[]).map((n) => ({ id: n.id, title: n.title, from: n.from, date: n.date, allowReply: n.allowReply })) as NoteItem[];
+            setNotes(list);
+          }
+        }
+
+        if (latestNotifRes.ok) {
+          const res = await latestNotifRes.json();
+          if (res.success) {
+            const n = res.data as { id: string; title: string; from: string; date: string; allowReply?: boolean } | null;
+            const mapped = n ? { id: n.id, title: n.title, from: n.from, date: n.date, allowReply: !!n.allowReply } : null;
+            setLatestNote(mapped);
           }
         }
 
@@ -183,7 +196,7 @@ export default function LecturerDashboardPage() {
             <div className="card"><div className="card-title">📢 Thông báo mới</div><div className="card-num">{stats.notifications}</div></div>
           </section>
 
-          <div className="panel">
+          <div className="panel" style={{ marginBottom: 16 }}>
             <div className="section-title">Lịch dạy gần nhất</div>
             {threeDays ? (
               <div className="three-days-grid">
@@ -255,22 +268,28 @@ export default function LecturerDashboardPage() {
             )}
           </div>
 
-          <div className="grid2">
+          <div className="grid2" style={{ marginTop: 12 }}>
             <div className="panel">
               <div className="section-title">Thông báo gần nhất</div>
               <div className="list">
-                {notes.length === 0 ? (
+                {!(latestNote || notes[0]) ? (
                   <div style={{ padding: '20px', textAlign: 'center', color: '#999' }}>Chưa có thông báo mới</div>
                 ) : (
-                  notes.map(n => (
-                    <div key={n.id} className="row">
-                      <div className="left">
-                        <div className="primary">🔔 {n.title}</div>
-                        <div className="muted">{n.from}</div>
-                      </div>
-                      <div className="right">{n.date}</div>
+                  <div
+                    key={(latestNote || notes[0])!.id}
+                    className="row"
+                    onClick={() => router.push('/thongbao_gv')}
+                    style={{ cursor: 'pointer' }}
+                  >
+                    <div className="left">
+                      <div className="primary">🔔 {(latestNote || notes[0])!.title}</div>
+                      <div className="muted">{(latestNote || notes[0])!.from}</div>
                     </div>
-                  ))
+                    <div className="right">
+                      {(latestNote || notes[0])!.date}
+                      {(latestNote || notes[0])!.allowReply ? <span title="Cho phép phản hồi" style={{ marginLeft: 8 }}>↩</span> : null}
+                    </div>
+                  </div>
                 )}
               </div>
             </div>
