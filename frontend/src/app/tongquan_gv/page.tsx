@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 
-type MiniClass = { id: string; classId: string; subjectCode: string; subjectName: string; time: string; room: string };
+type MiniClass = { id: string; classId: string; subjectCode: string; subjectName: string; time: string; room: string; slot: number; date: string };
 type DaySchedule = { date: string; dayName: string; classes: MiniClass[] };
 type ThreeDaysData = { yesterday: DaySchedule; today: DaySchedule; tomorrow: DaySchedule };
 type NoteItem = { id: string; title: string; from: string; date: string; allowReply?: boolean };
@@ -215,8 +215,9 @@ export default function LecturerDashboardPage() {
                       threeDays.yesterday.classes.map(c => (
                         <div key={c.id} className="class-card" onClick={() => router.push('/lichday_gv')}>
                           <div className="class-code">{c.subjectCode}</div>
-                          <div className="class-time">{c.time}</div>
+                          <div className="class-time">{c.time} <span style={{color:'#64748b',fontSize:12}}>(Slot {c.slot})</span></div>
                           <div className="class-room">Phòng {c.room}</div>
+                          <div className="class-date">Ngày: {c.date}</div>
                         </div>
                       ))
                     )}
@@ -236,8 +237,9 @@ export default function LecturerDashboardPage() {
                       threeDays.today.classes.map(c => (
                         <div key={c.id} className="class-card" onClick={() => router.push('/lichday_gv')}>
                           <div className="class-code">{c.subjectCode}</div>
-                          <div className="class-time">{c.time}</div>
+                          <div className="class-time">{c.time} <span style={{color:'#64748b',fontSize:12}}>(Slot {c.slot})</span></div>
                           <div className="class-room">Phòng {c.room}</div>
+                          <div className="class-date">Ngày: {c.date}</div>
                         </div>
                       ))
                     )}
@@ -257,8 +259,9 @@ export default function LecturerDashboardPage() {
                       threeDays.tomorrow.classes.map(c => (
                         <div key={c.id} className="class-card" onClick={() => router.push('/lichday_gv')}>
                           <div className="class-code">{c.subjectCode}</div>
-                          <div className="class-time">{c.time}</div>
+                          <div className="class-time">{c.time} <span style={{color:'#64748b',fontSize:12}}>(Slot {c.slot})</span></div>
                           <div className="class-room">Phòng {c.room}</div>
+                          <div className="class-date">Ngày: {c.date}</div>
                         </div>
                       ))
                     )}
