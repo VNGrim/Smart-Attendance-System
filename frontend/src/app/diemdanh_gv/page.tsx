@@ -770,8 +770,11 @@ export default function LecturerAttendancePage() {
       clearCountdown();
       return;
     }
-    loadSessionStudents(session.id);
-  }, [session, loadSessionStudents, clearCountdown]);
+    // Chỉ gọi loadSessionStudents nếu chưa có dữ liệu hoặc đang loading
+    if (!studentLoading && students.length === 0) {
+      loadSessionStudents(session.id);
+    }
+  }, [session, loadSessionStudents, clearCountdown, studentLoading, students.length]);
 
   useEffect(() => {
     if (!session) return;
@@ -1176,27 +1179,34 @@ export default function LecturerAttendancePage() {
                 </tr>
               </thead>
               <tbody>
-                {filtered.map((s) => (
-                  <tr key={s.studentId}>
-                    <td>{s.studentId}</td>
-                    <td>{s.fullName}</td>
-                    <td>{s.email || "--"}</td>
-                    <td>{s.status === "present" ? "✅ Có mặt" : s.status === "excused" ? "📝 Có phép" : "❌ Vắng"}</td>
-                    <td>{s.markedAt ? formatVietnamTime(s.markedAt) : "--"}</td>
-                    {session && sessionHasMode(session.type, "manual") && (
-                      <td>
-                        <label className="manual-check">
-                          <input
-                            type="checkbox"
-                            checked={s.status === "present"}
-                            onChange={(event) => handleManualCheckbox(s.studentId, event.target.checked)}
-                          />
-                          Có mặt
-                        </label>
-                      </td>
-                    )}
-                  </tr>
-                ))}
+                {(() => {
+                  const rows = [];
+                  for (let i = 0; i < filtered.length; i++) {
+                    const s = filtered[i];
+                    rows.push(
+                      <tr key={s.studentId}>
+                        <td>{s.studentId}</td>
+                        <td>{s.fullName}</td>
+                        <td>{s.email || "--"}</td>
+                        <td>{s.status === "present" ? "✅ Có mặt" : s.status === "excused" ? "📝 Có phép" : "❌ Vắng"}</td>
+                        <td>{s.markedAt ? formatVietnamTime(s.markedAt) : "--"}</td>
+                        {session && sessionHasMode(session.type, "manual") && (
+                          <td>
+                            <label className="manual-check">
+                              <input
+                                type="checkbox"
+                                checked={s.status === "present"}
+                                onChange={(event) => handleManualCheckbox(s.studentId, event.target.checked)}
+                              />
+                              Có mặt
+                            </label>
+                          </td>
+                        )}
+                      </tr>
+                    );
+                  }
+                  return rows;
+                })()}
                 {!filtered.length && !studentLoading && (
                   <tr>
                     <td colSpan={session && sessionHasMode(session.type, "manual") ? 6 : 5} style={{ textAlign: "center", padding: 16, color: "#64748b" }}>
