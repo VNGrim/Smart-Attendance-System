@@ -216,8 +216,8 @@ export default function LecturerDashboardPage() {
                         <div key={c.id} className="class-card" onClick={() => router.push('/lichday_gv')}>
                           <div className="class-code">{c.subjectCode}</div>
                           <div className="class-time">{c.time} <span style={{color:'#64748b',fontSize:12}}>(Slot {c.slot})</span></div>
-                          <div className="class-room">Phòng {c.room}</div>
-                          <div className="class-date">Ngày: {c.date}</div>
+                          {/* <div className="class-room">Phòng {c.room}</div> */}
+                          {/* <div className="class-date">Ngày: {c.date}</div> */}
                         </div>
                       ))
                     )}
@@ -238,8 +238,8 @@ export default function LecturerDashboardPage() {
                         <div key={c.id} className="class-card" onClick={() => router.push('/lichday_gv')}>
                           <div className="class-code">{c.subjectCode}</div>
                           <div className="class-time">{c.time} <span style={{color:'#64748b',fontSize:12}}>(Slot {c.slot})</span></div>
-                          <div className="class-room">Phòng {c.room}</div>
-                          <div className="class-date">Ngày: {c.date}</div>
+                          {/* <div className="class-room">Phòng {c.room}</div> */}
+                          {/* <div className="class-date">Ngày: {c.date}</div> */}
                         </div>
                       ))
                     )}
@@ -260,8 +260,8 @@ export default function LecturerDashboardPage() {
                         <div key={c.id} className="class-card" onClick={() => router.push('/lichday_gv')}>
                           <div className="class-code">{c.subjectCode}</div>
                           <div className="class-time">{c.time} <span style={{color:'#64748b',fontSize:12}}>(Slot {c.slot})</span></div>
-                          <div className="class-room">Phòng {c.room}</div>
-                          <div className="class-date">Ngày: {c.date}</div>
+                          {/* <div className="class-room">Phòng {c.room}</div> */}
+                          {/* <div className="class-date">Ngày: {c.date}</div> */}
                         </div>
                       ))
                     )}
