@@ -55,6 +55,15 @@ const getDayKeyFromDate = (date) => DAY_MAP[dayjs(date).day()] ?? "Mon";
 
 const VALID_STATUSES = new Set(["present", "absent", "excused"]);
 
+const typeIncludes = (typeStr, t) => {
+  if (!typeStr) return false;
+  return String(typeStr)
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean)
+    .includes(String(t));
+};
+
 const mapRecordsWithStudents = (records = [], students = []) => {
   const studentMap = new Map(students.map((item) => [item.student_id, item]));
   return records.map((record) => {
@@ -227,9 +236,28 @@ const createOrGetSession = async (req, res) => {
         existing.status = "expired";
       }
       if (["ended", "closed"].includes(existing.status)) {
+        // If session already finalized, allow reopening for manual edits only.
+        if (type === "manual") {
+          // Merge manual into existing types and reopen the session as active so teacher can edit.
+          const existingTypes2 = String(existing.type || "").split(',').map((s) => s.trim()).filter(Boolean);
+          const merged2 = Array.from(new Set([...existingTypes2, 'manual']));
+          const newType2 = merged2.join(',');
+          const reopened = await updateSession(existing.id, {
+            type: newType2,
+            status: 'active',
+            code: null,
+            expiresAt: null,
+            attempts: existing.attempts ?? 0,
+            totalStudents: existing.totalStudents ?? (await countClassStudents(classId)),
+            createdBy: teacherId,
+            endedAt: null,
+          });
+          return jsonResponse(res, { success: true, data: serializeSession(reopened), reused: true });
+        }
         return res.status(409).json({ success: false, message: "Đã hoàn thành phiên điểm danh" });
       }
-      if (existing.status === "active" && existing.type === type) {
+      // If existing active session already supports requested mode, reuse it.
+      if (existing.status === "active" && typeIncludes(existing.type, type)) {
         return jsonResponse(res, { success: true, data: serializeSession(existing), reused: true });
       }
 
@@ -240,8 +268,12 @@ const createOrGetSession = async (req, res) => {
         : null;
       const attempts = type === "manual" ? 0 : 1;
 
+      // Merge existing type(s) with requested type (avoid duplicates)
+      const existingTypes = String(existing.type || "").split(',').map((s) => s.trim()).filter(Boolean);
+      const merged = Array.from(new Set([...existingTypes, type]));
+      const newType = merged.join(',');
       const updated = await updateSession(existing.id, {
-        type,
+        type: newType,
         status: "active",
         code,
         expiresAt,
@@ -510,7 +542,7 @@ const resetSessionCode = async (req, res) => {
     const session = await getSessionWithClass(id);
     if (!session) return res.status(404).json({ success: false, message: "Không tìm thấy buổi điểm danh" });
     await ensureTeacherOwnsClass(teacherId, session.session_class.class_id);
-    if (session.type === "manual") {
+    if (typeIncludes(session.type, "manual")) {
       return res.status(400).json({ success: false, message: "Hình thức thủ công không hỗ trợ reset mã" });
     }
     if ((session.attempts ?? 0) >= MAX_ATTEMPTS) {
@@ -606,18 +638,34 @@ const getSessionStudents = async (req, res) => {
       getClassStudents(session.session_class.class_id),
       getAttendanceRecords(id),
     ]);
-    const data = mapRecordsWithStudents(records, students);
-    const { total, present, excused, absent } = summarizeRecords(data);
-    return jsonResponse(res, {
-      success: true,
-      data,
-      summary: {
-        total,
-        present,
-        excused,
-        absent,
-      },
-    });
+      // Map each class student to their attendance record (if any).
+      const recordMap = new Map((records || []).map((r) => [r.studentId, r]));
+      const data = (students || []).map((student) => {
+        const record = recordMap.get(student.student_id);
+        return {
+          studentId: student.student_id,
+          fullName: student.full_name,
+          email: student.email,
+          course: student.course,
+          status: record?.status || "absent",
+          markedAt: record?.recordedAt ? dayjs(record.recordedAt).toISOString() : null,
+          modifiedAt: record?.modifiedAt ? dayjs(record.modifiedAt).toISOString() : null,
+          modifiedBy: record?.modifiedBy || null,
+          note: record?.note || null,
+        };
+      });
+
+      const { total, present, excused, absent } = summarizeRecords(data);
+      return jsonResponse(res, {
+        success: true,
+        data,
+        summary: {
+          total,
+          present,
+          excused,
+          absent,
+        },
+      });
   } catch (error) {
     if (error.status === 404) return res.status(404).json({ success: false, message: "Không tìm thấy lớp" });
     if (error.status === 403) return res.status(403).json({ success: false, message: "Bạn không có quyền với lớp này" });
@@ -639,7 +687,7 @@ const updateManualAttendance = async (req, res) => {
     const session = await getSessionWithClass(id);
     if (!session) return res.status(404).json({ success: false, message: "Không tìm thấy buổi điểm danh" });
     await ensureTeacherOwnsClass(teacherId, session.session_class.class_id);
-    if (session.type !== "manual") {
+    if (!typeIncludes(session.type, "manual")) {
       return res.status(400).json({ success: false, message: "Chỉ hỗ trợ cập nhật cho hình thức thủ công" });
     }
 

@@ -289,12 +289,23 @@ export default function LichHocPage() {
           </div>
         </div>
 
-        {/* Headers */}
+        {/* Headers với ngày tháng dưới thứ, màu xanh, căn giữa */}
         <div className="grid" style={{ marginBottom: 6 }}>
           <div></div>
-          {DAYS.map((d) => (
-            <div key={d} className="col-header">{d}</div>
-          ))}
+          {DAYS.map((d, idx) => {
+            // Tính ngày tương ứng với từng thứ trong tuần
+            const weekStart = startOfWeek(dateFromWeekKey(selectedWeekKey), WEEK_START_OPTS);
+            const cellDate = new Date(weekStart.getTime());
+            cellDate.setDate(weekStart.getDate() + idx);
+            const dayLabel = d.toUpperCase();
+            const dateLabel = `${cellDate.getDate().toString().padStart(2, '0')}-${(cellDate.getMonth()+1).toString().padStart(2, '0')}`;
+            return (
+              <div key={d} className="col-header" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
+                <div style={{ textAlign: 'center' }}>{dayLabel}</div>
+                <div style={{ fontSize: 13, color: 'inherit', textAlign: 'center' }}>({dateLabel})</div>
+              </div>
+            );
+          })}
         </div>
 
         {/* Grid */}

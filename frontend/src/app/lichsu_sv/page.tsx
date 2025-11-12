@@ -97,7 +97,7 @@ export default function LichSuPage() {
         student_id: it.student_id,
         student_name: studentInfo?.full_name || 'Sinh viên',
         class_name: it.class_name || it.class_id || '',
-        teacher_name: '',
+        teacher_name: it.teacher_name || '',
         date: it.date,
         slot: it.slot ?? null,
         attendance_code: it.attendance_code || '',

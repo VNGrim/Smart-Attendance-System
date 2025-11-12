@@ -117,6 +117,39 @@ const MODE_LABELS: Record<Mode, string> = {
   manual: "Thủ công",
 };
 
+const sessionHasMode = (typeStr: string | undefined | null, mode: Mode) => {
+  if (!typeStr) return false;
+  return String(typeStr).split(",").map((s) => s.trim()).filter(Boolean).includes(mode);
+};
+
+const displayModeLabel = (typeStr: string | undefined | null) => {
+  if (!typeStr) return "-";
+  const parts = String(typeStr)
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+  const labels = parts.map((p) => MODE_LABELS[p as Mode] || p);
+  return labels.join(" + ");
+};
+
+const combinedRequirementsForType = (typeStr: string | undefined | null) => {
+  if (!typeStr) return [] as { title: string; description: string }[];
+  const parts = String(typeStr).split(",").map((s) => s.trim()).filter(Boolean) as Mode[];
+  const seen = new Set();
+  const out: { title: string; description: string }[] = [];
+  for (const p of parts) {
+    const list = SESSION_REQUIREMENTS[p] || [];
+    for (const item of list) {
+      const key = `${item.title}::${item.description}`;
+      if (!seen.has(key)) {
+        seen.add(key);
+        out.push(item);
+      }
+    }
+  }
+  return out;
+};
+
 const STATUS_LABELS: Record<string, string> = {
   active: "Đang diễn ra",
   expired: "Hết hạn",
@@ -312,8 +345,9 @@ export default function LecturerAttendancePage() {
   const expiresAtRef = useRef<string | null>(null);
 
   const updateQrPreview = useCallback(
-    async (code: string | null, sessionType: Mode) => {
-      if (sessionType !== "qr" || !code) {
+    async (code: string | null, sessionType: string | Mode | null) => {
+      const hasQr = typeof sessionType === 'string' ? String(sessionType).split(',').map(s=>s.trim()).includes('qr') : sessionType === 'qr';
+      if (!hasQr || !code) {
         setQrImage(null);
         return;
       }
@@ -344,7 +378,7 @@ export default function LecturerAttendancePage() {
   }, [history, slot]);
 
   const resetStats = useMemo(() => {
-    if (!session || session.type === "manual") {
+    if (!session || sessionHasMode(session.type, "manual")) {
       return { used: 0, total: 0, remaining: 0 };
     }
     const total = Math.max(0, session.maxResets);
@@ -493,10 +527,8 @@ export default function LecturerAttendancePage() {
         );
         const items = (payload.data || []).map(normalizeHistoryItem);
         setHistory(items);
-        setSelectedHistoryId((prev) => {
-          if (prev && items.some((item) => item.id === prev)) return prev;
-          return items[0]?.id ?? null;
-        });
+        // Do NOT auto-select the first item to avoid auto-opening the detail modal.
+        setSelectedHistoryId((prev) => (prev && items.some((item) => item.id === prev) ? prev : null));
       } catch (err) {
         console.error("fetch history error", err);
         setHistory([]);
@@ -515,11 +547,28 @@ export default function LecturerAttendancePage() {
         const payload = await fetchJson<{ success: boolean; data: any[]; summary?: Partial<AttendanceSummary> }>(
           `${API_BASE}/sessions/${sessionId}/students`
         );
+        if (!payload || !payload.success) {
+          throw new Error((payload as any)?.message || "Không thể tải danh sách sinh viên");
+        }
         const rows = (payload.data || []).map(mapSessionStudentRow);
+        if (!rows.length) {
+          // Fallback: try to fetch session detail which includes mapped records
+          try {
+            const fallback = await fetchJson<{ success: boolean; data: HistoryDetail }>(`${API_BASE}/session/${sessionId}`);
+            if (fallback && fallback.success && fallback.data && Array.isArray(fallback.data.records)) {
+              const fallbackRows = (fallback.data.records || []).map(mapApiRecordToRow);
+              setStudents(fallbackRows);
+              return;
+            }
+          } catch (fbErr) {
+            console.warn("fallback fetch session records failed", fbErr);
+          }
+        }
         setStudents(rows);
       } catch (err) {
         console.error("fetch session students error", err);
         setStudents([]);
+        setSessionNotice({ type: "error", message: (err as any)?.message || "Không thể tải danh sách sinh viên" });
       } finally {
         setStudentLoading(false);
       }
@@ -613,20 +662,43 @@ export default function LecturerAttendancePage() {
       try {
         setSessionLoading(true);
         setError(null);
-        if (finalizedToday) {
-          setError("Đã hoàn thành phiên điểm danh. Chỉ có thể chỉnh thủ công nếu có thay đổi.");
+        if (finalizedToday && selectedMode !== "manual") {
+          setError("Đã hoàn thành phiên điểm danh. Chỉ có thể tạo lại phiên không phải thủ công nếu có thay đổi.");
           return;
         }
-        const today = new Date().toISOString().slice(0, 10);
+        if (finalizedToday && selectedMode === "manual") {
+          // Allow creating manual edits even if a finalized session exists for the day.
+          // Show a non-blocking notice.
+          setSessionNotice({ type: "success", message: "Phiên đã hoàn thành — đang mở lại để chỉnh thủ công" });
+        }
+        // Use selected history date (if any) as the session date so UI date filters
+        // and created sessions are consistent. Fall back to today if not set.
+        const sessionDate = historyDate || new Date().toISOString().slice(0, 10);
         const payload = await fetchJson<{ success: boolean; data: SessionSummary; reused?: boolean }>(
           `${API_BASE}/sessions`,
           {
             method: "POST",
-            body: JSON.stringify({ classId, slotId, type: selectedMode, date: today }),
+            body: JSON.stringify({ classId, slotId, type: selectedMode, date: sessionDate }),
           }
         );
         const summary = payload.data;
+        // Ensure we refresh session and explicitly load students. Some backends
+        // may return before student records are ready, so call loadSessionStudents
+        // directly as a fallback.
         await refreshSessionData(summary.id);
+        try {
+          await loadSessionStudents(summary.id);
+        } catch (e) {
+          // Best-effort fallback: try direct fetch of students endpoint
+          try {
+            const p = await fetchJson<{ success: boolean; data: any[] }>(`${API_BASE}/sessions/${summary.id}/students`);
+            const rows = (p.data || []).map(mapSessionStudentRow);
+            setStudents(rows);
+          } catch (innerErr) {
+            // ignore - UI will show empty state and error banner if needed
+            console.error("failed to load session students fallback", innerErr);
+          }
+        }
         fetchHistory({ classId, date: historyDate, slotId });
         setSessionNotice(null);
       } catch (err: any) {
@@ -690,6 +762,8 @@ export default function LecturerAttendancePage() {
   useEffect(() => {
     sessionRef.current = session;
     if (!session) {
+      // Clear any lingering loading indicator when session is cleared
+      setStudentLoading(false);
       setStudents([]);
       setQrImage(null);
       setRequirements([]);
@@ -702,11 +776,11 @@ export default function LecturerAttendancePage() {
   useEffect(() => {
     if (!session) return;
     updateQrPreview(session.code, session.type);
-    setRequirements(SESSION_REQUIREMENTS[session.type] || []);
+    setRequirements(combinedRequirementsForType(session.type));
   }, [session, updateQrPreview]);
 
   useEffect(() => {
-    if (!session || session.type === "manual") {
+    if (!session || sessionHasMode(session.type, "manual")) {
       clearCountdown();
       setTimeLeft(null);
       expiresAtRef.current = null;
@@ -750,7 +824,7 @@ export default function LecturerAttendancePage() {
 
   const triggerReset = useCallback(async () => {
     const current = sessionRef.current;
-    if (!current || current.type === "manual") return;
+    if (!current || sessionHasMode(current.type, "manual")) return;
     if (current.status !== "active") return;
     if (current.attempts >= current.maxResets) return;
     if (isResettingRef.current) return;
@@ -783,7 +857,7 @@ export default function LecturerAttendancePage() {
   }, [refreshSessionData]);
 
   useEffect(() => {
-    if (!session || session.type === "manual") return;
+    if (!session || sessionHasMode(session.type, "manual")) return;
     if (session.status !== "active") return;
     if (session.attempts >= session.maxResets) return;
     if (timeLeft == null || timeLeft > 0) return;
@@ -804,7 +878,8 @@ export default function LecturerAttendancePage() {
   const handleModeChange = useCallback(
     (nextMode: Mode) => {
       setMode(nextMode);
-      if (session && nextMode !== session.type) {
+      // If current session already supports the requested mode, keep it.
+      if (session && !sessionHasMode(session.type, nextMode)) {
         stopPolling();
         setSession(null);
         setStudents([]);
@@ -863,7 +938,7 @@ export default function LecturerAttendancePage() {
 
   const handleManualCheckbox = useCallback(
     (studentId: string, checked: boolean) => {
-      if (!session || session.type !== "manual") return;
+      if (!session || !sessionHasMode(session.type, "manual")) return;
       setStudents((prev) =>
         prev.map((item) =>
           item.studentId === studentId
@@ -970,7 +1045,7 @@ export default function LecturerAttendancePage() {
                 </button>
               </div>
             </div>
-            {!(mode === "manual" && session?.type === "manual") && (
+            {!(mode === "manual" && sessionHasMode(session?.type, "manual")) && (
               <div className="actions">
                 <button className="btn-primary" disabled={!cls || slot === null || sessionLoading} onClick={handleCreateSession}>
                   {sessionLoading
@@ -989,13 +1064,14 @@ export default function LecturerAttendancePage() {
             <div className="session-box">
               <div className="qr-preview">
                 <div className="qr-box">
-                  {session.type === "qr" ? (
+                  {/* Render available mode previews. If multiple modes are enabled, show QR first, then code. */}
+                  {sessionHasMode(session.type, "qr") ? (
                     qrImage ? (
                       <img src={qrImage} alt="QR" style={{ width: 140, height: 140 }} />
                     ) : (
                       <span style={{ fontSize: 16 }}>Đang tạo QR...</span>
                     )
-                  ) : session.type === "code" ? (
+                  ) : sessionHasMode(session.type, "code") ? (
                     <span className="big-code">{session.code}</span>
                   ) : (
                     <span style={{ fontSize: 18, fontWeight: 600 }}>Điểm danh thủ công</span>
@@ -1003,21 +1079,21 @@ export default function LecturerAttendancePage() {
                 </div>
                 <div className="qr-meta">
                   <div className="time-left">Trạng thái: {session.status}</div>
-                  {session.type !== "manual" && <div className="time-left">Còn lại: {countdownDisplay}</div>}
-                  {session.type !== "manual" && (
+                  {!sessionHasMode(session.type, "manual") && <div className="time-left">Còn lại: {countdownDisplay}</div>}
+                  {!sessionHasMode(session.type, "manual") && (
                     <div className="time-left">Lượt sử dụng mã: {resetStats.used}/{resetStats.total}</div>
                   )}
-                  {session.type !== "manual" && (
+                  {!sessionHasMode(session.type, "manual") && (
                     <div className="time-left">Lượt còn lại: {resetStats.remaining}</div>
                   )}
                   {typeof session.totalStudents === "number" && <div className="time-left">Tổng SV: {session.totalStudents}</div>}
-                  {session.type === "manual" && (
+                  {sessionHasMode(session.type, "manual") && (
                     <div className="time-left">Chọn sinh viên có mặt và nhấn lưu để cập nhật.</div>
                   )}
                 </div>
               </div>
               <div className="actions end">
-                {session.type !== "manual" && (
+                {!sessionHasMode(session.type, "manual") && (
                   <button
                     className="btn-primary"
                     onClick={handleCloseSession}
@@ -1047,7 +1123,7 @@ export default function LecturerAttendancePage() {
 
           {!!requirements.length && (
             <div className="requirements-table">
-              <div className="requirements-title">Yêu cầu khi điểm danh ({session?.type === "qr" ? "QR" : session?.type === "code" ? "Nhập mã" : "Thủ công"})</div>
+              <div className="requirements-title">Yêu cầu khi điểm danh ({displayModeLabel(session?.type)})</div>
               <table>
                 <thead>
                   <tr>
@@ -1096,7 +1172,7 @@ export default function LecturerAttendancePage() {
                   <th>Email</th>
                   <th>Trạng thái</th>
                   <th>Thời gian</th>
-                  {session?.type === "manual" && <th>Thao tác</th>}
+                  {session && sessionHasMode(session.type, "manual") && <th>Thao tác</th>}
                 </tr>
               </thead>
               <tbody>
@@ -1107,7 +1183,7 @@ export default function LecturerAttendancePage() {
                     <td>{s.email || "--"}</td>
                     <td>{s.status === "present" ? "✅ Có mặt" : s.status === "excused" ? "📝 Có phép" : "❌ Vắng"}</td>
                     <td>{s.markedAt ? formatVietnamTime(s.markedAt) : "--"}</td>
-                    {session?.type === "manual" && (
+                    {session && sessionHasMode(session.type, "manual") && (
                       <td>
                         <label className="manual-check">
                           <input
@@ -1123,7 +1199,7 @@ export default function LecturerAttendancePage() {
                 ))}
                 {!filtered.length && !studentLoading && (
                   <tr>
-                    <td colSpan={session?.type === "manual" ? 6 : 5} style={{ textAlign: "center", padding: 16, color: "#64748b" }}>
+                    <td colSpan={session && sessionHasMode(session.type, "manual") ? 6 : 5} style={{ textAlign: "center", padding: 16, color: "#64748b" }}>
                       Chưa có dữ liệu điểm danh
                     </td>
                   </tr>
@@ -1131,7 +1207,7 @@ export default function LecturerAttendancePage() {
               </tbody>
             </table>
           </div>
-          {session?.type === "manual" && (
+          {session && sessionHasMode(session.type, "manual") && (
             <div className="actions end" style={{ marginTop: 12 }}>
               <button className="btn-primary" onClick={handleManualUpdate}>
                 💾 Lưu điểm danh thủ công
@@ -1194,7 +1270,7 @@ export default function LecturerAttendancePage() {
                       <div className="cell-sub">{formatWeekdayOrFallback(dayValue)}</div>
                     </td>
                     <td className="cell-main">{h.slotId ?? "--"}</td>
-                    <td className="cell-main">{MODE_LABELS[h.type]}</td>
+                    <td className="cell-main">{displayModeLabel(h.type)}</td>
                     <td>
                       {h.status === "closed" ? (
                         <span className="status-pill status-closed">{STATUS_LABELS[h.status] || h.status}</span>
@@ -1279,8 +1355,8 @@ export default function LecturerAttendancePage() {
                       <div className="summary-item">
                         <span className="summary-label">Hình thức</span>
                         <span className="summary-value">
-                          {MODE_LABELS[historyDetail.session.type]}
-                        </span>
+                          {displayModeLabel(historyDetail.session.type)}
+                          </span>
                       </div>
                       <div className="summary-item">
                         <span className="summary-label">Tỉ lệ tham dự</span>
@@ -1291,6 +1367,31 @@ export default function LecturerAttendancePage() {
                           </span>
                         </span>
                       </div>
+                    </div>
+
+                    <div style={{ marginTop: 12, display: 'flex', gap: 8 }}>
+                      <button
+                        className="btn-danger"
+                        onClick={async () => {
+                          if (!historyDetail || !historyDetail.session?.id) return;
+                          if (!confirm('Bạn có chắc muốn kết thúc phiên này?')) return;
+                          try {
+                            setHistoryDetailLoading(true);
+                            await fetchJson(`${API_BASE}/sessions/${historyDetail.session.id}/close`, { method: 'POST' });
+                            // refresh list & detail
+                            if (cls) await fetchHistory({ classId: cls, date: historyDate, slotId: slot });
+                            await fetchHistoryDetail(historyDetail.session.id);
+                            setSessionNotice({ type: 'success', message: 'Đã kết thúc phiên điểm danh' });
+                          } catch (err: any) {
+                            console.error('close session from modal error', err);
+                            setHistoryDetailError(err?.message || 'Không thể kết thúc phiên');
+                          } finally {
+                            setHistoryDetailLoading(false);
+                          }
+                        }}
+                      >
+                        ✅ Kết thúc phiên
+                      </button>
                     </div>
 
                     <div className="table-wrap">

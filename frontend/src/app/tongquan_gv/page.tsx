@@ -36,8 +36,10 @@ export default function LecturerDashboardPage() {
           router.push("/login");
           return;
         }
-        const user = JSON.parse(userStr);
-        setName(user.name || "Giảng viên");
+  const user = JSON.parse(userStr);
+  // Ưu tiên lấy tên thật từ full_name hoặc fullName
+  const lecturerName = user.full_name || user.fullName || user.name || user.teacherName || "Giảng viên";
+  setName(lecturerName);
 
         // Gọi API song song
         const [statsRes, threeDaysRes, notificationsRes, latestNotifRes, attendanceRes] = await Promise.all([
@@ -165,7 +167,7 @@ export default function LecturerDashboardPage() {
 
       <header className="topbar">
         <div className="welcome">
-          <div className="hello">Chào buổi sáng, {name} 👋</div>
+          <div className="hello">Xin chào, {name} 👋</div>
           <div className="date">{dateStr}</div>
         </div>
         <div className="controls">

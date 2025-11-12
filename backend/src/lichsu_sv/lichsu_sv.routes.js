@@ -76,7 +76,14 @@ router.get("/history", async (req, res) => {
     const classes = classIds.length
       ? await prisma.classes.findMany({
           where: { class_id: { in: classIds } },
-          select: { class_id: true, class_name: true, subject_name: true, subject_code: true },
+          select: {
+            class_id: true,
+            class_name: true,
+            subject_name: true,
+            subject_code: true,
+            // include related teacher (may be null)
+            teacher: { select: { full_name: true } },
+          },
         })
       : [];
     const classMap = new Map(classes.map((c) => [String(c.class_id).trim(), c]));
@@ -97,6 +104,7 @@ router.get("/history", async (req, res) => {
         attendance_code: r.session?.code || null,
         status: r.status || "unknown",
         recorded_at: r.recordedAt ? dayjs(r.recordedAt).toISOString() : null,
+        teacher_name: info?.teacher?.full_name ?? null,
       };
     });
 

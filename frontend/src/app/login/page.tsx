@@ -80,7 +80,7 @@ export default function LoginPage() {
         localStorage.setItem("sas_user", JSON.stringify({
           userId: data.userId,
           role: data.role,
-          name: data.name,
+          name: data.full_name || data.name || data.teacher_id || data.userId,
           teacher_id: data.teacher_id,
           full_name: data.full_name,
           token: data.token,
@@ -90,19 +90,19 @@ export default function LoginPage() {
       // Đăng nhập thành công - xử lý theo từng loại người dùng
       if (data.role === "student") {
         // SINH VIÊN: Chuyển đến trang tổng quan sinh viên
-        setMessage(`Chào mừng ${data.name}! Đang chuyển đến Dashboard sinh viên...`);
+        setMessage(`Chào mừng ${data.full_name || data.name || data.userId}! Đang chuyển đến Dashboard sinh viên...`);
         setTimeout(() => {
           router.push("/tongquan_sv");
         }, 1000);
       } else if (data.role === "teacher") {
         // GIÁO VIÊN: Chuyển đến trang tổng quan giảng viên
-        setMessage(`Chào mừng ${data.name}! Đang chuyển đến Dashboard giảng viên...`);
+        setMessage(`Chào mừng ${data.full_name || data.name || data.teacher_id || data.userId}! Đang chuyển đến Dashboard giảng viên...`);
         setTimeout(() => {
           router.push("/tongquan_gv");
         }, 1000);
       } else if (data.role === "admin") {
         // ADMIN: Đăng nhập thành công, chuyển đến Dashboard admin
-        setMessage(`Đăng nhập thành công! Chào mừng ${data.name} (Quản trị viên)`);
+        setMessage(`Đăng nhập thành công! Chào mừng ${data.full_name || data.name || data.userId} (Quản trị viên)`);
         setTimeout(() => {
           router.push("/tongquan_ad");
         }, 1000);

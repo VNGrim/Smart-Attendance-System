@@ -391,16 +391,6 @@ export default function StudentDashboardPage() {
           <div className="date">Hôm nay: {todayStr}</div>
         </div>
         <div className="controls">
-          <div className="attendance-dropdown-wrapper">
-            <button className="qr-btn primary" onClick={() => {
-              // Show dropdown or modal with QR/Code options
-              if (confirm('Chọn hình thức điểm danh:\n1. OK = Quét QR Code\n2. Cancel = Nhập mã thủ công')) {
-                setShowQRScanner(true);
-              } else {
-                setShowCodeInput(true);
-              }
-            }}>📷 Điểm danh ngay</button>
-          </div>
           <button className="qr-btn" onClick={() => { 
             if (confirm('Bạn có chắc muốn đăng xuất?')) {
               localStorage.removeItem('sas_user'); 
