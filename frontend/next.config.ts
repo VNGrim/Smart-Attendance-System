@@ -9,6 +9,9 @@ const nextConfig: NextConfig = {
     // Tắt type checking trong build (tạm thời)
     ignoreBuildErrors: true,
   },
+  turbopack: {
+    root: __dirname,
+  },
   async redirects() {
     return [
       {

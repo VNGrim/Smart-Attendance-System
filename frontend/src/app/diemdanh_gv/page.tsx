@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, memo } from "react";
+import { Dialog, DialogTitle, DialogContent, Grid, Typography, Box } from "@mui/material";
 import { useSearchParams } from "next/navigation";
 import QRCode from "qrcode";
 import { makeApiUrl } from "../../lib/apiBase";
@@ -316,6 +317,7 @@ export default function LecturerAttendancePage() {
   const [classes, setClasses] = useState<ClassInfo[]>([]);
   const [cls, setCls] = useState<string>("");
   const [slots, setSlots] = useState<SlotInfo[]>([]);
+  const [formNotice, setFormNotice] = useState<string | null>(null);
   const [slot, setSlot] = useState<number | null>(null);
   const [mode, setMode] = useState<Mode>("qr");
   const [session, setSession] = useState<SessionDetail | null>(null);
@@ -323,11 +325,16 @@ export default function LecturerAttendancePage() {
   const [closingSession, setClosingSession] = useState(false);
   const [students, setStudents] = useState<AttendanceRow[]>([]);
   const [timeLeft, setTimeLeft] = useState<number | null>(null);
+  const [autoExpired, setAutoExpired] = useState(false);
   const [autoResetPending, setAutoResetPending] = useState(false);
   const [sessionNotice, setSessionNotice] = useState<{ type: "success" | "error"; message: string } | null>(null);
   const [filter, setFilter] = useState<Filter>("all");
   const [history, setHistory] = useState<HistoryItem[]>([]);
-  const [historyDate, setHistoryDate] = useState<string>(() => new Date().toISOString().slice(0, 10));
+  const [historyDate, setHistoryDate] = useState<string>(() => {
+    const d = new Date();
+    const local = new Date(d.getTime() - d.getTimezoneOffset() * 60000);
+    return local.toISOString().slice(0, 10);
+  });
   const [selectedHistoryId, setSelectedHistoryId] = useState<string | null>(null);
   const [historyDetail, setHistoryDetail] = useState<HistoryDetail | null>(null);
   const [historyDetailLoading, setHistoryDetailLoading] = useState(false);
@@ -339,6 +346,7 @@ export default function LecturerAttendancePage() {
   const [polling, setPolling] = useState<NodeJS.Timeout | null>(null);
   const [qrImage, setQrImage] = useState<string | null>(null);
   const [requirements, setRequirements] = useState<{ title: string; description: string }[]>([]);
+  const [autoModalOpen, setAutoModalOpen] = useState(false);
   const sessionRef = useRef<SessionDetail | null>(null);
   const countdownRef = useRef<number | null>(null);
   const isResettingRef = useRef(false);
@@ -369,7 +377,27 @@ export default function LecturerAttendancePage() {
     return students;
   }, [students, filter]);
 
-  const countdownDisplay = useMemo(() => formatCountdown(timeLeft), [timeLeft]);
+  const CountdownLabel = useMemo(() => {
+    return memo(function CountdownLabelComp({ expiresAt }: { expiresAt: string | null }) {
+      const [seconds, setSeconds] = useState<number | null>(null);
+      useEffect(() => {
+        if (!expiresAt) {
+          setSeconds(null);
+          return;
+        }
+        const expiry = new Date(expiresAt).getTime();
+        const tick = () => {
+          const diff = expiry - Date.now();
+          const s = Math.max(0, Math.round(diff / 1000));
+          setSeconds(s);
+        };
+        tick();
+        const t = window.setInterval(tick, 1000);
+        return () => window.clearInterval(t);
+      }, [expiresAt]);
+      return <>{formatCountdown(seconds)}</>;
+    });
+  }, []);
 
   // Đã có phiên kết thúc/đóng cho lớp + slot hôm nay?
   const finalizedToday = useMemo(() => {
@@ -397,11 +425,20 @@ export default function LecturerAttendancePage() {
     }
   }, []);
 
+  const expireTimeoutRef = useRef<number | null>(null);
+  const clearExpireTimeout = useCallback(() => {
+    if (expireTimeoutRef.current != null) {
+      window.clearTimeout(expireTimeoutRef.current);
+      expireTimeoutRef.current = null;
+    }
+  }, []);
+
   useEffect(() => {
     return () => {
       clearCountdown();
+      clearExpireTimeout();
     };
-  }, [clearCountdown]);
+  }, [clearCountdown, clearExpireTimeout]);
 
   useEffect(() => {
     try {
@@ -472,8 +509,20 @@ export default function LecturerAttendancePage() {
       const timer = setInterval(async () => {
         try {
           const payload = await fetchJson<{ success: boolean; data: SessionDetail }>(`${API_BASE}/sessions/${sessionId}`);
-          setSession(payload.data);
-          updateQrPreview(payload.data.code, payload.data.type);
+          const prev = sessionRef.current;
+          const next = payload.data;
+          const changed = !prev
+            || prev.status !== next.status
+            || prev.code !== next.code
+            || prev.expiresAt !== next.expiresAt
+            || prev.attempts !== next.attempts
+            || prev.type !== next.type;
+          if (changed) {
+            setSession(next);
+          }
+          if (!prev || prev.code !== next.code || prev.type !== next.type) {
+            updateQrPreview(next.code, next.type);
+          }
           if (payload.data.status !== "active") {
             clearInterval(timer);
             setPolling(null);
@@ -492,16 +541,37 @@ export default function LecturerAttendancePage() {
       try {
         setSlots([]);
         setSlot(null);
-        const today = new Date().toISOString().slice(0, 10);
+        setFormNotice(null);
+        const targetDate = historyDate || (() => {
+          const d = new Date();
+          const local = new Date(d.getTime() - d.getTimezoneOffset() * 60000);
+          return local.toISOString().slice(0, 10);
+        })();
         const payload = await fetchJson<{ success: boolean; data: SlotInfo[] }>(
-          `${API_BASE}/classes/${classId}/slots?date=${today}`
+          `${API_BASE}/classes/${classId}/slots?date=${targetDate}`
         );
         const list = payload.data || [];
-        setSlots(list);
+        const seen = new Set<number>();
+        const unique = [] as SlotInfo[];
+        for (const item of list) {
+          const id = Number(item.slotId);
+          if (!Number.isInteger(id)) continue;
+          if (id < 1 || id > 4) continue;
+          if (!seen.has(id)) {
+            seen.add(id);
+            unique.push(item);
+          }
+        }
+        unique.sort((a, b) => (a.slotId ?? 0) - (b.slotId ?? 0));
+        setSlots(unique);
         setError(null);
-        if (list.length) {
-          const desired = (paramSlot && list.find((s) => s.slotId === paramSlot)?.slotId) || null;
-          setSlot(desired ?? list[0].slotId);
+        // yêu cầu: xoá hoàn toàn thông báo "Đã chuẩn hoá danh sách slot..."
+        if (!list.length) {
+          setFormNotice(null);
+        }
+        if (unique.length) {
+          const desired = (paramSlot && unique.find((s) => s.slotId === paramSlot)?.slotId) || null;
+          setSlot(desired ?? unique[0].slotId);
         }
       } catch (err: any) {
         console.error("fetch slots error", err);
@@ -509,7 +579,7 @@ export default function LecturerAttendancePage() {
         setError(err.message || "Không thể tải slot lớp");
       }
     },
-    [paramSlot]
+    [paramSlot, historyDate]
   );
 
   const fetchHistory = useCallback(
@@ -673,7 +743,11 @@ export default function LecturerAttendancePage() {
         }
         // Use selected history date (if any) as the session date so UI date filters
         // and created sessions are consistent. Fall back to today if not set.
-        const sessionDate = historyDate || new Date().toISOString().slice(0, 10);
+        const sessionDate = historyDate || (() => {
+          const d = new Date();
+          const local = new Date(d.getTime() - d.getTimezoneOffset() * 60000);
+          return local.toISOString().slice(0, 10);
+        })();
         const payload = await fetchJson<{ success: boolean; data: SessionSummary; reused?: boolean }>(
           `${API_BASE}/sessions`,
           {
@@ -704,7 +778,7 @@ export default function LecturerAttendancePage() {
       } catch (err: any) {
         const msg = err.message || "Không thể tạo buổi điểm danh";
         if (msg.includes("Đã hoàn thành phiên điểm danh")) {
-          setError("Đã hoàn thành phiên điểm danh. Chỉ có thể chỉnh thủ công nếu có thay đổi.");
+          setError("Đã hoàn thành phiên điểm danh. Chỉ có thể tạo lại phiên không phải thủ công nếu có thay đổi.");
         } else {
           setError(msg);
         }
@@ -723,7 +797,9 @@ export default function LecturerAttendancePage() {
       setQrImage(null);
       setSessionNotice(null);
       stopPolling();
-      const today = new Date().toISOString().slice(0, 10);
+      const d = new Date();
+      const local = new Date(d.getTime() - d.getTimezoneOffset() * 60000);
+      const today = local.toISOString().slice(0, 10);
       setHistoryDate(today);
       if (classId) {
         fetchSlots(classId);
@@ -786,44 +862,44 @@ export default function LecturerAttendancePage() {
     if (!session || sessionHasMode(session.type, "manual")) {
       clearCountdown();
       setTimeLeft(null);
+      setAutoExpired(false);
       expiresAtRef.current = null;
+      clearExpireTimeout();
       return;
     }
     if (session.status !== "active") {
       clearCountdown();
       setTimeLeft(null);
+      setAutoExpired(false);
       expiresAtRef.current = null;
+      setAutoModalOpen(false);
+      clearExpireTimeout();
       return;
     }
     if (!session.expiresAt) {
       clearCountdown();
       setTimeLeft(null);
+      setAutoExpired(false);
       expiresAtRef.current = null;
+      clearExpireTimeout();
       return;
     }
 
     expiresAtRef.current = session.expiresAt;
     const expireTime = new Date(session.expiresAt).getTime();
-    const startCountdown = () => {
-      const tick = () => {
-        const diff = expireTime - Date.now();
-        const seconds = Math.max(0, Math.round(diff / 1000));
-        setTimeLeft(seconds);
-        if (seconds <= 0) {
-          clearCountdown();
-        }
-      };
-      tick();
-      clearCountdown();
-      countdownRef.current = window.setInterval(tick, 1000);
-    };
-
-    startCountdown();
+    const diffMs = Math.max(0, expireTime - Date.now());
+    clearCountdown();
+    clearExpireTimeout();
+    setAutoExpired(false);
+    expireTimeoutRef.current = window.setTimeout(() => {
+      setAutoExpired(true);
+    }, diffMs);
 
     return () => {
       clearCountdown();
+      clearExpireTimeout();
     };
-  }, [session, clearCountdown]);
+  }, [session, clearCountdown, clearExpireTimeout]);
 
   const triggerReset = useCallback(async () => {
     const current = sessionRef.current;
@@ -863,12 +939,21 @@ export default function LecturerAttendancePage() {
     if (!session || sessionHasMode(session.type, "manual")) return;
     if (session.status !== "active") return;
     if (session.attempts >= session.maxResets) return;
-    if (timeLeft == null || timeLeft > 0) return;
+    if (!autoExpired) return;
     if (autoResetPending || closingSession) return;
     if (isResettingRef.current) return;
 
+    setAutoExpired(false);
     triggerReset();
-  }, [session, timeLeft, autoResetPending, closingSession, triggerReset]);
+  }, [session, autoExpired, autoResetPending, closingSession, triggerReset]);
+
+  useEffect(() => {
+    if (!session) return;
+    if (!sessionHasMode(session.type, "manual") && (session.attempts >= session.maxResets)) {
+      setAutoModalOpen(false);
+      setSessionNotice({ type: "success", message: "Đang kiểm tra danh sách sinh viên tham gia điểm danh" });
+    }
+  }, [session]);
 
   const handleCreateSession = useCallback(() => {
     if (!cls || slot == null) {
@@ -876,6 +961,7 @@ export default function LecturerAttendancePage() {
       return;
     }
     createSession(cls, slot, mode);
+    if (mode !== "manual") setAutoModalOpen(true);
   }, [cls, slot, mode, createSession]);
 
   const handleModeChange = useCallback(
@@ -906,7 +992,7 @@ export default function LecturerAttendancePage() {
       );
       await refreshSessionData(session.id);
       stopPolling();
-      setSessionNotice({ type: "success", message: "Phiên điểm danh thành công" });
+      setSessionNotice({ type: "success", message: "Kết thúc phiên điểm danh thành công" });
     } catch (err: any) {
       console.error("close session error", err);
       setSessionNotice({ type: "error", message: "Phiên điểm danh thất bại" });
@@ -1037,11 +1123,8 @@ export default function LecturerAttendancePage() {
             <div className="kv">
               <div className="k">Hình thức</div>
               <div className="seg">
-                <button className={`seg-btn ${mode === "qr" ? "active" : ""}`} onClick={() => handleModeChange("qr")}>
-                  QR code
-                </button>
-                <button className={`seg-btn ${mode === "code" ? "active" : ""}`} onClick={() => handleModeChange("code")}>
-                  Nhập mã
+                <button className={`seg-btn ${mode !== "manual" ? "active" : ""}`} onClick={() => handleModeChange("qr")}>
+                  Tự động
                 </button>
                 <button className={`seg-btn ${mode === "manual" ? "active" : ""}`} onClick={() => handleModeChange("manual")}>
                   Thủ công
@@ -1059,6 +1142,7 @@ export default function LecturerAttendancePage() {
                 </button>
               </div>
             )}
+            
           </div>
 
           {error && <div className="error-banner">⚠️ {error}</div>}
@@ -1067,22 +1151,15 @@ export default function LecturerAttendancePage() {
             <div className="session-box">
               <div className="qr-preview">
                 <div className="qr-box">
-                  {/* Render available mode previews. If multiple modes are enabled, show QR first, then code. */}
-                  {sessionHasMode(session.type, "qr") ? (
-                    qrImage ? (
-                      <img src={qrImage} alt="QR" style={{ width: 140, height: 140 }} />
-                    ) : (
-                      <span style={{ fontSize: 16 }}>Đang tạo QR...</span>
-                    )
-                  ) : sessionHasMode(session.type, "code") ? (
-                    <span className="big-code">{session.code}</span>
-                  ) : (
+                  {sessionHasMode(session.type, "manual") ? (
                     <span style={{ fontSize: 18, fontWeight: 600 }}>Điểm danh thủ công</span>
+                  ) : (
+                    <span style={{ fontSize: 16 }}>Đang điểm danh (xem popup)</span>
                   )}
                 </div>
                 <div className="qr-meta">
                   <div className="time-left">Trạng thái: {session.status}</div>
-                  {!sessionHasMode(session.type, "manual") && <div className="time-left">Còn lại: {countdownDisplay}</div>}
+                  {!sessionHasMode(session.type, "manual") && <div className="time-left">Còn lại: <CountdownLabel expiresAt={session.expiresAt || null} /></div>}
                   {!sessionHasMode(session.type, "manual") && (
                     <div className="time-left">Lượt sử dụng mã: {resetStats.used}/{resetStats.total}</div>
                   )}
@@ -1095,7 +1172,7 @@ export default function LecturerAttendancePage() {
                   )}
                 </div>
               </div>
-              <div className="actions end">
+              <div className="actions" style={{ justifyContent: "center" }}>
                 {!sessionHasMode(session.type, "manual") && (
                   <button
                     className="btn-primary"
@@ -1230,33 +1307,28 @@ export default function LecturerAttendancePage() {
       <div className="panel history-panel">
         <div className="history-title">Lịch sử điểm danh</div>
         <div className="history-filters">
-          <label style={{ display: "flex", flexDirection: "column", fontSize: 12, color: "#A0AEC0" }}>
-            Ngày
-            <input
-              type="date"
-              className="input"
-              value={historyDate}
-              max={new Date().toISOString().slice(0, 10)}
-              onChange={(e) => setHistoryDate(e.target.value || new Date().toISOString().slice(0, 10))}
-              style={{ minWidth: 160 }}
-            />
-          </label>
-          <button
-            className="btn-icon"
-            onClick={() => cls && fetchHistory({ classId: cls, date: historyDate, slotId: slot })}
-            disabled={!cls || historyLoading}
-            title="Làm mới"
-            aria-label="Làm mới lịch sử"
-          >
-            <i className="fa-solid fa-arrows-rotate" />
-          </button>
+          <input
+            type="date"
+            className="input"
+            value={historyDate}
+            onChange={(e) => {
+              const val = e.target.value;
+              if (val) setHistoryDate(val);
+              else {
+                const d = new Date();
+                const local = new Date(d.getTime() - d.getTimezoneOffset() * 60000);
+                setHistoryDate(local.toISOString().slice(0, 10));
+              }
+            }}
+            style={{ width: 140 }}
+          />
         </div>
         {historyLoading && <div className="loading-row">Đang tải lịch sử...</div>}
         <div className="table-wrap">
           <table className="history-table history-list">
             <thead>
               <tr>
-                <th>Ngày</th>
+                <th>Thời gian</th>
                 <th>Slot</th>
                 <th>Hình thức</th>
                 <th>Trạng thái</th>
@@ -1265,7 +1337,6 @@ export default function LecturerAttendancePage() {
             </thead>
             <tbody>
               {history.map((h) => {
-                const dayValue = getSessionDisplayDate(h);
                 const summary = ensureSummary(h.summary);
                 const isSelected = selectedHistoryId === h.id;
                 return (
@@ -1276,11 +1347,10 @@ export default function LecturerAttendancePage() {
                     style={{ cursor: "pointer" }}
                   >
                     <td>
-                      <div className="cell-main">{formatDateOrFallback(dayValue)}</div>
-                      <div className="cell-sub">{formatWeekdayOrFallback(dayValue)}</div>
+                      <div className="cell-main">{h.createdAt ? formatVietnamTime(h.createdAt) : "--"}</div>
                     </td>
                     <td className="cell-main">{h.slotId ?? "--"}</td>
-                    <td className="cell-main">{displayModeLabel(h.type)}</td>
+                    <td className="cell-main">{sessionHasMode(h.type, "manual") ? "Thủ công" : "Tự động"}</td>
                     <td>
                       {h.status === "closed" ? (
                         <span className="status-pill status-closed">{STATUS_LABELS[h.status] || h.status}</span>
@@ -1306,11 +1376,49 @@ export default function LecturerAttendancePage() {
           </table>
         </div>
 
-        {selectedHistoryId && (
-          <div
-            className="modal-backdrop"
-            onClick={() => {
-              setSelectedHistoryId(null);
+        {/* Popup MUI cho phiên tự động */}
+        <Dialog open={autoModalOpen && !!session && !sessionHasMode(session?.type, "manual")} onClose={() => setAutoModalOpen(false)} fullWidth maxWidth="lg">
+          <DialogTitle>Phiên điểm danh tự động</DialogTitle>
+          <DialogContent>
+            <Grid container spacing={2}>
+              <Grid item xs={12} md={3}>
+                <Typography variant="h6" gutterBottom>Nội quy điểm danh</Typography>
+                <Box component="ul" sx={{ pl: 2, m: 0 }}>
+                  <li>Mã QR: Sinh viên quét QR để điểm danh</li>
+                  <li>Mã ký tự: Sinh viên nhập mã để điểm danh</li>
+                  <li>Reset: Tự động reset mỗi 60s (tối đa 3 lần)</li>
+                </Box>
+              </Grid>
+              <Grid item xs={12} md={7}>
+                <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                  {qrImage ? (
+                    <img src={qrImage} alt="QR" style={{ width: '100%', maxWidth: 640 }} />
+                  ) : (
+                    <Typography>Đang tạo QR...</Typography>
+                  )}
+                  <Typography variant="h4" sx={{ mt: 2, fontWeight: 700 }}>{session?.code}</Typography>
+                </Box>
+              </Grid>
+              <Grid item xs={12} md={2}>
+                <Typography variant="h6" gutterBottom>Thông tin phiên</Typography>
+                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+                  <Typography>Trạng thái: Đang điểm danh</Typography>
+                  {typeof session?.totalStudents === 'number' && (
+                    <Typography>Tổng sinh viên: {session?.totalStudents}</Typography>
+                  )}
+                  <Typography>Thời gian: <CountdownLabel expiresAt={session?.expiresAt || null} /></Typography>
+                  <Typography>Số lần reset: {resetStats.used}/{resetStats.total}</Typography>
+                </Box>
+              </Grid>
+            </Grid>
+          </DialogContent>
+        </Dialog>
+
+      {selectedHistoryId && (
+        <div
+          className="modal-backdrop"
+          onClick={() => {
+            setSelectedHistoryId(null);
               setHistoryDetail(null);
               setHistoryDetailError(null);
             }}
@@ -1347,7 +1455,7 @@ export default function LecturerAttendancePage() {
                       <div className="summary-item">
                         <span className="summary-label">Lớp</span>
                         <span className="summary-value">
-                          {historyDetail.session.className || historyDetail.session.classId}
+                          {historyDetail.session.classId}
                         </span>
                       </div>
                       <div className="summary-item">
@@ -1365,7 +1473,7 @@ export default function LecturerAttendancePage() {
                       <div className="summary-item">
                         <span className="summary-label">Hình thức</span>
                         <span className="summary-value">
-                          {displayModeLabel(historyDetail.session.type)}
+                          {sessionHasMode(historyDetail.session.type, "manual") ? "Thủ công" : "Tự động"}
                           </span>
                       </div>
                       <div className="summary-item">
@@ -1379,30 +1487,7 @@ export default function LecturerAttendancePage() {
                       </div>
                     </div>
 
-                    <div style={{ marginTop: 12, display: 'flex', gap: 8 }}>
-                      <button
-                        className="btn-danger"
-                        onClick={async () => {
-                          if (!historyDetail || !historyDetail.session?.id) return;
-                          if (!confirm('Bạn có chắc muốn kết thúc phiên này?')) return;
-                          try {
-                            setHistoryDetailLoading(true);
-                            await fetchJson(`${API_BASE}/sessions/${historyDetail.session.id}/close`, { method: 'POST' });
-                            // refresh list & detail
-                            if (cls) await fetchHistory({ classId: cls, date: historyDate, slotId: slot });
-                            await fetchHistoryDetail(historyDetail.session.id);
-                            setSessionNotice({ type: 'success', message: 'Đã kết thúc phiên điểm danh' });
-                          } catch (err: any) {
-                            console.error('close session from modal error', err);
-                            setHistoryDetailError(err?.message || 'Không thể kết thúc phiên');
-                          } finally {
-                            setHistoryDetailLoading(false);
-                          }
-                        }}
-                      >
-                        ✅ Kết thúc phiên
-                      </button>
-                    </div>
+                    
 
                     <div className="table-wrap">
                       <table className="detail-table">

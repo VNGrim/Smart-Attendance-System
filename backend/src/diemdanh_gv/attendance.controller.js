@@ -236,24 +236,7 @@ const createOrGetSession = async (req, res) => {
         existing.status = "expired";
       }
       if (["ended", "closed"].includes(existing.status)) {
-        // If session already finalized, allow reopening for manual edits only.
-        if (type === "manual") {
-          // Merge manual into existing types and reopen the session as active so teacher can edit.
-          const existingTypes2 = String(existing.type || "").split(',').map((s) => s.trim()).filter(Boolean);
-          const merged2 = Array.from(new Set([...existingTypes2, 'manual']));
-          const newType2 = merged2.join(',');
-          const reopened = await updateSession(existing.id, {
-            type: newType2,
-            status: 'active',
-            code: null,
-            expiresAt: null,
-            attempts: existing.attempts ?? 0,
-            totalStudents: existing.totalStudents ?? (await countClassStudents(classId)),
-            createdBy: teacherId,
-            endedAt: null,
-          });
-          return jsonResponse(res, { success: true, data: serializeSession(reopened), reused: true });
-        }
+        // yêu cầu: slot chỉ điểm danh 1 lần, không cho mở lại kể cả thủ công
         return res.status(409).json({ success: false, message: "Đã hoàn thành phiên điểm danh" });
       }
       // If existing active session already supports requested mode, reuse it.

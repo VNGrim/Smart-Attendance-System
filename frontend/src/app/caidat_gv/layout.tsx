@@ -1,8 +1,5 @@
 import "./global.css";
 import "@fortawesome/fontawesome-free/css/all.min.css";
-import { Inter } from "next/font/google";
-
-const inter = Inter({ subsets: ["latin"] });
 
 export const metadata = {
   title: "Cài đặt giảng viên",
@@ -16,7 +13,7 @@ export default function LecturerSettingsLayout({
 }) {
   return (
     <html lang="vi">
-      <body className={`${inter.className} role-lecturer`}>{children}</body>
+      <body className={`role-lecturer`}>{children}</body>
     </html>
   );
 }
