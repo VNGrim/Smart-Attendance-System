@@ -67,7 +67,7 @@ export default function Home() {
       <div className="absolute left-0 right-0 bottom-0">
         <div className="w-full bg-black text-white py-3 px-6 flex justify-center items-center text-sm md:text-base">
           <div className="max-w-4xl text-center">
-            Trường Đại học ABC - Địa chỉ: Số 123, Đường XYZ, Quận Q, Thành phố T
+            Đại học FPT Quy Nhơn - Địa chỉ: Khu đô thị An Phú Thịnh, Phường Quy Nhơn Nam, Tỉnh Gia Lai.
           </div>
         </div>
       </div>

@@ -4,6 +4,7 @@ dayjs.extend(utc);
 
 const {
   getClassesByTeacher,
+  getClassesByTeacherAndDay,
   getClassById,
   getClassSlotsByDay,
   findLatestSession,
@@ -54,6 +55,15 @@ const DAY_MAP = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const getDayKeyFromDate = (date) => DAY_MAP[dayjs(date).day()] ?? "Mon";
 
 const VALID_STATUSES = new Set(["present", "absent", "excused"]);
+
+const typeIncludes = (typeStr, t) => {
+  if (!typeStr) return false;
+  return String(typeStr)
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean)
+    .includes(String(t));
+};
 
 const mapRecordsWithStudents = (records = [], students = []) => {
   const studentMap = new Map(students.map((item) => [item.student_id, item]));
@@ -152,8 +162,21 @@ const listTeacherClasses = async (req, res) => {
     if (!teacherId) {
       return res.status(401).json({ success: false, message: "Không xác định được giảng viên" });
     }
-    console.log("[Attendance] listTeacherClasses user", teacherId, req.user);
-    const rows = await getClassesByTeacher(teacherId);
+    const hasDateFilter = Boolean(req.query?.date);
+    const targetDay = hasDateFilter ? toDateOnly(req.query.date) : null;
+    console.log("[Attendance] listTeacherClasses user", teacherId, req.user, {
+      date: hasDateFilter ? targetDay.format("YYYY-MM-DD") : null,
+    });
+
+    let rows;
+    if (hasDateFilter) {
+      const dayKey = getDayKeyFromDate(targetDay.toDate());
+      const dateStr = targetDay.format("YYYY-MM-DD");
+      rows = await getClassesByTeacherAndDay(teacherId, dayKey, dateStr);
+    } else {
+      rows = await getClassesByTeacher(teacherId);
+    }
+
     console.log("[Attendance] classes found", rows?.length);
     const data = rows.map((row) => ({
       id: row.class_id,
@@ -180,9 +203,10 @@ const listClassSlots = async (req, res) => {
     const targetDay = toDateOnly(req.query?.date);
     console.log("[Attendance] listClassSlots", { classId, date: targetDay.format("YYYY-MM-DD") });
     await ensureTeacherOwnsClass(teacherId, classId);
-    const dayKey = getDayKeyFromDate(targetDay);
+    const dayKey = getDayKeyFromDate(targetDay.toDate());
     console.log("[Attendance] dayKey", dayKey);
-    const slots = await getClassSlotsByDay(classId, dayKey, targetDay.toDate());
+    const dateStr = targetDay.format("YYYY-MM-DD");
+    const slots = await getClassSlotsByDay(classId, dayKey, dateStr);
 
     console.log("[Attendance] slots length", slots.length);
     const data = slots.map((slot) => ({
@@ -227,9 +251,11 @@ const createOrGetSession = async (req, res) => {
         existing.status = "expired";
       }
       if (["ended", "closed"].includes(existing.status)) {
+        // yêu cầu: slot chỉ điểm danh 1 lần, không cho mở lại kể cả thủ công
         return res.status(409).json({ success: false, message: "Đã hoàn thành phiên điểm danh" });
       }
-      if (existing.status === "active" && existing.type === type) {
+      // If existing active session already supports requested mode, reuse it.
+      if (existing.status === "active" && typeIncludes(existing.type, type)) {
         return jsonResponse(res, { success: true, data: serializeSession(existing), reused: true });
       }
 
@@ -240,8 +266,12 @@ const createOrGetSession = async (req, res) => {
         : null;
       const attempts = type === "manual" ? 0 : 1;
 
+      // Merge existing type(s) with requested type (avoid duplicates)
+      const existingTypes = String(existing.type || "").split(',').map((s) => s.trim()).filter(Boolean);
+      const merged = Array.from(new Set([...existingTypes, type]));
+      const newType = merged.join(',');
       const updated = await updateSession(existing.id, {
-        type,
+        type: newType,
         status: "active",
         code,
         expiresAt,
@@ -510,7 +540,7 @@ const resetSessionCode = async (req, res) => {
     const session = await getSessionWithClass(id);
     if (!session) return res.status(404).json({ success: false, message: "Không tìm thấy buổi điểm danh" });
     await ensureTeacherOwnsClass(teacherId, session.session_class.class_id);
-    if (session.type === "manual") {
+    if (typeIncludes(session.type, "manual")) {
       return res.status(400).json({ success: false, message: "Hình thức thủ công không hỗ trợ reset mã" });
     }
     if ((session.attempts ?? 0) >= MAX_ATTEMPTS) {
@@ -606,18 +636,34 @@ const getSessionStudents = async (req, res) => {
       getClassStudents(session.session_class.class_id),
       getAttendanceRecords(id),
     ]);
-    const data = mapRecordsWithStudents(records, students);
-    const { total, present, excused, absent } = summarizeRecords(data);
-    return jsonResponse(res, {
-      success: true,
-      data,
-      summary: {
-        total,
-        present,
-        excused,
-        absent,
-      },
-    });
+      // Map each class student to their attendance record (if any).
+      const recordMap = new Map((records || []).map((r) => [r.studentId, r]));
+      const data = (students || []).map((student) => {
+        const record = recordMap.get(student.student_id);
+        return {
+          studentId: student.student_id,
+          fullName: student.full_name,
+          email: student.email,
+          course: student.course,
+          status: record?.status || "absent",
+          markedAt: record?.recordedAt ? dayjs(record.recordedAt).toISOString() : null,
+          modifiedAt: record?.modifiedAt ? dayjs(record.modifiedAt).toISOString() : null,
+          modifiedBy: record?.modifiedBy || null,
+          note: record?.note || null,
+        };
+      });
+
+      const { total, present, excused, absent } = summarizeRecords(data);
+      return jsonResponse(res, {
+        success: true,
+        data,
+        summary: {
+          total,
+          present,
+          excused,
+          absent,
+        },
+      });
   } catch (error) {
     if (error.status === 404) return res.status(404).json({ success: false, message: "Không tìm thấy lớp" });
     if (error.status === 403) return res.status(403).json({ success: false, message: "Bạn không có quyền với lớp này" });
@@ -639,7 +685,7 @@ const updateManualAttendance = async (req, res) => {
     const session = await getSessionWithClass(id);
     if (!session) return res.status(404).json({ success: false, message: "Không tìm thấy buổi điểm danh" });
     await ensureTeacherOwnsClass(teacherId, session.session_class.class_id);
-    if (session.type !== "manual") {
+    if (!typeIncludes(session.type, "manual")) {
       return res.status(400).json({ success: false, message: "Chỉ hỗ trợ cập nhật cho hình thức thủ công" });
     }
 

@@ -1,7 +1,16 @@
 const VN_TZ = "Asia/Ho_Chi_Minh";
 
-const ensureDate = (value: Date | string | number): Date =>
-  value instanceof Date ? value : new Date(value);
+const ensureDate = (value: Date | string | number): Date => {
+  if (value instanceof Date) return value;
+  // If value is a date-only string like "2025-11-12", constructing a Date
+  // directly may be interpreted inconsistently across environments and
+  // cause a timezone-shifted day (showing yesterday). To avoid that, parse
+  // date-only strings as midday UTC which is safe when converting to VN time.
+  if (typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    return new Date(`${value}T12:00:00Z`);
+  }
+  return new Date(value);
+};
 
 export function formatVietnamDate(
   value: Date | string | number,

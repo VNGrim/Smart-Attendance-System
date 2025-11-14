@@ -1,8 +1,5 @@
 import "./global.css";
 import "@fortawesome/fontawesome-free/css/all.min.css";
-import { Inter } from "next/font/google";
-
-const inter = Inter({ subsets: ["latin"] });
 
 export const metadata = {
   title: "Cấu hình hệ thống",
@@ -16,7 +13,7 @@ export default function AdminSettingsLayout({
 }) {
   return (
     <html lang="vi">
-      <body className={`${inter.className} role-admin`}>{children}</body>
+      <body className={`role-admin`}>{children}</body>
     </html>
   );
 }

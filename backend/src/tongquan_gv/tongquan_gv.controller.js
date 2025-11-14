@@ -476,21 +476,30 @@ exports.getThreeDaysSchedule = async (req, res) => {
       Sun: "CN",
     };
 
-    const groupByDay = (dow) => {
+    // Nhóm theo ngày, mỗi ngày có thể có nhiều slot/lớp
+    const groupByDay = (dow, date) => {
+      // Lấy tất cả slot/lớp của ngày đó
+      // Dùng thời gian slot cố định
+      const slotTimes = {
+        1: '07:00–09:45',
+        2: '09:30–11:45',
+        3: '12:30–14:45',
+        4: '15:00–17:15',
+      };
       return timetable
         .filter(item => item.day_of_week === dow)
         .map(item => {
           const classInfo = classMap.get(item.classes);
-          const startTime = item.time_slots?.start_time ? dayjs(item.time_slots.start_time).format('HH:mm') : '';
-          const endTime = item.time_slots?.end_time ? dayjs(item.time_slots.end_time).format('HH:mm') : '';
-
+          const time = slotTimes[item.slot_id] || '';
           return {
             id: `${item.classes}-${item.day_of_week}-${item.slot_id}`,
             classId: item.classes,
             subjectCode: classInfo?.subject_code || 'N/A',
             subjectName: classInfo?.subject_name || 'Không rõ môn',
-            time: `${startTime}–${endTime}`,
+            time,
             room: item.room_name || item.room || 'TBA',
+            slot: item.slot_id,
+            date: date,
           };
         });
     };
@@ -499,17 +508,17 @@ exports.getThreeDaysSchedule = async (req, res) => {
       yesterday: {
         date: formatDate(yesterday),
         dayName: dayNamesVi[yesterdayDow] || yesterdayDow,
-        classes: groupByDay(yesterdayDow),
+        classes: groupByDay(yesterdayDow, formatDate(yesterday)),
       },
       today: {
         date: formatDate(today),
         dayName: dayNamesVi[todayDow] || todayDow,
-        classes: groupByDay(todayDow),
+        classes: groupByDay(todayDow, formatDate(today)),
       },
       tomorrow: {
         date: formatDate(tomorrow),
         dayName: dayNamesVi[tomorrowDow] || tomorrowDow,
-        classes: groupByDay(tomorrowDow),
+        classes: groupByDay(tomorrowDow, formatDate(tomorrow)),
       },
     };
 

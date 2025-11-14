@@ -18,6 +18,7 @@
   },
   "homepage": "https://github.com/VNGrim/Smart-Attendance-System#readme",
   "devDependencies": {
+    "concurrently": "^9.2.1",
     "eslint": "^9.36.0",
     "husky": "^9.1.7",
     "lint-staged": "^16.2.0",
