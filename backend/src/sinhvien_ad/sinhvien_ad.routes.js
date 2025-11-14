@@ -328,4 +328,148 @@ router.post('/', async (req, res) => {
   }
 });
 
+router.put('/:studentId', async (req, res) => {
+  try {
+    const { studentId } = req.params;
+    if (!studentId) {
+      return res.status(400).json({ success: false, message: 'Thiếu MSSV hiện tại' });
+    }
+
+    const existing = await prisma.students.findUnique({
+      where: { student_id: studentId },
+    });
+
+    if (!existing) {
+      return res.status(404).json({ success: false, message: 'Không tìm thấy sinh viên' });
+    }
+
+    const {
+      mssv,
+      fullName,
+      email,
+      cohort,
+      className,
+      classes,
+      major,
+      advisor,
+      status,
+      phone,
+    } = req.body || {};
+
+    if (fullName && (typeof fullName !== 'string' || !fullName.trim())) {
+      return res.status(400).json({ success: false, message: 'Họ tên không hợp lệ' });
+    }
+
+    const trimmedCohort = typeof cohort === 'string' && cohort.trim()
+      ? cohort.trim()
+      : existing.course;
+
+    let nextStudentId = (typeof mssv === 'string' && mssv.trim())
+      ? mssv.trim().toUpperCase()
+      : existing.student_id;
+
+    // Nếu không truyền MSSV nhưng đổi khóa, tự sinh MSSV mới giống logic tạo mới
+    if ((!mssv || !String(mssv).trim()) && cohort && cohort.trim() && cohort.trim() !== existing.course) {
+      nextStudentId = await generateStudentId(trimmedCohort);
+    }
+
+    // Nếu đổi MSSV, kiểm tra xung đột
+    if (nextStudentId !== existing.student_id) {
+      const conflictStudent = await prisma.students.findUnique({ where: { student_id: nextStudentId } });
+      if (conflictStudent) {
+        return res.status(409).json({ success: false, message: 'MSSV mới đã tồn tại' });
+      }
+
+      const conflictAccount = await prisma.accounts.findUnique({ where: { user_code: nextStudentId } });
+      if (conflictAccount) {
+        return res.status(409).json({ success: false, message: 'Tài khoản với MSSV mới đã tồn tại' });
+      }
+    }
+
+    const classesValue = Array.isArray(classes)
+      ? classes.filter(Boolean).join(', ')
+      : (className && typeof className === 'string') ? className.trim() : existing.classes;
+
+    const statusCode = status
+      ? (normalizeStatusFilter(status) || existing.status)
+      : existing.status;
+
+    const updatedStudent = await prisma.$transaction(async (tx) => {
+      // Cập nhật account và các bảng liên quan nếu MSSV thay đổi
+      if (nextStudentId !== existing.student_id) {
+        // Cập nhật tất cả account có user_code = MSSV cũ (kể cả dữ liệu legacy chưa gắn account_id)
+        await tx.accounts.updateMany({
+          where: { user_code: existing.student_id },
+          data: { user_code: nextStudentId },
+        });
+
+        // Cập nhật attendance records trỏ theo student_id
+        await tx.attendanceRecord.updateMany({
+          where: { studentId: existing.student_id },
+          data: { studentId: nextStudentId },
+        });
+      }
+
+      const studentRecord = await tx.students.update({
+        where: { student_id: existing.student_id },
+        data: {
+          student_id: nextStudentId,
+          full_name: typeof fullName === 'string' && fullName.trim() ? fullName.trim() : existing.full_name,
+          email: typeof email === 'string' ? (email.trim() || null) : existing.email,
+          course: trimmedCohort,
+          classes: classesValue,
+          major: typeof major === 'string' ? (major.trim() || null) : existing.major,
+          advisor_name: typeof advisor === 'string' ? (advisor.trim() || null) : existing.advisor_name,
+          status: statusCode,
+          phone: typeof phone === 'string' ? (phone.trim() || null) : existing.phone,
+        },
+      });
+
+      return studentRecord;
+    });
+
+    return res.json({
+      success: true,
+      student: mapStudent(updatedStudent),
+    });
+  } catch (error) {
+    if (error.code === 'INVALID_COHORT') {
+      return res.status(400).json({ success: false, message: 'Định dạng khóa không hợp lệ. Ví dụ hợp lệ: K18, K2023.' });
+    }
+    console.error('admin students update error:', error);
+    return res.status(500).json({ success: false, message: 'Lỗi hệ thống' });
+  }
+});
+
+router.delete('/:studentId', async (req, res) => {
+  try {
+    const { studentId } = req.params;
+
+    if (!studentId) {
+      return res.status(400).json({ success: false, message: 'Thiếu MSSV' });
+    }
+
+    const existing = await prisma.students.findUnique({
+      where: { student_id: studentId },
+    });
+
+    if (!existing) {
+      return res.status(404).json({ success: false, message: 'Không tìm thấy sinh viên' });
+    }
+
+    await prisma.$transaction(async (tx) => {
+      if (existing.account_id) {
+        await tx.accounts.delete({ where: { id: existing.account_id } });
+      } else {
+        await tx.students.delete({ where: { student_id: studentId } });
+      }
+    });
+
+    return res.json({ success: true, message: 'Đã xóa sinh viên và tài khoản liên quan (nếu có)' });
+  } catch (error) {
+    console.error('admin students delete error:', error);
+    return res.status(500).json({ success: false, message: 'Lỗi hệ thống' });
+  }
+});
+
 module.exports = router;

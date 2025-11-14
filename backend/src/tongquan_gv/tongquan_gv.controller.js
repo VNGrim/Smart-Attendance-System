@@ -41,33 +41,26 @@ exports.getTeacherStats = async (req, res) => {
 
     // Đếm tổng số sinh viên (qua các lớp đang dạy)
     const classes = await prisma.classes.findMany({
-      where: { 
+      where: {
         teacher_id: teacherId,
-        status: "Đang hoạt động"
+        status: "Đang hoạt động",
       },
-      select: { class_id: true }
+      select: { class_id: true },
     });
 
-    const classIds = classes.map(c => c.class_id);
-    
+    const classIds = classes.map((c) => c.class_id);
+
+    // Đếm tổng sinh viên theo đúng "Sĩ số" ở lophoc_gv: cộng size từng lớp
     let studentsCount = 0;
     if (classIds.length > 0) {
-      const students = await prisma.students.findMany({
-        where: {
-          classes: {
-            contains: classIds.join(',')
-          }
-        }
-      });
-      
-      // Đếm sinh viên unique
-      const uniqueStudents = new Set();
-      students.forEach(s => {
-        const studentClasses = s.classes?.split(',').map(c => c.trim()) || [];
-        const hasClass = studentClasses.some(c => classIds.includes(c));
-        if (hasClass) uniqueStudents.add(s.student_id);
-      });
-      studentsCount = uniqueStudents.size;
+      for (const classId of classIds) {
+        const count = await prisma.students.count({
+          where: {
+            classes: { contains: classId },
+          },
+        });
+        studentsCount += count;
+      }
     }
 
     // Đếm thông báo chưa đọc (giả sử có bảng notifications)
@@ -338,25 +331,25 @@ exports.getLatestAttendanceNote = async (req, res) => {
     const latestSession = await prisma.attendanceSession.findFirst({
       where: {
         session_class: {
-          teacher_id: teacherId
-        }
+          teacher_id: teacherId,
+        },
       },
       include: {
         session_class: {
           select: {
             class_id: true,
-            class_name: true
-          }
+            class_name: true,
+          },
         },
         records: {
           select: {
-            status: true
-          }
-        }
+            status: true,
+          },
+        },
       },
       orderBy: {
-        createdAt: 'desc'
-      }
+        createdAt: "desc",
+      },
     });
 
     if (!latestSession) {
@@ -366,11 +359,16 @@ exports.getLatestAttendanceNote = async (req, res) => {
       });
     }
 
-    const totalRecords = latestSession.records.length;
-    const presentCount = latestSession.records.filter(r => r.status === 'present').length;
-    const percentage = totalRecords > 0 ? Math.round((presentCount / totalRecords) * 100) : 0;
+    const presentCount = latestSession.records.filter((r) => r.status === "present").length;
 
-    const note = `Lớp ${latestSession.session_class?.class_id || 'N/A'} vừa được điểm danh ${percentage}% (${presentCount}/${totalRecords} sinh viên).`;
+    // Sử dụng totalStudents nếu có (đặc biệt cho buổi điểm danh tự động),
+    // nếu không có thì fallback về số record như cũ
+    const totalStudents = latestSession.totalStudents ?? latestSession.records.length;
+    const percentage = totalStudents > 0 ? Math.round((presentCount / totalStudents) * 100) : 0;
+
+    const classLabel = latestSession.session_class?.class_name || latestSession.session_class?.class_id || "N/A";
+
+    const note = `Lớp ${classLabel} vừa được điểm danh ${percentage}% (${presentCount}/${totalStudents} sinh viên).`;
 
     return res.json({
       success: true,

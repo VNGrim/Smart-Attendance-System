@@ -159,12 +159,44 @@ const AddStudentModal = ({ open, onClose, options, student, onSaved }: AddStuden
     }
   }, [open, student, mssv, options]);
 
-  const handleSubmit = useCallback(async () => {
-    if (student) {
-      setError("Chức năng chỉnh sửa đang được phát triển.");
-      return;
-    }
+  // Tự sinh MSSV khi đổi khóa trong chế độ chỉnh sửa (nếu người dùng chưa tự sửa MSSV)
+  useEffect(() => {
+    if (!open || !student) return;
+    if (!cohort) return;
+    if (mssvTouchedRef.current && mssv.trim()) return;
 
+    // Nếu khóa không đổi so với ban đầu thì không làm gì
+    const originalCohort = findCohort(options, student.cohort);
+    if (cohort === originalCohort) return;
+
+    let cancelled = false;
+    const controller = new AbortController();
+
+    const fetchNextId = async () => {
+      try {
+        const resp = await fetch(`http://localhost:8080/api/admin/students/next-id?cohort=${encodeURIComponent(cohort)}`, {
+          credentials: "include",
+          signal: controller.signal,
+        });
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+        const data: NextIdResponse = await resp.json();
+        if (!cancelled && data?.data?.nextId && !mssvTouchedRef.current) {
+          setMssv(data.data.nextId);
+        }
+      } catch (err: unknown) {
+        if (err instanceof DOMException && err.name === "AbortError") return;
+        console.error("fetch next student id error (edit)", err);
+      }
+    };
+
+    fetchNextId();
+    return () => {
+      cancelled = true;
+      controller.abort();
+    };
+  }, [open, student, cohort, mssv, options]);
+
+  const handleSubmit = useCallback(async () => {
     if (!name.trim()) {
       setError("Họ tên là bắt buộc");
       return;
@@ -183,11 +215,16 @@ const AddStudentModal = ({ open, onClose, options, student, onSaved }: AddStuden
         email: email.trim() || undefined,
         cohort,
         major,
-        password: passwordEditable ? password : undefined,
+        // Khi chỉnh sửa, mật khẩu không thay đổi trừ khi sau này có form riêng
       };
 
-      const resp = await fetch("http://localhost:8080/api/admin/students", {
-        method: "POST",
+      const url = student
+        ? `http://localhost:8080/api/admin/students/${encodeURIComponent(student.mssv || student.id)}`
+        : "http://localhost:8080/api/admin/students";
+      const method = student ? "PUT" : "POST";
+
+      const resp = await fetch(url, {
+        method,
         headers: { "Content-Type": "application/json" },
         credentials: "include",
         body: JSON.stringify(payload),
@@ -203,13 +240,13 @@ const AddStudentModal = ({ open, onClose, options, student, onSaved }: AddStuden
         throw new Error("Phản hồi không hợp lệ từ máy chủ");
       }
     } catch (err: unknown) {
-      console.error("create student error", err);
+      console.error(student ? "update student error" : "create student error", err);
       const message = err instanceof Error && err.message ? err.message : "Không thể lưu sinh viên";
       setError(message);
     } finally {
       setSaving(false);
     }
-  }, [student, name, cohort, mssv, email, major, passwordEditable, password, onSaved]);
+  }, [student, name, cohort, mssv, email, major, onSaved]);
 
   const cohortOptions = useMemo(() => options.cohorts, [options.cohorts]);
   const majorOptions = useMemo(() => options.majors, [options.majors]);

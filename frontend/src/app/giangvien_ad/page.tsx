@@ -6,6 +6,84 @@ import { useRouter } from "next/navigation";
 import AddLecturerModal from "./AddLecturerModal";
 import { Lecturer, mapBackendLecturer } from "./lecturerUtils";
 
+const LecturersShell = ({
+  collapsed,
+  onToggleCollapsed,
+  search,
+  onSearchChange,
+  onLogout,
+  children,
+}: {
+  collapsed: boolean;
+  onToggleCollapsed: () => void;
+  search: string;
+  onSearchChange: (value: string) => void;
+  onLogout: () => void;
+  children: React.ReactNode;
+}) => (
+  <div className={`layout ${collapsed ? "collapsed" : ""}`}>
+    <aside className="sidebar">
+      <div className="side-header">
+        <button
+          className="collapse-btn"
+          onClick={onToggleCollapsed}
+          title={collapsed ? "Mở rộng" : "Thu gọn"}
+        >
+          {collapsed ? "⮞" : "⮜"}
+        </button>
+        {!collapsed && <div className="side-name">Smart Attendance</div>}
+      </div>
+      <nav className="side-nav">
+        <Link href="/tongquan_ad" className="side-link" title="Dashboard">
+          🏠 {!collapsed && "Dashboard"}
+        </Link>
+        <Link href="/thongbao_ad" className="side-link" title="Thông báo">
+          📢 {!collapsed && "Thông báo"}
+        </Link>
+        <Link href="/sinhvien_ad" className="side-link" title="Sinh viên">
+          👨‍🎓 {!collapsed && "Sinh viên"}
+        </Link>
+        <Link href="/giangvien_ad" className="side-link active" title="Giảng viên">
+          👩‍🏫 {!collapsed && "Giảng viên"}
+        </Link>
+        <Link href="/lophoc_ad" className="side-link" title="Lớp học">
+          🏫 {!collapsed && "Lớp học"}
+        </Link>
+        <Link href="/lichhoc_ad" className="side-link" title="Lịch học">
+          📅 {!collapsed && "Lịch học"}
+        </Link>
+        <Link href="/taikhoan_ad" className="side-link" title="Tài khoản">
+          🔑 {!collapsed && "Tài khoản"}
+        </Link>
+        <Link href="/caidat_ad" className="side-link" title="Cấu hình">
+          ⚙️ {!collapsed && "Cấu hình"}
+        </Link>
+      </nav>
+    </aside>
+
+    <header className="topbar">
+      <div className="top-left">
+        <div className="page-title">Quản lý Giảng viên</div>
+      </div>
+      <div className="controls">
+        <div className="search">
+          <i className="fas fa-search" />
+          <input
+            value={search}
+            onChange={(e) => onSearchChange(e.target.value)}
+            placeholder="Tìm tên, MSGV"
+          />
+        </div>
+        <button className="qr-btn" onClick={onLogout}>
+          🚪 Đăng xuất
+        </button>
+      </div>
+    </header>
+
+    <main className="main">{children}</main>
+  </div>
+);
+
 export default function AdminLecturersPage() {
   const router = useRouter();
   const [collapsed, setCollapsed] = useState(false);
@@ -18,12 +96,35 @@ export default function AdminLecturersPage() {
   const [modalOpen, setModalOpen] = useState(false);
   const [edit, setEdit] = useState<Lecturer | null>(null);
   const [classesByLecturer, setClassesByLecturer] = useState<Record<string, string[]>>({});
+  const fetchLecturers = useCallback(async (signal?: AbortSignal) => {
+    try {
+      const resp = await fetch("http://localhost:8080/api/admin/lecturers", {
+        credentials: "include",
+        signal,
+      });
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+      const data = await resp.json();
+      if (signal?.aborted) return;
+      const lecturers: Lecturer[] = Array.isArray(data?.lecturers)
+        ? data.lecturers.map((lec: any) => mapBackendLecturer(lec))
+        : [];
+      setList(lecturers);
+      const classMap: Record<string, string[]> = {};
+      lecturers.forEach((lec) => {
+        if (lec.classList?.length) classMap[lec.id] = lec.classList;
+      });
+      setClassesByLecturer(classMap);
+    } catch (err) {
+      if ((err as any)?.name === "AbortError") return;
+      console.error("fetch lecturers error", err);
+    }
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
     const controller = new AbortController();
 
-    const load = async () => {
+    (async () => {
       try {
         const saved = localStorage.getItem("sas_settings");
         if (saved) {
@@ -32,35 +133,15 @@ export default function AdminLecturersPage() {
         }
       } catch {}
 
-      try {
-        const resp = await fetch("http://localhost:8080/api/admin/lecturers", {
-          credentials: "include",
-          signal: controller.signal,
-        });
-        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-        const data = await resp.json();
-        if (cancelled) return;
-        const lecturers: Lecturer[] = Array.isArray(data?.lecturers)
-          ? data.lecturers.map((lec: any) => mapBackendLecturer(lec))
-          : [];
-        setList(lecturers);
-        const classMap: Record<string, string[]> = {};
-        lecturers.forEach((lec) => {
-          if (lec.classList?.length) classMap[lec.id] = lec.classList;
-        });
-        setClassesByLecturer(classMap);
-      } catch (err) {
-        if ((err as any)?.name === "AbortError") return;
-        console.error("fetch lecturers error", err);
-      }
-    };
+      await fetchLecturers(controller.signal);
+      if (cancelled) return;
+    })();
 
-    load();
     return () => {
       cancelled = true;
       controller.abort();
     };
-  }, []);
+  }, [fetchLecturers]);
 
   const toggleSort = (key: keyof Lecturer) => {
     if (sortKey === key) setSortAsc(!sortAsc);
@@ -107,17 +188,8 @@ export default function AdminLecturersPage() {
   const onOpenCreate = () => { setEdit(null); setModalOpen(true); };
   const onOpenEdit = (s: Lecturer) => { setEdit(s); setModalOpen(true); };
   const handleSaved = useCallback((lecturer: Lecturer) => {
-    setList((prev) => {
-      const exists = prev.some((s) => s.id === lecturer.id);
-      if (exists) {
-        return prev.map((s) => (s.id === lecturer.id ? lecturer : s));
-      }
-      return [lecturer, ...prev];
-    });
-    if (lecturer.classList) {
-      setClassesByLecturer((prev) => ({ ...prev, [lecturer.id]: lecturer.classList ?? [] }));
-    }
-  }, []);
+    fetchLecturers();
+  }, [fetchLecturers]);
 
   const stats = useMemo(() => {
     const total = list.length;
@@ -126,55 +198,52 @@ export default function AdminLecturersPage() {
     const totalClasses = list.reduce((a, b) => a + (classesByLecturer[b.id]?.length ?? b.classes ?? 0), 0);
     return { total, teaching, resting, totalClasses };
   }, [list, classesByLecturer]);
-
-  const Shell = ({ children }: { children: React.ReactNode }) => (
-    <div className={`layout ${collapsed ? "collapsed" : ""}`}>
-      <aside className="sidebar">
-        <div className="side-header">
-          <button className="collapse-btn" onClick={() => setCollapsed(!collapsed)} title={collapsed ? "Mở rộng" : "Thu gọn"}>
-            {collapsed ? "⮞" : "⮜"}
-          </button>
-          {!collapsed && <div className="side-name">Smart Attendance</div>}
-        </div>
-        <nav className="side-nav">
-          <Link href="/tongquan_ad" className="side-link" title="Dashboard">🏠 {!collapsed && "Dashboard"}</Link>
-          <Link href="/thongbao_ad" className="side-link" title="Thông báo">📢 {!collapsed && "Thông báo"}</Link>
-          <Link href="/sinhvien_ad" className="side-link" title="Sinh viên">👨‍🎓 {!collapsed && "Sinh viên"}</Link>
-          <Link href="/giangvien_ad" className="side-link active" title="Giảng viên">👩‍🏫 {!collapsed && "Giảng viên"}</Link>
-          <Link href="/lophoc_ad" className="side-link" title="Lớp học">🏫 {!collapsed && "Lớp học"}</Link>
-          <Link href="/lichhoc_ad" className="side-link" title="Lịch học">📅 {!collapsed && "Lịch học"}</Link>
-          <Link href="/taikhoan_ad" className="side-link" title="Tài khoản">🔑 {!collapsed && "Tài khoản"}</Link>
-          <Link href="/caidat_ad" className="side-link" title="Cấu hình">⚙️ {!collapsed && "Cấu hình"}</Link>
-        </nav>
-      </aside>
-
-      <header className="topbar">
-        <div className="top-left">
-          <div className="page-title">Quản lý Giảng viên</div>
-        </div>
-        <div className="controls">
-          <div className="search">
-            <i className="fas fa-search" />
-            <input value={search} onChange={(e)=>setSearch(e.target.value)} placeholder="Tìm tên, MSGV" />
-          </div>
-          <button className="qr-btn" onClick={async ()=>{ 
-            if (confirm('Bạn có chắc muốn đăng xuất?')) {
-              try { await fetch('http://localhost:8080/api/auth/logout', { method: 'POST', credentials: 'include' }); } catch {}
-              try { localStorage.removeItem('sas_user'); } catch {}
-              router.push('/login');
-            }
-          }}>🚪 Đăng xuất</button>
-        </div>
-      </header>
-
-      <main className="main">{children}</main>
-    </div>
-  );
+  const handleLogout = useCallback(async () => {
+    if (confirm('Bạn có chắc muốn đăng xuất?')) {
+      try {
+        await fetch('http://localhost:8080/api/auth/logout', { method: 'POST', credentials: 'include' });
+      } catch {}
+      try {
+        localStorage.removeItem('sas_user');
+      } catch {}
+      router.push('/login');
+    }
+  }, [router]);
 
   const anySelected = selected.size > 0;
+  const selectedCount = selected.size;
+
+  const bulkDeleteLecturers = useCallback(() => {
+    if (!confirm("Xóa các giảng viên đã chọn?")) return;
+    const ids = Array.from(selected);
+    if (!ids.length) return;
+
+    (async () => {
+      for (const id of ids) {
+        const lecturer = list.find((s) => s.id === id);
+        if (!lecturer) continue;
+        try {
+          await fetch(`http://localhost:8080/api/admin/lecturers/${encodeURIComponent(lecturer.id)}`, {
+            method: "DELETE",
+            credentials: "include",
+          });
+        } catch (err) {
+          console.error("bulk delete lecturer error", err);
+        }
+      }
+      setList((prev) => prev.filter((s) => !selected.has(s.id)));
+      setSelected(new Set());
+    })();
+  }, [list, selected]);
 
   return (
-    <Shell>
+    <LecturersShell
+      collapsed={collapsed}
+      onToggleCollapsed={() => setCollapsed(!collapsed)}
+      search={search}
+      onSearchChange={setSearch}
+      onLogout={handleLogout}
+    >
       <section className="cards">
         <div className="card"><div className="card-title">👨‍🏫 Tổng số</div><div className="card-num">{stats.total}</div></div>
         <div className="card"><div className="card-title">🏫 Đang dạy</div><div className="card-num">{stats.teaching}</div></div>
@@ -199,6 +268,13 @@ export default function AdminLecturersPage() {
             <span className="chip-title">Xuất danh sách</span>
             <span className="chip-sub">Tải CSV nhanh</span>
           </button>
+          {selectedCount > 0 && (
+            <button className="chip danger" onClick={bulkDeleteLecturers}>
+              <span className="chip-icon">🗑</span>
+              <span className="chip-title">Xóa {selectedCount}</span>
+              <span className="chip-sub">Giảng viên đã chọn</span>
+            </button>
+          )}
         </div>
         <div className="right">{anySelected ? `${selected.size} đã chọn` : ""}</div>
       </div>
@@ -218,7 +294,15 @@ export default function AdminLecturersPage() {
             {filtered.map((s) => {
               const classCount = classesByLecturer[s.id]?.length ?? s.classes ?? 0;
               return (
-                <div className="trow" key={s.id} onClick={() => setDrawer(s)}>
+                <div
+                  className="trow"
+                  key={s.id}
+                  onMouseDown={(e) => {
+                    const target = e.target as HTMLElement | null;
+                    if (target && target.closest("input,button")) return;
+                    setDrawer(s);
+                  }}
+                >
                   <div><input type="checkbox" checked={selected.has(s.id)} onChange={(e)=>{e.stopPropagation(); toggleSelect(s.id);}} /></div>
                   <div>{s.code}</div>
                   <div>{s.name}</div>
@@ -226,9 +310,31 @@ export default function AdminLecturersPage() {
                   <div>{classCount}</div>
                   <div><span className={`status ${s.status}`.replace(/\s/g,"-")}>{s.status}</span></div>
                   <div className="actions">
-                    <button className="icon-btn" title="Xem" onClick={(e)=>{e.stopPropagation(); setDrawer(s);}}>👁</button>
                     <button className="icon-btn" title="Sửa" onClick={(e)=>{e.stopPropagation(); onOpenEdit(s);}}>✏️</button>
-                    <button className="icon-btn" title="Xóa" onClick={(e)=>{e.stopPropagation(); if(confirm("Xóa giảng viên?")) setList(prev=>prev.filter(x=>x.id!==s.id));}}>🗑</button>
+                    <button
+                      className="icon-btn"
+                      title="Xóa"
+                      onClick={async (e)=>{
+                        e.stopPropagation();
+                        if (!confirm("Xóa giảng viên?")) return;
+                        try {
+                          const resp = await fetch(`http://localhost:8080/api/admin/lecturers/${encodeURIComponent(s.id)}`, {
+                            method: "DELETE",
+                            credentials: "include",
+                          });
+                          if (!resp.ok) {
+                            const data = await resp.json().catch(() => null) as any;
+                            const message = data?.message || `HTTP ${resp.status}`;
+                            alert(message);
+                            return;
+                          }
+                          setList(prev=>prev.filter(x=>x.id!==s.id));
+                        } catch (err) {
+                          console.error("delete lecturer error", err);
+                          alert("Không thể xóa giảng viên trên hệ thống. Vui lòng thử lại.");
+                        }
+                      }}
+                    >🗑</button>
                   </div>
                 </div>
               );
@@ -286,7 +392,7 @@ export default function AdminLecturersPage() {
         lecturer={edit}
         onSaved={handleSaved}
       />
-    </Shell>
+    </LecturersShell>
   );
 }
 

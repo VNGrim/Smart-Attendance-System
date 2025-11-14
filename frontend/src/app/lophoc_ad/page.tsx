@@ -185,6 +185,68 @@ const API_BASE = "http://localhost:8080/api/admin/classes";
 
 const ACTIVE_LABEL: ClassItem["status"] = "Đang hoạt động";
 
+const Shell = ({
+  children,
+  search,
+  onSearchChange,
+  collapsed,
+  onToggleCollapsed,
+  onLogout,
+}: {
+  children: React.ReactNode;
+  search: string;
+  onSearchChange: (value: string) => void;
+  collapsed: boolean;
+  onToggleCollapsed: () => void;
+  onLogout: () => void;
+}) => (
+  <div className={`layout ${collapsed ? "collapsed" : ""}`}>
+    <aside className="sidebar">
+      <div className="side-header">
+        <button
+          className="collapse-btn"
+          onClick={onToggleCollapsed}
+          title={collapsed ? "Mở rộng" : "Thu gọn"}
+        >
+          {collapsed ? "⮞" : "⮜"}
+        </button>
+        {!collapsed && <div className="side-name">Smart Attendance</div>}
+      </div>
+      <nav className="side-nav">
+        <Link href="/tongquan_ad" className="side-link" title="Dashboard">🏠 {!collapsed && "Dashboard"}</Link>
+        <Link href="/thongbao_ad" className="side-link" title="Thông báo">📢 {!collapsed && "Thông báo"}</Link>
+        <Link href="/sinhvien_ad" className="side-link" title="Sinh viên">👨‍🎓 {!collapsed && "Sinh viên"}</Link>
+        <Link href="/giangvien_ad" className="side-link" title="Giảng viên">👩‍🏫 {!collapsed && "Giảng viên"}</Link>
+        <Link href="/lophoc_ad" className="side-link active" title="Lớp học">🏫 {!collapsed && "Lớp học"}</Link>
+        <Link href="/lichhoc_ad" className="side-link" title="Lịch học">📅 {!collapsed && "Lịch học"}</Link>
+        <Link href="/taikhoan_ad" className="side-link" title="Tài khoản">🔑 {!collapsed && "Tài khoản"}</Link>
+        <Link href="/caidat_ad" className="side-link" title="Cấu hình">⚙️ {!collapsed && "Cấu hình"}</Link>
+      </nav>
+    </aside>
+
+    <header className="topbar">
+      <div className="top-left">
+        <div className="page-title">Quản lý Lớp học</div>
+      </div>
+      <div className="controls">
+        <div className="search">
+          <i className="fas fa-search" />
+          <input
+            value={search}
+            onChange={(e) => onSearchChange(e.target.value)}
+            placeholder="Tìm mã lớp, tên lớp, giảng viên, khóa"
+          />
+        </div>
+        <button className="qr-btn" onClick={onLogout}>
+          🚪 Đăng xuất
+        </button>
+      </div>
+    </header>
+
+    <main className="main">{children}</main>
+  </div>
+);
+
 const mapBackendClass = (input: any): ClassItem => {
   const rawCode = input?.code ?? input?.class_id ?? input?.id ?? "";
   const code = String(rawCode || "");
@@ -918,6 +980,28 @@ export default function AdminClassesPage() {
     }
   }, [selected, findTeacherName, fetchClassList]);
 
+  const handleDeleteClass = useCallback(async (classCode: string) => {
+    if (!classCode) return;
+    if (!confirm("Xóa lớp?")) return;
+    try {
+      const resp = await fetch(`${API_BASE}/bulk`, {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ classIds: [classCode] }),
+      });
+      const data = await resp.json().catch(() => null);
+      if (!resp.ok) {
+        throw new Error(data?.message || `HTTP ${resp.status}`);
+      }
+      await fetchClassList();
+      setDrawer((prev) => (prev && prev.code === classCode ? null : prev));
+    } catch (error) {
+      console.error("delete class error", error);
+      alert("Không thể xóa lớp. Vui lòng thử lại.");
+    }
+  }, [fetchClassList]);
+
   const onOpenCreate = () => { setEdit(null); setModalOpen(true); };
   const onOpenEdit = (c: ClassItem) => { setEdit(c); setModalOpen(true); };
 
@@ -1019,53 +1103,26 @@ export default function AdminClassesPage() {
   useEffect(() => {
     if (!anySelected) setStatusMenuOpen(false);
   }, [anySelected]);
-
-  const Shell = ({ children }: { children: React.ReactNode }) => (
-    <div className={`layout ${collapsed ? "collapsed" : ""}`}>
-      <aside className="sidebar">
-        <div className="side-header">
-          <button className="collapse-btn" onClick={() => setCollapsed(!collapsed)} title={collapsed ? "Mở rộng" : "Thu gọn"}>
-            {collapsed ? "⮞" : "⮜"}
-          </button>
-          {!collapsed && <div className="side-name">Smart Attendance</div>}
-        </div>
-        <nav className="side-nav">
-          <Link href="/tongquan_ad" className="side-link" title="Dashboard">🏠 {!collapsed && "Dashboard"}</Link>
-          <Link href="/thongbao_ad" className="side-link" title="Thông báo">📢 {!collapsed && "Thông báo"}</Link>
-          <Link href="/sinhvien_ad" className="side-link" title="Sinh viên">👨‍🎓 {!collapsed && "Sinh viên"}</Link>
-          <Link href="/giangvien_ad" className="side-link" title="Giảng viên">👩‍🏫 {!collapsed && "Giảng viên"}</Link>
-          <Link href="/lophoc_ad" className="side-link active" title="Lớp học">🏫 {!collapsed && "Lớp học"}</Link>
-          <Link href="/lichhoc_ad" className="side-link" title="Lịch học">📅 {!collapsed && "Lịch học"}</Link>
-          <Link href="/taikhoan_ad" className="side-link" title="Tài khoản">🔑 {!collapsed && "Tài khoản"}</Link>
-          <Link href="/caidat_ad" className="side-link" title="Cấu hình">⚙️ {!collapsed && "Cấu hình"}</Link>
-        </nav>
-      </aside>
-
-      <header className="topbar">
-        <div className="top-left">
-          <div className="page-title">Quản lý Lớp học</div>
-        </div>
-        <div className="controls">
-          <div className="search">
-            <i className="fas fa-search" />
-            <input value={search} onChange={(e)=>setSearch(e.target.value)} placeholder="Tìm mã lớp, tên lớp, giảng viên, khóa" />
-          </div>
-          <button className="qr-btn" onClick={async ()=>{ 
-            if (confirm('Bạn có chắc muốn đăng xuất?')) {
-              try { await fetch('http://localhost:8080/api/auth/logout', { method: 'POST', credentials: 'include' }); } catch {}
-              try { localStorage.removeItem('sas_user'); } catch {}
-              router.push('/login');
-            }
-          }}>🚪 Đăng xuất</button>
-        </div>
-      </header>
-
-      <main className="main">{children}</main>
-    </div>
-  );
+  const handleLogout = useCallback(async () => {
+    if (confirm('Bạn có chắc muốn đăng xuất?')) {
+      try {
+        await fetch('http://localhost:8080/api/auth/logout', { method: 'POST', credentials: 'include' });
+      } catch {}
+      try {
+        localStorage.removeItem('sas_user');
+      } catch {}
+      router.push('/login');
+    }
+  }, [router]);
 
   return (
-    <Shell>
+    <Shell
+      search={search}
+      onSearchChange={setSearch}
+      collapsed={collapsed}
+      onToggleCollapsed={() => setCollapsed((prev) => !prev)}
+      onLogout={handleLogout}
+    >
       <section className="cards">
         <div className="card"><div className="card-title">📚 Tổng số lớp</div><div className="card-num">{stats.total}</div></div>
         <div className="card"><div className="card-title">🏫 Đang hoạt động</div><div className="card-num">{stats.active}</div></div>
@@ -1080,34 +1137,6 @@ export default function AdminClassesPage() {
             <span className="chip-title">Tạo lớp mới</span>
             <span className="chip-sub">Thiết lập thông tin lớp</span>
           </button>
-          <div className="status-menu" ref={statusMenuRef}>
-            <button
-              className="chip outline"
-              disabled={!anySelected || bulkProcessing}
-              onClick={() => setStatusMenuOpen((prev) => !prev)}
-            >
-              <span className="chip-icon">⚙️</span>
-              <span className="chip-title">Cập nhật trạng thái</span>
-              <span className="chip-sub">Áp dụng cho lớp đã chọn</span>
-            </button>
-            {statusMenuOpen && (
-              <div
-                className="status-dropdown"
-              >
-                {(["Đang hoạt động", "Tạm nghỉ", "Kết thúc"] as ClassItem["status"][]).map((status) => (
-                  <button
-                    key={status}
-                    type="button"
-                    onClick={() => { bulkStatus(status); }}
-                    className="status-dropdown-item"
-                    disabled={bulkProcessing}
-                  >
-                    {status}
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
           <button className="chip soft" onClick={()=>alert("Nhập Excel/CSV")}>
             <span className="chip-icon">📥</span>
             <span className="chip-title">Nhập danh sách</span>
@@ -1151,7 +1180,7 @@ export default function AdminClassesPage() {
                 setDrawer(c);
                 fetchClassStudents(c.code).catch(() => {});
               }}>
-                <div><input type="checkbox" checked={selected.has(c.id)} onChange={(e)=>{e.stopPropagation(); toggleSelect(c.id);}} /></div>
+                <div><input type="checkbox" checked={selected.has(c.id)} onClick={(e)=>e.stopPropagation()} onChange={(e)=>{e.stopPropagation(); toggleSelect(c.id);}} /></div>
                 <div>{c.code}</div>
                 <div>{c.name}</div>
                 <div>{c.cohort}</div>
@@ -1159,9 +1188,8 @@ export default function AdminClassesPage() {
                 <div>{c.students}</div>
                 <div><span className={`status ${c.status}`.replace(/\s/g,"-")}>{c.status}</span></div>
                 <div className="actions">
-                  <button className="icon-btn" title="Xem" onClick={(e)=>{e.stopPropagation(); setDrawer(c); fetchClassStudents(c.code).catch(()=>{});}}>👁</button>
                   <button className="icon-btn" title="Sửa" onClick={(e)=>{e.stopPropagation(); onOpenEdit(c);}}>✏️</button>
-                  <button className="icon-btn" title="Xóa" onClick={(e)=>{e.stopPropagation(); if(confirm("Xóa lớp?")) setList(prev=>prev.filter(x=>x.id!==c.id));}}>🗑</button>
+                  <button className="icon-btn" title="Xóa" onClick={(e)=>{e.stopPropagation(); handleDeleteClass(c.code);}}>🗑</button>
                 </div>
               </div>
             ))}
@@ -1193,7 +1221,7 @@ export default function AdminClassesPage() {
                   <button className="qr-btn" onClick={()=>{ setDrawer(null); onOpenEdit(drawer); }}>✏️ Chỉnh sửa</button>
                   <button className="qr-btn" onClick={()=>alert("Đổi giảng viên")}>👨‍🏫 Đổi giảng viên</button>
                   <button className="qr-btn" onClick={()=>handleOpenAddStudent(drawer)}>➕ Thêm sinh viên</button>
-                  <button className="qr-btn" onClick={()=>{ if(confirm("Xóa lớp?")){ setList(prev=>prev.filter(x=>x.id!==drawer.id)); setDrawer(null);} }}>🗑 Xóa lớp</button>
+                  <button className="qr-btn" onClick={()=>{ handleDeleteClass(drawer.code); }}>🗑 Xóa lớp</button>
                 </div>
               </div>
               <div>
@@ -1236,7 +1264,7 @@ export default function AdminClassesPage() {
         edit={edit}
         options={options}
         existingClasses={list}
-        onClose={() => setModalOpen(false)}
+        onClose={() => { setModalOpen(false); setEdit(null); }}
         onSubmit={handleModalSubmit}
         onRequestCode={requestNextCode}
       />

@@ -23,6 +23,108 @@ type StudentOptionsResponse = {
 type HandleNoteChange = (studentId: string, value: string) => void;
 type HandleStudentCreated = (student: Student) => void;
 
+type ShellProps = {
+  collapsed: boolean;
+  onToggleCollapsed: () => void;
+  search: string;
+  onSearchChange: (value: string) => void;
+  selectedCount: number;
+  loading: boolean;
+  error: string | null;
+  onAddStudent: () => void;
+  onBulkDelete: () => void;
+  onLogout: () => void;
+  children: React.ReactNode;
+};
+
+function Shell({
+  collapsed,
+  onToggleCollapsed,
+  search,
+  onSearchChange,
+  selectedCount,
+  loading,
+  error,
+  onAddStudent,
+  onBulkDelete,
+  onLogout,
+  children,
+}: ShellProps) {
+  return (
+    <div className={`layout ${collapsed ? "collapsed" : ""}`}>
+      <aside className="sidebar">
+        <div className="side-header">
+          <button className="collapse-btn" onClick={onToggleCollapsed} title={collapsed ? "Mở rộng" : "Thu gọn"}>
+            {collapsed ? "⮞" : "⮜"}
+          </button>
+          {!collapsed && <div className="side-name">Smart Attendance</div>}
+        </div>
+        <nav className="side-nav">
+          <Link href="/tongquan_ad" className="side-link" title="Dashboard">🏠 {!collapsed && "Dashboard"}</Link>
+          <Link href="/thongbao_ad" className="side-link" title="Thông báo">📢 {!collapsed && "Thông báo"}</Link>
+          <Link href="/sinhvien_ad" className="side-link active" title="Sinh viên">👨‍🎓 {!collapsed && "Sinh viên"}</Link>
+          <Link href="/giangvien_ad" className="side-link" title="Giảng viên">👩‍🏫 {!collapsed && "Giảng viên"}</Link>
+          <Link href="/lophoc_ad" className="side-link" title="Lớp học">🏫 {!collapsed && "Lớp học"}</Link>
+          <Link href="/lichhoc_ad" className="side-link" title="Lịch học">📅 {!collapsed && "Lịch học"}</Link>
+          <Link href="/taikhoan_ad" className="side-link" title="Tài khoản">🔑 {!collapsed && "Tài khoản"}</Link>
+          <Link href="/caidat_ad" className="side-link" title="Cấu hình">⚙️ {!collapsed && "Cấu hình"}</Link>
+        </nav>
+      </aside>
+
+      <header className="topbar">
+        <div className="top-left">
+          <div className="page-title">Quản lý Sinh viên</div>
+        </div>
+        <div className="controls">
+          <div className="search">
+            <i className="fas fa-search" />
+            <input value={search} onChange={(e)=>onSearchChange(e.target.value)} placeholder="Tìm tên, MSSV" />
+          </div>
+          <button className="qr-btn" onClick={onLogout}>🚪 Đăng xuất</button>
+        </div>
+      </header>
+
+      <main className="main">
+        <div className="toolbar-sub">
+          <div className="left">
+            <button className="chip solid" onClick={onAddStudent}>
+              <span className="chip-icon">➕</span>
+              <span className="chip-title">Thêm sinh viên</span>
+              <span className="chip-sub">Tạo hồ sơ mới</span>
+            </button>
+            <button className="chip soft" onClick={()=>alert("Nhập CSV/Excel")}>
+              <span className="chip-icon">📥</span>
+              <span className="chip-title">Nhập danh sách</span>
+              <span className="chip-sub">Gồm file CSV, Excel</span>
+            </button>
+            <button className="chip outline" onClick={()=>alert("Xuất CSV/Excel")}>
+              <span className="chip-icon">📤</span>
+              <span className="chip-title">Xuất danh sách</span>
+              <span className="chip-sub">Tải về dạng CSV</span>
+            </button>
+            {selectedCount > 0 && (
+              <button className="chip danger" onClick={onBulkDelete}>
+                <span className="chip-icon">🗑</span>
+                <span className="chip-title">Xóa {selectedCount}</span>
+                <span className="chip-sub">Sinh viên đã chọn</span>
+              </button>
+            )}
+          </div>
+          <div className="right">
+            {loading && <span>Đang tải...</span>}
+            {!loading && error && <span className="error-text">{error}</span>}
+            {!loading && !error && selectedCount > 0 && <span>{selectedCount} sinh viên đã chọn</span>}
+          </div>
+        </div>
+
+        <div className="content-area">
+          {children}
+        </div>
+      </main>
+    </div>
+  );
+}
+
 export default function AdminStudentsPage() {
   const router = useRouter();
   const [collapsed, setCollapsed] = useState(false);
@@ -50,47 +152,45 @@ export default function AdminStudentsPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const fetchStudents = useCallback(async (signal?: AbortSignal) => {
+    setLoading(true);
+    setError(null);
+    try {
+      const params = new URLSearchParams();
+      if (search.trim()) params.set("search", search.trim());
+
+      const resp = await fetch(`http://localhost:8080/api/admin/students${params.toString() ? `?${params.toString()}` : ""}`, {
+        credentials: "include",
+        signal,
+      });
+      if (resp.status === 401) {
+        setError('Chưa đăng nhập hoặc phiên đã hết, vui lòng đăng nhập.');
+        try { router.push('/login'); } catch {};
+        return;
+      }
+      if (resp.status === 403) {
+        setError('Bạn không có quyền truy cập trang này.');
+        return;
+      }
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+      const data: StudentsListResponse = await resp.json();
+      if (signal?.aborted) return;
+      const rawStudents = Array.isArray(data?.students) ? data.students : [];
+      const students = rawStudents.map((item) => mapBackendStudent(item as Record<string, unknown>));
+      setList(students);
+    } catch (err: unknown) {
+      if (err instanceof DOMException && err.name === "AbortError") return;
+      console.error("fetch students error", err);
+      if (!signal?.aborted) setError("Không thể tải danh sách sinh viên. Vui lòng thử lại.");
+    } finally {
+      if (!signal?.aborted) setLoading(false);
+    }
+  }, [router, search]);
+
   useEffect(() => {
-    let isMounted = true;
     const controller = new AbortController();
 
-    const fetchStudents = async () => {
-      setLoading(true);
-      setError(null);
-      try {
-        const params = new URLSearchParams();
-        if (search.trim()) params.set("search", search.trim());
-
-        const resp = await fetch(`http://localhost:8080/api/admin/students${params.toString() ? `?${params.toString()}` : ""}`, {
-          credentials: "include",
-          signal: controller.signal,
-        });
-        if (resp.status === 401) {
-          // Not authenticated
-          if (isMounted) setError('Chưa đăng nhập hoặc phiên đã hết, vui lòng đăng nhập.');
-          try { router.push('/login'); } catch {};
-          return;
-        }
-        if (resp.status === 403) {
-          if (isMounted) setError('Bạn không có quyền truy cập trang này.');
-          return;
-        }
-        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-        const data: StudentsListResponse = await resp.json();
-        if (!isMounted) return;
-        const rawStudents = Array.isArray(data?.students) ? data.students : [];
-        const students = rawStudents.map((item) => mapBackendStudent(item as Record<string, unknown>));
-        setList(students);
-      } catch (err: unknown) {
-        if (err instanceof DOMException && err.name === "AbortError") return;
-        console.error("fetch students error", err);
-        if (isMounted) setError("Không thể tải danh sách sinh viên. Vui lòng thử lại.");
-      } finally {
-        if (isMounted) setLoading(false);
-      }
-    };
-
-    fetchStudents();
+    fetchStudents(controller.signal);
 
     try {
       const saved = localStorage.getItem("sas_settings");
@@ -101,10 +201,9 @@ export default function AdminStudentsPage() {
     } catch {}
 
     return () => {
-      isMounted = false;
       controller.abort();
     };
-  }, [search]);
+  }, [fetchStudents]);
 
   useEffect(() => {
     const fetchOptions = async () => {
@@ -182,89 +281,33 @@ export default function AdminStudentsPage() {
 
   const bulkDelete = () => {
     if (!confirm("Xóa các sinh viên đã chọn?")) return;
-    setList((prev) => prev.filter((s) => !selected.has(s.id)));
-    setSelected(new Set());
+    const ids = Array.from(selected);
+    if (!ids.length) return;
+
+    (async () => {
+      for (const id of ids) {
+        const student = list.find((s) => s.id === id);
+        if (!student || !student.mssv) continue;
+        try {
+          await fetch(`http://localhost:8080/api/admin/students/${encodeURIComponent(student.mssv)}`, {
+            method: "DELETE",
+            credentials: "include",
+          });
+        } catch (err) {
+          console.error("delete student error", err);
+        }
+      }
+      setList((prev) => prev.filter((s) => !selected.has(s.id)));
+      setSelected(new Set());
+    })();
   };
-
-  const Shell = ({ children }: { children: React.ReactNode }) => (
-    <div className={`layout ${collapsed ? "collapsed" : ""}`}>
-      <aside className="sidebar">
-        <div className="side-header">
-          <button className="collapse-btn" onClick={() => setCollapsed(!collapsed)} title={collapsed ? "Mở rộng" : "Thu gọn"}>
-            {collapsed ? "⮞" : "⮜"}
-          </button>
-          {!collapsed && <div className="side-name">Smart Attendance</div>}
-        </div>
-        <nav className="side-nav">
-          <Link href="/tongquan_ad" className="side-link" title="Dashboard">🏠 {!collapsed && "Dashboard"}</Link>
-          <Link href="/thongbao_ad" className="side-link" title="Thông báo">📢 {!collapsed && "Thông báo"}</Link>
-          <Link href="/sinhvien_ad" className="side-link active" title="Sinh viên">👨‍🎓 {!collapsed && "Sinh viên"}</Link>
-          <Link href="/giangvien_ad" className="side-link" title="Giảng viên">👩‍🏫 {!collapsed && "Giảng viên"}</Link>
-          <Link href="/lophoc_ad" className="side-link" title="Lớp học">🏫 {!collapsed && "Lớp học"}</Link>
-          <Link href="/lichhoc_ad" className="side-link" title="Lịch học">📅 {!collapsed && "Lịch học"}</Link>
-          <Link href="/taikhoan_ad" className="side-link" title="Tài khoản">🔑 {!collapsed && "Tài khoản"}</Link>
-          <Link href="/caidat_ad" className="side-link" title="Cấu hình">⚙️ {!collapsed && "Cấu hình"}</Link>
-        </nav>
-      </aside>
-
-      <header className="topbar">
-        <div className="top-left">
-          <div className="page-title">Quản lý Sinh viên</div>
-        </div>
-        <div className="controls">
-          <div className="search">
-            <i className="fas fa-search" />
-            <input value={search} onChange={(e)=>setSearch(e.target.value)} placeholder="Tìm tên, MSSV" />
-          </div>
-          <button className="qr-btn" onClick={async ()=>{
-            if (confirm('Bạn có chắc muốn đăng xuất?')) {
-              try { await fetch('http://localhost:8080/api/auth/logout', { method: 'POST', credentials: 'include' }); } catch {}
-              try { localStorage.removeItem('sas_user'); } catch {}
-              router.push('/login');
-            }
-          }}>🚪 Đăng xuất</button>
-        </div>
-      </header>
-
-      <main className="main">
-        <div className="toolbar-sub">
-          <div className="left">
-            <button className="chip solid" onClick={onAddStudent}>
-              <span className="chip-icon">➕</span>
-              <span className="chip-title">Thêm sinh viên</span>
-              <span className="chip-sub">Tạo hồ sơ mới</span>
-            </button>
-            <button className="chip soft" onClick={()=>alert("Nhập CSV/Excel")}>
-              <span className="chip-icon">📥</span>
-              <span className="chip-title">Nhập danh sách</span>
-              <span className="chip-sub">Gồm file CSV, Excel</span>
-            </button>
-            <button className="chip outline" onClick={()=>alert("Xuất CSV/Excel")}>
-              <span className="chip-icon">📤</span>
-              <span className="chip-title">Xuất danh sách</span>
-              <span className="chip-sub">Tải về dạng CSV</span>
-            </button>
-            {selectedCount > 0 && (
-              <button className="chip danger" onClick={bulkDelete}>
-                <span className="chip-icon">🗑</span>
-                <span className="chip-title">Xóa {selectedCount}</span>
-                <span className="chip-sub">Sinh viên đã chọn</span>
-              </button>
-            )}
-          </div>
-          <div className="right">
-            {loading && <span>Đang tải...</span>}
-            {!loading && error && <span className="error-text">{error}</span>}
-            {!loading && !error && selectedCount > 0 && <span>{selectedCount} sinh viên đã chọn</span>}
-          </div>
-        </div>
-
-        <div className="content-area">
-          {children}
-        </div>
-      </main>
-    </div>
-  );
+  const handleLogout = useCallback(async () => {
+    if (confirm('Bạn có chắc muốn đăng xuất?')) {
+      try { await fetch('http://localhost:8080/api/auth/logout', { method: 'POST', credentials: 'include' }); } catch {}
+      try { localStorage.removeItem('sas_user'); } catch {}
+      router.push('/login');
+    }
+  }, [router]);
 
   const closeModal = useCallback(() => {
     setModalOpen(false);
@@ -286,16 +329,23 @@ export default function AdminStudentsPage() {
   }, []);
 
   const handleStudentCreated: HandleStudentCreated = useCallback((student) => {
-    setList((prev) => {
-      const withoutDup = prev.filter((s) => s.id !== student.id);
-      return [student, ...withoutDup];
-    });
     closeModal();
-    setSearch("");
-  }, [closeModal]);
+    fetchStudents();
+  }, [closeModal, fetchStudents]);
 
   return (
-    <Shell>
+    <Shell
+      collapsed={collapsed}
+      onToggleCollapsed={() => setCollapsed(!collapsed)}
+      search={search}
+      onSearchChange={setSearch}
+      selectedCount={selectedCount}
+      loading={loading}
+      error={error}
+      onAddStudent={onAddStudent}
+      onBulkDelete={bulkDelete}
+      onLogout={handleLogout}
+    >
       <div className="panel">
         <div className="table students-table">
           <div className="thead">
@@ -309,7 +359,15 @@ export default function AdminStudentsPage() {
           </div>
           <div className="tbody">
             {filtered.map((s) => (
-              <div className="trow" key={s.id} onClick={() => setDrawer(s)}>
+              <div
+                className="trow"
+                key={s.id}
+                onMouseDown={(e) => {
+                  const target = e.target as HTMLElement | null;
+                  if (target && target.closest("input,button")) return;
+                  setDrawer(s);
+                }}
+              >
                 <div><input type="checkbox" checked={selected.has(s.id)} onChange={(e)=>{e.stopPropagation(); toggleSelect(s.id);}} /></div>
                 <div>{s.mssv}</div>
                 <div>{s.name}</div>
@@ -318,7 +376,24 @@ export default function AdminStudentsPage() {
                 <div><span className={`status ${s.status}`.replace(/\s/g,"-")}>{s.status}</span></div>
                 <div className="actions">
                   <button className="icon-btn" title="Sửa" onClick={(e)=>{e.stopPropagation(); onOpenEdit(s);}}>✏️</button>
-                  <button className="icon-btn" title="Xóa" onClick={(e)=>{e.stopPropagation(); if(confirm("Xóa sinh viên?")) setList(prev=>prev.filter(x=>x.id!==s.id));}}>🗑</button>
+                  <button
+                    className="icon-btn"
+                    title="Xóa"
+                    onClick={async (e)=>{
+                      e.stopPropagation();
+                      if (!confirm("Xóa sinh viên?")) return;
+                      try {
+                        await fetch(`http://localhost:8080/api/admin/students/${encodeURIComponent(s.mssv)}`, {
+                          method: "DELETE",
+                          credentials: "include",
+                        });
+                        setList(prev=>prev.filter(x=>x.id!==s.id));
+                      } catch (err) {
+                        console.error("delete student error", err);
+                        alert("Không thể xóa sinh viên trên hệ thống. Vui lòng thử lại.");
+                      }
+                    }}
+                  >🗑</button>
                 </div>
               </div>
             ))}
@@ -348,7 +423,23 @@ export default function AdminStudentsPage() {
                   <button className="qr-btn" onClick={()=>{ setDrawer(null); onOpenEdit(drawer); }}>✏️ Chỉnh sửa</button>
                   <button className="qr-btn" onClick={()=>setList(prev=>prev.map(x=>x.id===drawer.id?{...x,status:x.status==="Hoạt động"?"Bị khóa":"Hoạt động"}:x))}>{drawer.status==="Hoạt động"?"🔒 Khóa":"✅ Mở khóa"}</button>
                   <button className="qr-btn" onClick={()=>alert("Chuyển lớp")}>🔁 Chuyển lớp</button>
-                  <button className="qr-btn" onClick={()=>{ if(confirm("Xóa sinh viên?")){ setList(prev=>prev.filter(x=>x.id!==drawer.id)); setDrawer(null);} }}>🗑 Xóa</button>
+                  <button
+                    className="qr-btn"
+                    onClick={async ()=>{
+                      if (!confirm("Xóa sinh viên?")) return;
+                      try {
+                        await fetch(`http://localhost:8080/api/admin/students/${encodeURIComponent(drawer.mssv)}`, {
+                          method: "DELETE",
+                          credentials: "include",
+                        });
+                        setList(prev=>prev.filter(x=>x.id!==drawer.id));
+                        setDrawer(null);
+                      } catch (err) {
+                        console.error("delete student error", err);
+                        alert("Không thể xóa sinh viên trên hệ thống. Vui lòng thử lại.");
+                      }
+                    }}
+                  >🗑 Xóa</button>
                 </div>
               </div>
               <div className="study">

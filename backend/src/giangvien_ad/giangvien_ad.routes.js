@@ -182,4 +182,159 @@ router.post('/', async (req, res) => {
   }
 });
 
+router.put('/:id', async (req, res) => {
+  try {
+    const teacherId = String(req.params.id || '').trim();
+    if (!teacherId) {
+      return res.status(400).json({ success: false, message: 'Thiếu mã giảng viên' });
+    }
+
+    const existing = await prisma.teachers.findUnique({ where: { teacher_id: teacherId } });
+    if (!existing) {
+      return res.status(404).json({ success: false, message: 'Giảng viên không tồn tại' });
+    }
+
+    const {
+      code,
+      fullName,
+      email,
+      phone,
+      subject,
+      faculty,
+      status,
+      classes,
+    } = req.body || {};
+
+    if (!fullName || typeof fullName !== 'string' || !fullName.trim()) {
+      return res.status(400).json({ success: false, message: 'Họ tên là bắt buộc' });
+    }
+
+    const subjectToUse = typeof subject === 'string' && subject.trim() ? subject.trim() : existing.subject;
+    const facultyToUse = typeof faculty === 'string' && faculty.trim() ? faculty.trim() : (existing.faculty || 'Chưa cập nhật');
+    const statusToUse = normalizeStatus(status || existing.status);
+    const classesValue = Array.isArray(classes)
+      ? classes.map((item) => String(item || '').trim()).filter(Boolean).join(', ')
+      : existing.classes;
+
+    const incomingCode = typeof code === 'string' && code.trim()
+      ? code.trim().toUpperCase()
+      : teacherId.toUpperCase();
+    const currentCode = teacherId.toUpperCase();
+    const isChangingCode = incomingCode !== currentCode;
+
+    if (isChangingCode) {
+      const conflictTeacher = await prisma.teachers.findUnique({ where: { teacher_id: incomingCode } });
+      if (conflictTeacher) {
+        return res.status(409).json({ success: false, message: 'Mã giảng viên mới đã tồn tại' });
+      }
+
+      const conflictAccount = await prisma.accounts.findUnique({ where: { user_code: incomingCode } });
+      if (conflictAccount) {
+        return res.status(409).json({ success: false, message: 'Đã tồn tại tài khoản với mã này' });
+      }
+    }
+
+    const updated = await prisma.$transaction(async (tx) => {
+      const newTeacherId = isChangingCode ? incomingCode : teacherId;
+
+      if (isChangingCode) {
+        await tx.accounts.updateMany({
+          where: existing.account_id
+            ? { id: existing.account_id }
+            : { user_code: teacherId },
+          data: { user_code: newTeacherId },
+        });
+
+        await tx.teachers.update({
+          where: { teacher_id: teacherId },
+          data: { teacher_id: newTeacherId },
+        });
+
+        await tx.classes.updateMany({
+          where: { teacher_id: teacherId },
+          data: { teacher_id: newTeacherId },
+        });
+
+        await tx.teacher_availability.updateMany({
+          where: { teacher_id: teacherId },
+          data: { teacher_id: newTeacherId },
+        });
+
+        await tx.timetable.updateMany({
+          where: { teacher_id: teacherId },
+          data: { teacher_id: newTeacherId, teacher_name: fullName.trim() },
+        });
+      } else {
+        await tx.timetable.updateMany({
+          where: { teacher_id: teacherId },
+          data: { teacher_name: fullName.trim() },
+        });
+      }
+
+      const teacher = await tx.teachers.update({
+        where: { teacher_id: isChangingCode ? incomingCode : teacherId },
+        data: {
+          full_name: fullName.trim(),
+          email: email && typeof email === 'string' ? email.trim() : null,
+          phone: phone && typeof phone === 'string' ? phone.trim() : null,
+          subject: subjectToUse,
+          faculty: facultyToUse,
+          status: statusToUse,
+          classes: classesValue,
+        },
+      });
+
+      return teacher;
+    });
+
+    return res.json({
+      success: true,
+      lecturer: mapLecturer(updated),
+    });
+  } catch (error) {
+    console.error('admin lecturers update error:', error);
+    return res.status(500).json({ success: false, message: 'Lỗi hệ thống' });
+  }
+});
+
+router.delete('/:id', async (req, res) => {
+  try {
+    const teacherId = String(req.params.id || '').trim();
+    if (!teacherId) {
+      return res.status(400).json({ success: false, message: 'Thiếu mã giảng viên' });
+    }
+
+    const existing = await prisma.teachers.findUnique({ where: { teacher_id: teacherId } });
+    if (!existing) {
+      return res.status(404).json({ success: false, message: 'Giảng viên không tồn tại' });
+    }
+
+    await prisma.$transaction(async (tx) => {
+      await tx.classes.updateMany({
+        where: { teacher_id: teacherId },
+        data: { teacher_id: null },
+      });
+
+      await tx.timetable.updateMany({
+        where: { teacher_id: teacherId },
+        data: { teacher_id: null, teacher_name: null },
+      });
+
+      if (existing.account_id) {
+        // Xóa account sẽ cascade xóa teacher qua FK teachers.account_id
+        await tx.accounts.delete({ where: { id: existing.account_id } });
+      } else {
+        // Không có account_id, xóa teacher trực tiếp và dọn các account rời (nếu có)
+        await tx.teachers.delete({ where: { teacher_id: teacherId } });
+        await tx.accounts.deleteMany({ where: { user_code: teacherId } });
+      }
+    });
+
+    return res.json({ success: true, message: 'Đã xóa giảng viên và các thông tin liên quan' });
+  } catch (error) {
+    console.error('admin lecturers delete error:', error);
+    return res.status(500).json({ success: false, message: 'Lỗi hệ thống' });
+  }
+});
+
 module.exports = router;

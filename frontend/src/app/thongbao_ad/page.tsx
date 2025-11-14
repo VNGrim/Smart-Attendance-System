@@ -669,10 +669,8 @@ export default function AdminNotifyPage() {
 
   const filters = [
     { key: "all", label: "Tất cả" },
-    { key: "toantruong", label: "📢 Toàn trường" },
     { key: "giangvien", label: "👨‍🏫 Giảng viên" },
     { key: "sinhvien", label: "🎓 Sinh viên" },
-    { key: "scheduled", label: "⏰ Đã lên lịch" },
     { key: "deleted", label: "🗑 Đã xóa" },
   ];
 
