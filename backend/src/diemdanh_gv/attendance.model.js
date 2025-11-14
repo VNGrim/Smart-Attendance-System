@@ -107,6 +107,25 @@ async function getClassSlotsByDay(classId, dayKey, targetDate) {
   }
 
   // Fallback: lịch cố định theo thứ trong tuần (date IS NULL)
+  if (dayKey) {
+    const rowsWithDay = await prisma.$queryRaw`
+      SELECT
+        id,
+        slot_id,
+        room,
+        week_key,
+        subject_name,
+        teacher_name,
+        day_of_week
+      FROM timetable
+      WHERE classes = ${normalizedClass}
+        AND date IS NULL
+        AND day_of_week::text = ${dayKey}
+      ORDER BY slot_id ASC
+    `;
+    return rowsWithDay;
+  }
+
   const rows = await prisma.$queryRaw`
     SELECT
       id,
@@ -119,7 +138,6 @@ async function getClassSlotsByDay(classId, dayKey, targetDate) {
     FROM timetable
     WHERE classes = ${normalizedClass}
       AND date IS NULL
-      ${dayKey ? prisma.$unsafe(`AND day_of_week::text = '${dayKey}'`) : prisma.$unsafe('')}
     ORDER BY slot_id ASC
   `;
 
