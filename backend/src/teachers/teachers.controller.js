@@ -45,37 +45,33 @@ exports.getTeacherInfo = async (req, res) => {
   }
 };
 
-// Cập nhật avatar giảng viên
+// Cập nhật avatar giảng viên (nhận URL từ Supabase)
 exports.updateAvatar = async (req, res) => {
   try {
-    const { teacher_id } = req.body;
-    
-    if (!req.file) {
+    const { teacher_id, avatar_url } = req.body || {};
+
+    if (!teacher_id || !avatar_url) {
       return res.status(400).json({
         success: false,
-        message: "Không có file được upload"
+        message: "Thiếu teacher_id hoặc avatar_url",
       });
     }
 
-    // Đường dẫn avatar (relative path)
-    const avatarPath = `/uploads/${req.file.filename}`;
-
-    // Cập nhật vào database
     const updatedTeacher = await prisma.teachers.update({
       where: { teacher_id },
-      data: { avatar_url: avatarPath }
+      data: { avatar_url },
     });
 
     res.json({
       success: true,
       message: "Cập nhật avatar thành công",
-      avatar_url: avatarPath
+      avatar_url: updatedTeacher.avatar_url,
     });
   } catch (err) {
     console.error("Error updating teacher avatar:", err);
     res.status(500).json({
       success: false,
-      message: "Lỗi server khi cập nhật avatar"
+      message: "Lỗi server khi cập nhật avatar",
     });
   }
 };
