@@ -298,6 +298,21 @@ th, td { text-align: left; padding: 10px; border-top: 1px solid var(--card-borde
   background: rgba(42, 53, 71, 0.4);
 }
 
+/* Row highlighting by attendance status */
+.detail-table tbody tr.row-present {
+  background: rgba(22, 163, 74, 0.15);
+}
+
+.detail-table tbody tr.row-absent {
+  background: rgba(239, 68, 68, 0.12);
+}
+
+/* Scrollable area for history detail student list */
+.modal-body .table-wrap {
+  max-height: 320px;
+  overflow-y: auto;
+}
+
 /* Status Dropdown */
 .status-select {
   min-width: 120px;

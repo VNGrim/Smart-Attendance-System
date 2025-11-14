@@ -11,6 +11,40 @@ function formatTime(value) {
   return dayjs(value).utc().format("HH:mm");
 }
 
+function normalizeDay(value) {
+  if (!value) return "Mon";
+  const str = String(value).trim();
+  const upper = str.charAt(0).toUpperCase() + str.slice(1).toLowerCase();
+  const allowed = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+  return allowed.includes(upper) ? upper : "Mon";
+}
+
+function computeDateFromWeekDay(weekKey, day) {
+  if (!weekKey) return null;
+  const match = String(weekKey).trim().match(/^(\d{4})-W(\d{2})$/);
+  if (!match) return null;
+  const year = Number(match[1]);
+  const week = Number(match[2]);
+  if (!Number.isInteger(year) || !Number.isInteger(week) || week < 1 || week > 53) return null;
+
+  // Tính thứ 2 của tuần ISO (UTC)
+  const simple = new Date(Date.UTC(year, 0, 1 + (week - 1) * 7));
+  const dayOfWeek = simple.getUTCDay() || 7; // 1=Mon..7=Sun
+  const weekStart = new Date(simple);
+  weekStart.setUTCDate(simple.getUTCDate() - (dayOfWeek - 1));
+  weekStart.setUTCHours(0, 0, 0, 0);
+
+  const normalizedDay = normalizeDay(day);
+  const order = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+  const index = order.indexOf(normalizedDay);
+  if (index < 0) return null;
+
+  const target = new Date(weekStart);
+  target.setUTCDate(weekStart.getUTCDate() + index);
+  target.setUTCHours(0, 0, 0, 0);
+  return target;
+}
+
 exports.getStudentInfo = async (studentId) => {
   await prisma.$ready;
   return prisma.students.findUnique({
@@ -82,7 +116,7 @@ exports.getStudentSchedule = async (studentId, weekKey) => {
       slot: normalizedSlot,
     };
 
-    let session = await prisma.attendanceSession.findFirst({
+    const session = await prisma.attendanceSession.findFirst({
       where: normalizedDate ? { ...baseWhere, date: normalizedDate } : baseWhere,
       orderBy: [
         { date: "desc" },
@@ -97,36 +131,33 @@ exports.getStudentSchedule = async (studentId, weekKey) => {
       },
     });
 
-    if (!session && normalizedDate) {
-      session = await prisma.attendanceSession.findFirst({
-        where: baseWhere,
-        orderBy: [
-          { date: "desc" },
-          { createdAt: "desc" },
-        ],
-        include: {
-          records: {
-            where: { studentId: targetStudentId },
-            select: { status: true },
-            take: 1,
-          },
-        },
-      });
+    if (!session) {
+      statusCache.set(cacheKey, null);
+      return null;
     }
 
-    const status = session?.records?.[0]?.status ?? null;
-    statusCache.set(cacheKey, status);
-    return status;
+    const recordStatus = session.records?.[0]?.status ?? null;
+    let normalizedStatus = recordStatus;
+
+    if (!normalizedStatus && (session.status === "ended" || session.status === "closed")) {
+      normalizedStatus = "absent";
+    }
+
+    statusCache.set(cacheKey, normalizedStatus);
+    return normalizedStatus;
   };
 
   const mappedRows = await Promise.all(
     rows.map(async (row) => {
       const slotId = Number(row.slot_id);
       const classInfo = classMap.get(row.classes);
+      const effectiveDate = row.date
+        ? dayjs(row.date).utc().startOf("day").toDate()
+        : computeDateFromWeekDay(row.week_key, row.day_of_week);
       const attendanceStatus = await resolveAttendanceStatus({
         classId: row.classes,
         slotId,
-        date: row.date ?? null,
+        date: effectiveDate,
       });
 
       return {
@@ -141,7 +172,7 @@ exports.getStudentSchedule = async (studentId, weekKey) => {
         subject_name: classInfo?.subject_name || row.subject_name || row.classes,
         subject_code: classInfo?.subject_code || "",
         week_key: row.week_key,
-        date: row.date ? dayjs(row.date).utc().format("YYYY-MM-DD") : null,
+        date: effectiveDate ? dayjs(effectiveDate).utc().format("YYYY-MM-DD") : null,
         attendance_status: attendanceStatus,
         attendanceStatus,
       };

@@ -418,6 +418,12 @@ export default function LecturerAttendancePage() {
     };
   }, [session]);
 
+  const hideManualList = useMemo(() => {
+    if (!session) return false;
+    if (!sessionHasMode(session.type, "manual")) return false;
+    return session.status !== "active";
+  }, [session]);
+
   const clearCountdown = useCallback(() => {
     if (countdownRef.current != null) {
       window.clearInterval(countdownRef.current);
@@ -1020,11 +1026,20 @@ export default function LecturerAttendancePage() {
         }
       );
       setStudents(payload.data || []);
-      alert("Đã lưu điểm danh thủ công");
+
+      await fetchJson<{ success: boolean; data: SessionSummary }>(
+        `${API_BASE}/sessions/${session.id}/close`,
+        {
+          method: "POST",
+        }
+      );
+
+      await refreshSessionData(session.id, { loadStudents: false });
+      setSessionNotice({ type: "success", message: "Đã kết thúc phiên điểm danh" });
     } catch (err: any) {
       alert(err.message || "Không thể lưu điểm danh");
     }
-  }, [session, students]);
+  }, [session, students, refreshSessionData]);
 
   const handleManualCheckbox = useCallback(
     (studentId: string, checked: boolean) => {
@@ -1227,80 +1242,88 @@ export default function LecturerAttendancePage() {
 
         <div className="panel">
           <div className="section-title">Danh sách điểm danh</div>
-          <div className="row-actions">
-            <div className="seg">
-              <button className={`seg-btn ${filter === "all" ? "active" : ""}`} onClick={() => setFilter("all")}>
-                Tất cả
-              </button>
-              <button className={`seg-btn ${filter === "present" ? "active" : ""}`} onClick={() => setFilter("present")}>
-                Đã điểm danh
-              </button>
-              <button className={`seg-btn ${filter === "absent" ? "active" : ""}`} onClick={() => setFilter("absent")}>
-                Chưa điểm danh
-              </button>
-              <button className={`seg-btn ${filter === "excused" ? "active" : ""}`} onClick={() => setFilter("excused")}>
-                Có phép
-              </button>
+          {hideManualList ? (
+            <div style={{ padding: 12, color: "#64748b" }}>
+              Phiên điểm danh thủ công đã kết thúc. Danh sách điểm danh đã được lưu.
             </div>
-          </div>
-          {studentLoading && <div className="loading-row">Đang tải danh sách...</div>}
-          <div className="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>Mã SV</th>
-                  <th>Họ tên</th>
-                  <th>Email</th>
-                  <th>Trạng thái</th>
-                  <th>Thời gian</th>
-                  {session && sessionHasMode(session.type, "manual") && <th>Thao tác</th>}
-                </tr>
-              </thead>
-              <tbody>
-                {(() => {
-                  const rows = [];
-                  for (let i = 0; i < filtered.length; i++) {
-                    const s = filtered[i];
-                    rows.push(
-                      <tr key={s.studentId}>
-                        <td>{s.studentId}</td>
-                        <td>{s.fullName}</td>
-                        <td>{s.email || "--"}</td>
-                        <td>{s.status === "present" ? "✅ Có mặt" : s.status === "excused" ? "📝 Có phép" : "❌ Vắng"}</td>
-                        <td>{s.markedAt ? formatVietnamTime(s.markedAt) : "--"}</td>
-                        {session && sessionHasMode(session.type, "manual") && (
-                          <td>
-                            <label className="manual-check">
-                              <input
-                                type="checkbox"
-                                checked={s.status === "present"}
-                                onChange={(event) => handleManualCheckbox(s.studentId, event.target.checked)}
-                              />
-                              Có mặt
-                            </label>
-                          </td>
-                        )}
+          ) : (
+            <>
+              <div className="row-actions">
+                <div className="seg">
+                  <button className={`seg-btn ${filter === "all" ? "active" : ""}`} onClick={() => setFilter("all")}>
+                    Tất cả
+                  </button>
+                  <button className={`seg-btn ${filter === "present" ? "active" : ""}`} onClick={() => setFilter("present")}>
+                    Đã điểm danh
+                  </button>
+                  <button className={`seg-btn ${filter === "absent" ? "active" : ""}`} onClick={() => setFilter("absent")}>
+                    Chưa điểm danh
+                  </button>
+                  <button className={`seg-btn ${filter === "excused" ? "active" : ""}`} onClick={() => setFilter("excused")}>
+                    Có phép
+                  </button>
+                </div>
+              </div>
+              {studentLoading && <div className="loading-row">Đang tải danh sách...</div>}
+              <div className="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Mã SV</th>
+                      <th>Họ tên</th>
+                      <th>Email</th>
+                      <th>Trạng thái</th>
+                      <th>Thời gian</th>
+                      {session && sessionHasMode(session.type, "manual") && <th>Thao tác</th>}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(() => {
+                      const rows = [];
+                      for (let i = 0; i < filtered.length; i++) {
+                        const s = filtered[i];
+                        rows.push(
+                          <tr key={s.studentId}>
+                            <td>{s.studentId}</td>
+                            <td>{s.fullName}</td>
+                            <td>{s.email || "--"}</td>
+                            <td>{s.status === "present" ? "✅ Có mặt" : s.status === "excused" ? "📝 Có phép" : "❌ Vắng"}</td>
+                            <td>{s.markedAt ? formatVietnamTime(s.markedAt) : "--"}</td>
+                            {session && sessionHasMode(session.type, "manual") && (
+                              <td>
+                                <label className="manual-check">
+                                  <input
+                                    type="checkbox"
+                                    checked={s.status === "present"}
+                                    onChange={(event) => handleManualCheckbox(s.studentId, event.target.checked)}
+                                  />
+                                  Có mặt
+                                </label>
+                              </td>
+                            )}
+                          </tr>
+                        );
+                      }
+                      return rows;
+                    })()}
+                    {!filtered.length && !studentLoading && (
+                      <tr>
+                        <td colSpan={session && sessionHasMode(session.type, "manual") ? 6 : 5} style={{ textAlign: "center", padding: 16, color: "#64748b" }}>
+                          Chưa có dữ liệu điểm danh
+                        </td>
                       </tr>
-                    );
-                  }
-                  return rows;
-                })()}
-                {!filtered.length && !studentLoading && (
-                  <tr>
-                    <td colSpan={session && sessionHasMode(session.type, "manual") ? 6 : 5} style={{ textAlign: "center", padding: 16, color: "#64748b" }}>
-                      Chưa có dữ liệu điểm danh
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-          {session && sessionHasMode(session.type, "manual") && (
-            <div className="actions end" style={{ marginTop: 12 }}>
-              <button className="btn-primary" onClick={handleManualUpdate}>
-                💾 Lưu điểm danh thủ công
-              </button>
-            </div>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+              {session && sessionHasMode(session.type, "manual") && (
+                <div className="actions end" style={{ marginTop: 12 }}>
+                  <button className="btn-primary" onClick={handleManualUpdate}>
+                    💾 Lưu điểm danh thủ công
+                  </button>
+                </div>
+              )}
+            </>
           )}
         </div>
       </div>
@@ -1466,9 +1489,15 @@ export default function LecturerAttendancePage() {
                         </span>
                       </div>
                       <div className="summary-item">
-                        <span className="summary-label">Ngày</span>
+                        <span className="summary-label">Slot</span>
                         <span className="summary-value">
-                          {formatDateOrFallback(getSessionDisplayDate(historyDetail.session))}
+                          {historyDetail.session.slotId ? `Slot ${historyDetail.session.slotId}` : "--"}
+                        </span>
+                      </div>
+                      <div className="summary-item">
+                        <span className="summary-label">Tổng sinh viên</span>
+                        <span className="summary-value">
+                          {historyDetail.session.totalStudents ?? historyDetail.summary.total}
                         </span>
                       </div>
                       <div className="summary-item">
@@ -1507,7 +1536,16 @@ export default function LecturerAttendancePage() {
                               const recordId = row.recordId;
                               const disabled = !recordId || updatingRecordId === recordId;
                               return (
-                                <tr key={`${row.studentId}-${recordId ?? "noid"}`}>
+                                <tr
+                                  key={`${row.studentId}-${recordId ?? "noid"}`}
+                                  className={
+                                    row.status === "present"
+                                      ? "row-present"
+                                      : row.status === "absent"
+                                      ? "row-absent"
+                                      : ""
+                                  }
+                                >
                                   <td>{row.studentId}</td>
                                   <td>{row.fullName || "--"}</td>
                                   <td>
