@@ -25,7 +25,7 @@ type AddStudentModalProps = {
   candidates: StudentRow[];
   search: string;
   onSearchChange: (value: string) => void;
-  selectedId: string;
+  selectedIds: string[];
   onSelect: (studentId: string) => void;
   onClose: () => void;
   onSubmit: () => void;
@@ -38,7 +38,7 @@ const AddStudentModal = ({
   candidates,
   search,
   onSearchChange,
-  selectedId,
+  selectedIds,
   onSelect,
   onClose,
   onSubmit,
@@ -71,12 +71,12 @@ const AddStudentModal = ({
           <div className="candidate-list">
             {candidates.length ? (
               candidates.map((candidate) => (
-                <label key={candidate.studentId} className={`candidate-item ${candidate.studentId === selectedId ? "selected" : ""}`}>
+                <label key={candidate.studentId} className={`candidate-item ${selectedIds.includes(candidate.studentId) ? "selected" : ""}`}>
                   <input
-                    type="radio"
+                    type="checkbox"
                     name="candidate"
                     value={candidate.studentId}
-                    checked={candidate.studentId === selectedId}
+                    checked={selectedIds.includes(candidate.studentId)}
                     onChange={() => onSelect(candidate.studentId)}
                   />
                   <div>
@@ -91,10 +91,10 @@ const AddStudentModal = ({
           </div>
         </div>
         <div className="modal-foot">
-          <div className="foot-left">Chọn sinh viên và nhấn "Thêm"</div>
+          <div className="foot-left">Tick chọn nhiều sinh viên rồi nhấn "Thêm"</div>
           <div className="foot-right">
             <button className="qr-btn ghost" onClick={onClose} disabled={loading}>Hủy</button>
-            <button className="qr-btn" onClick={onSubmit} disabled={loading || !selectedId}>➕ {loading ? "Đang thêm..." : "Thêm"}</button>
+            <button className="qr-btn" onClick={onSubmit} disabled={loading || selectedIds.length === 0}>➕ {loading ? "Đang thêm..." : "Thêm"}</button>
           </div>
         </div>
       </div>
@@ -543,6 +543,18 @@ export default function AdminClassesPage() {
   const [dark, setDark] = useState(false);
   const [notifCount] = useState(1);
   const [search, setSearch] = useState("");
+    const [selectedCandidateIds, setSelectedCandidateIds] = useState<string[]>([]);
+
+    // Hàm tick chọn/xóa sinh viên
+    const handleSelectCandidate = useCallback((studentId: string) => {
+      setSelectedCandidateIds((prev) => {
+        if (prev.includes(studentId)) {
+          return prev.filter((id) => id !== studentId);
+        } else {
+          return [...prev, studentId];
+        }
+      });
+    }, []);
   const [filterCohort, setFilterCohort] = useState("Tất cả khóa");
   const [filterTeacher, setFilterTeacher] = useState("Tất cả giảng viên");
   const [filterStatus, setFilterStatus] = useState("Tất cả trạng thái");
@@ -726,7 +738,7 @@ export default function AdminClassesPage() {
   }, []);
 
   const handleAddStudent = useCallback(async () => {
-    if (!addStudentTarget || !selectedCandidateId) {
+    if (!addStudentTarget || !selectedCandidateIds.length) {
       alert("Vui lòng chọn sinh viên");
       return;
     }
@@ -736,7 +748,7 @@ export default function AdminClassesPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
-        body: JSON.stringify({ studentId: selectedCandidateId }),
+        body: JSON.stringify({ studentIds: selectedCandidateIds }),
       });
       const data = await resp.json().catch(() => null);
       if (!resp.ok) {
@@ -744,7 +756,7 @@ export default function AdminClassesPage() {
       }
       alert("Đã thêm sinh viên vào lớp");
       handleCloseAddStudent();
-      setSelectedCandidateId("");
+      setSelectedCandidateIds([]);
       await fetchClassStudents(addStudentTarget.code);
       fetchStudentCandidates(addStudentTarget.code, "");
     } catch (error: any) {
@@ -753,7 +765,7 @@ export default function AdminClassesPage() {
     } finally {
       setStudentAdding(false);
     }
-  }, [addStudentTarget, selectedCandidateId, fetchClassStudents, fetchStudentCandidates, handleCloseAddStudent]);
+  }, [addStudentTarget, selectedCandidateIds, fetchClassStudents, fetchStudentCandidates, handleCloseAddStudent]);
 
   useEffect(() => {
     fetchOptions();
@@ -1235,8 +1247,8 @@ export default function AdminClassesPage() {
         candidates={studentOptions}
         search={studentSearch}
         onSearchChange={setStudentSearch}
-        selectedId={selectedCandidateId}
-        onSelect={setSelectedCandidateId}
+        selectedIds={selectedCandidateIds}
+        onSelect={handleSelectCandidate}
         onClose={handleCloseAddStudent}
         onSubmit={handleAddStudent}
         loading={studentAdding}

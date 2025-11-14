@@ -641,50 +641,41 @@ router.post("/:code/students", async (req, res) => {
   try {
     await prisma.$ready;
     const code = normalizeClassCode(req.params.code);
-    const { studentId } = req.body || {};
-
-    if (!code || !studentId || typeof studentId !== "string") {
-      return res.status(400).json({ success: false, message: "Thiếu mã lớp hoặc mã sinh viên" });
+    const { studentIds } = req.body || {};
+    if (!code || !Array.isArray(studentIds) || !studentIds.length) {
+      return res.status(400).json({ success: false, message: "Thiếu mã lớp hoặc danh sách sinh viên" });
     }
-
     const cls = await prisma.classes.findUnique({ where: { class_id: code } });
     if (!cls) {
       return res.status(404).json({ success: false, message: "Không tìm thấy lớp" });
     }
-
-    const student = await prisma.students.findUnique({
-      where: { student_id: studentId.trim() },
-      select: {
-        student_id: true,
-        full_name: true,
-        email: true,
-        status: true,
-        course: true,
-        classes: true,
-      },
-    });
-
-    if (!student) {
-      return res.status(404).json({ success: false, message: "Không tìm thấy sinh viên" });
+    let added = 0;
+    for (const studentId of studentIds) {
+      const student = await prisma.students.findUnique({
+        where: { student_id: studentId.trim() },
+        select: {
+          student_id: true,
+          full_name: true,
+          email: true,
+          status: true,
+          course: true,
+          classes: true,
+        },
+      });
+      if (!student) continue;
+      const currentClasses = splitClasses(student.classes);
+      if (!currentClasses.includes(code)) {
+        currentClasses.push(code);
+        const updatedClasses = joinClasses(currentClasses).join(",");
+        await prisma.students.update({
+          where: { student_id: student.student_id },
+          data: { classes: updatedClasses },
+        });
+        added++;
+      }
     }
-
-    const currentClasses = splitClasses(student.classes);
-    if (currentClasses.includes(code)) {
-      return res.status(409).json({ success: false, message: "Sinh viên đã thuộc lớp này" });
-    }
-
-    currentClasses.push(code);
-    const updatedClasses = joinClasses(currentClasses).join(",");
-
-    await prisma.students.update({
-      where: { student_id: student.student_id },
-      data: { classes: updatedClasses },
-    });
-
     const members = await prisma.students.findMany({
-      where: {
-        classes: { contains: code },
-      },
+      where: { classes: { contains: code } },
       select: {
         student_id: true,
         full_name: true,
@@ -694,15 +685,11 @@ router.post("/:code/students", async (req, res) => {
         classes: true,
       },
     });
-
-    const filteredMembers = members
-      .filter((row) => splitClasses(row.classes).includes(code))
-      .map(mapStudentRecord);
-
+    const filteredMembers = members.filter((row) => splitClasses(row.classes).includes(code)).map(mapStudentRecord);
     return res.status(201).json({
       success: true,
       data: {
-        student: mapStudentRecord(student),
+        added,
         total: filteredMembers.length,
       },
     });
