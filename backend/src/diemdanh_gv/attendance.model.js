@@ -34,6 +34,47 @@ async function getClassesByTeacher(teacherId) {
   return rows;
 }
 
+async function getClassesByTeacherAndDay(teacherId, dayKey, targetDate) {
+  await prisma.$ready;
+  const rows = await prisma.$queryRaw`
+    SELECT
+      c.class_id,
+      c.class_name,
+      c.subject_name,
+      c.subject_code,
+      c.semester,
+      c.school_year,
+      c.teacher_id,
+      c.status,
+      COUNT(DISTINCT s.student_id) AS student_count
+    FROM classes c
+    INNER JOIN timetable t
+      ON t.classes = c.class_id
+    LEFT JOIN students s
+      ON s.classes IS NOT NULL
+     AND CONCAT(',', REPLACE(UPPER(s.classes), ' ', ''), ',') LIKE CONCAT('%,', UPPER(c.class_id), ',%')
+    WHERE (c.teacher_id = ${teacherId} OR t.teacher_id = ${teacherId})
+      AND (
+        -- Lịch theo ngày cố định trong tuần (t.date IS NULL)
+        (t.date IS NULL AND t.day_of_week::text = ${dayKey})
+        OR
+        -- Lịch dạy bù / thay đổi theo ngày cụ thể
+        (t.date = ${targetDate}::date)
+      )
+    GROUP BY
+      c.class_id,
+      c.class_name,
+      c.subject_name,
+      c.subject_code,
+      c.semester,
+      c.school_year,
+      c.teacher_id,
+      c.status
+    ORDER BY c.class_name ASC
+  `;
+  return rows;
+}
+
 async function getClassById(classId) {
   await prisma.$ready;
   return prisma.classes.findUnique({ where: { class_id: normalizeClassId(classId) } });
@@ -41,30 +82,48 @@ async function getClassById(classId) {
 
 async function getClassSlotsByDay(classId, dayKey, targetDate) {
   await prisma.$ready;
-  const where = {
-    classes: classId,
-    ...(dayKey ? { day_of_week: dayKey } : {}),
-  };
+  const normalizedClass = normalizeClassId(classId);
+
+  // Nếu có targetDate (chuỗi YYYY-MM-DD), ưu tiên lịch dạy cụ thể theo ngày
   if (targetDate) {
-    where.OR = [
-      { date: targetDate },
-      { date: null },
-    ];
+    const byDate = await prisma.$queryRaw`
+      SELECT
+        id,
+        slot_id,
+        room,
+        week_key,
+        subject_name,
+        teacher_name,
+        day_of_week
+      FROM timetable
+      WHERE classes = ${normalizedClass}
+        AND date = ${targetDate}::date
+      ORDER BY slot_id ASC
+    `;
+
+    if (byDate.length) {
+      return byDate;
+    }
   }
 
-  return prisma.timetable.findMany({
-    where,
-    select: {
-      id: true,
-      slot_id: true,
-      room: true,
-      week_key: true,
-      subject_name: true,
-      teacher_name: true,
-      day_of_week: true,
-    },
-    orderBy: { slot_id: "asc" },
-  });
+  // Fallback: lịch cố định theo thứ trong tuần (date IS NULL)
+  const rows = await prisma.$queryRaw`
+    SELECT
+      id,
+      slot_id,
+      room,
+      week_key,
+      subject_name,
+      teacher_name,
+      day_of_week
+    FROM timetable
+    WHERE classes = ${normalizedClass}
+      AND date IS NULL
+      ${dayKey ? prisma.$unsafe(`AND day_of_week::text = '${dayKey}'`) : prisma.$unsafe('')}
+    ORDER BY slot_id ASC
+  `;
+
+  return rows;
 }
 
 async function getAttendanceRecord(sessionId, studentId) {
@@ -472,6 +531,7 @@ async function finalizeAttendanceSession({
 
 module.exports = {
   getClassesByTeacher,
+  getClassesByTeacherAndDay,
   getClassById,
   getClassSlotsByDay,
   findLatestSession,

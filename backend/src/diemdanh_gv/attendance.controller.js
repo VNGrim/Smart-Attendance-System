@@ -4,6 +4,7 @@ dayjs.extend(utc);
 
 const {
   getClassesByTeacher,
+  getClassesByTeacherAndDay,
   getClassById,
   getClassSlotsByDay,
   findLatestSession,
@@ -161,8 +162,21 @@ const listTeacherClasses = async (req, res) => {
     if (!teacherId) {
       return res.status(401).json({ success: false, message: "Không xác định được giảng viên" });
     }
-    console.log("[Attendance] listTeacherClasses user", teacherId, req.user);
-    const rows = await getClassesByTeacher(teacherId);
+    const hasDateFilter = Boolean(req.query?.date);
+    const targetDay = hasDateFilter ? toDateOnly(req.query.date) : null;
+    console.log("[Attendance] listTeacherClasses user", teacherId, req.user, {
+      date: hasDateFilter ? targetDay.format("YYYY-MM-DD") : null,
+    });
+
+    let rows;
+    if (hasDateFilter) {
+      const dayKey = getDayKeyFromDate(targetDay.toDate());
+      const dateStr = targetDay.format("YYYY-MM-DD");
+      rows = await getClassesByTeacherAndDay(teacherId, dayKey, dateStr);
+    } else {
+      rows = await getClassesByTeacher(teacherId);
+    }
+
     console.log("[Attendance] classes found", rows?.length);
     const data = rows.map((row) => ({
       id: row.class_id,
@@ -189,9 +203,10 @@ const listClassSlots = async (req, res) => {
     const targetDay = toDateOnly(req.query?.date);
     console.log("[Attendance] listClassSlots", { classId, date: targetDay.format("YYYY-MM-DD") });
     await ensureTeacherOwnsClass(teacherId, classId);
-    const dayKey = getDayKeyFromDate(targetDay);
+    const dayKey = getDayKeyFromDate(targetDay.toDate());
     console.log("[Attendance] dayKey", dayKey);
-    const slots = await getClassSlotsByDay(classId, dayKey, targetDay.toDate());
+    const dateStr = targetDay.format("YYYY-MM-DD");
+    const slots = await getClassSlotsByDay(classId, dayKey, dateStr);
 
     console.log("[Attendance] slots length", slots.length);
     const data = slots.map((slot) => ({

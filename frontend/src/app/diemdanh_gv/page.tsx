@@ -471,13 +471,22 @@ export default function LecturerAttendancePage() {
   }, [polling]);
 
   useEffect(() => {
-    fetchJson<{ success: boolean; data: ClassInfo[] }>(`${API_BASE}/classes`)
+    const targetDate = historyDate || (() => {
+      const d = new Date();
+      const local = new Date(d.getTime() - d.getTimezoneOffset() * 60000);
+      return local.toISOString().slice(0, 10);
+    })();
+    fetchJson<{ success: boolean; data: ClassInfo[] }>(`${API_BASE}/classes?date=${targetDate}`)
       .then((payload) => {
-        const list = payload.data || [];
+        const list = (payload.data || []).slice().sort((a, b) => a.name.localeCompare(b.name, "vi"));
         setClasses(list);
         if (list.length) {
-          const found = paramClass && list.find((c) => c.id === paramClass)?.id;
-          setCls(found || list[0].id);
+          const current = cls && list.find((c) => c.id === cls)?.id;
+          const fromParam = paramClass && list.find((c) => c.id === paramClass)?.id;
+          const next = current || fromParam || list[0].id;
+          setCls(next);
+        } else {
+          setCls("");
         }
       })
       .catch((err) => {
@@ -487,7 +496,7 @@ export default function LecturerAttendancePage() {
     return () => {
       stopPolling();
     };
-  }, [stopPolling]);
+  }, [stopPolling, historyDate, paramClass, cls]);
 
   const toggleDark = () => {
     const next = !dark;
@@ -797,16 +806,8 @@ export default function LecturerAttendancePage() {
       setQrImage(null);
       setSessionNotice(null);
       stopPolling();
-      const d = new Date();
-      const local = new Date(d.getTime() - d.getTimezoneOffset() * 60000);
-      const today = local.toISOString().slice(0, 10);
-      setHistoryDate(today);
-      if (classId) {
-        fetchSlots(classId);
-        fetchHistory({ classId, date: today, slotId: null });
-      }
     },
-    [fetchSlots, fetchHistory, stopPolling]
+    [stopPolling]
   );
 
   useEffect(() => {
