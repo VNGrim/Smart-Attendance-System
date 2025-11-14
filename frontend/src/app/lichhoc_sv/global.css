@@ -102,6 +102,31 @@ body::before {
   position: relative;
 }
 
+/* Attendance status badge dot on schedule cards */
+.class-card {
+  position: relative;
+}
+
+.class-card.attend-present::after,
+.class-card.attend-absent::after {
+  content: "";
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  border: 2px solid rgba(15,23,42,0.9);
+}
+
+.class-card.attend-present::after {
+  background-color: #22c55e; /* xanh */
+}
+
+.class-card.attend-absent::after {
+  background-color: #ef4444; /* đỏ */
+}
+
 .side-link:hover {
   transform: translateX(4px);
   box-shadow: 0 4px 12px rgba(0,0,0,0.1);

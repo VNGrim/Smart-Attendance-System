@@ -568,46 +568,67 @@ router.get("/history/recent", async (req, res) => {
       return res.status(401).json({ success: false, message: "Không xác định được sinh viên" });
     }
 
-    // Lấy các bản ghi điểm danh mới nhất của SV, kèm session
-    const records = await prisma.attendanceRecord.findMany({
-      where: { studentId },
-      include: {
-        session: { select: { classId: true, date: true, slot: true } },
+    const student = await prisma.students.findUnique({
+      where: { student_id: studentId },
+      select: { classes: true },
+    });
+
+    if (!student) {
+      return res.status(404).json({ success: false, message: "Không tìm thấy thông tin sinh viên" });
+    }
+
+    const classList = parseClassList(student.classes);
+    const classListUpper = Array.from(new Set(classList.map((item) => item.toUpperCase())));
+    const classIdFilters = Array.from(new Set([...classList, ...classListUpper]));
+
+    if (!classIdFilters.length) {
+      return res.json({ success: true, data: [] });
+    }
+
+    const today = dayjs().startOf("day");
+
+    const sessions = await prisma.attendanceSession.findMany({
+      where: {
+        classId: { in: classIdFilters },
+        date: { lte: today.endOf("day").toDate() },
       },
-      orderBy: [{ recordedAt: "desc" }],
+      include: {
+        records: {
+          where: { studentId },
+          select: { status: true },
+          take: 1,
+        },
+        session_class: {
+          select: { class_id: true, subject_name: true, subject_code: true },
+        },
+      },
+      orderBy: [{ date: "desc" }, { slot: "asc" }, { createdAt: "desc" }],
       take: 10,
     });
 
-    if (!records.length) return res.json({ success: true, data: [] });
+    if (!sessions.length) {
+      return res.json({ success: true, data: [] });
+    }
 
-    const classIds = Array.from(
-      new Set(
-        records
-          .map((r) => String(r.session?.classId || "").trim())
-          .filter((v) => v.length > 0)
-      )
-    );
-
-    const classesData = classIds.length
-      ? await prisma.classes.findMany({
-          where: { class_id: { in: classIds } },
-          select: { class_id: true, subject_name: true, subject_code: true },
-        })
-      : [];
-    const classMap = new Map(classesData.map((c) => [String(c.class_id).trim(), c]));
-
-    const data = records.map((r) => {
-      const clsKey = String(r.session?.classId || "").trim();
-      const info = classMap.get(clsKey);
-      const d = r.session?.date ? dayjs(r.session.date) : null;
+    const data = sessions.map((s) => {
+      const clsKey = String(s.classId || "").trim().toUpperCase();
+      const info = s.session_class || null;
+      const d = s.date ? dayjs(s.date) : null;
+      const rec = s.records?.[0] || null;
+      let status = rec?.status || null;
+      if (!status && (s.status === "ended" || s.status === "closed")) {
+        status = "absent";
+      }
+      const normalized = String(status || "unknown").toLowerCase();
+      const present = normalized === "present" || normalized === "excused";
       return {
         classId: clsKey || null,
         subjectName: info?.subject_name || clsKey || "",
         subjectCode: info?.subject_code || null,
         date: d?.isValid() ? d.format("DD/MM") : "--",
-        slot: r.session?.slot ?? null,
-        status: r.status || "unknown",
-        present: String(r.status || "").toLowerCase() === "present",
+        slot: s.slot ?? null,
+        status: normalized,
+        present,
       };
     });
 

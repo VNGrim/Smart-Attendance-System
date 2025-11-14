@@ -43,11 +43,22 @@ const generateCode = () => {
 };
 
 const toDateOnly = (input) => {
-  const fallback = dayjs().startOf("day");
+  // Luôn chuẩn hóa về mốc 00:00 UTC của ngày tương ứng để tránh lệch ngày khi lưu @db.Date
+  const buildUtcDay = (year, month, day) => dayjs.utc(new Date(Date.UTC(year, month - 1, day)));
+  const today = dayjs();
+  const fallback = buildUtcDay(today.year(), today.month() + 1, today.date());
   if (!input) return fallback;
-  const parsed = dayjs(input);
+  const str = String(input).trim();
+  // Ưu tiên parse định dạng yyyy-MM-dd (frontend gửi)
+  const simple = /^(\d{4})-(\d{2})-(\d{2})$/.exec(str);
+  if (simple) {
+    const [, y, m, d] = simple;
+    return buildUtcDay(Number(y), Number(m), Number(d));
+  }
+  // Fallback cho các định dạng khác, nhưng vẫn chuyển sang UTC date-only
+  const parsed = dayjs(str);
   if (!parsed.isValid()) return fallback;
-  return parsed.startOf("day");
+  return buildUtcDay(parsed.year(), parsed.month() + 1, parsed.date());
 };
 
 const DAY_MAP = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
@@ -230,6 +241,7 @@ const createOrGetSession = async (req, res) => {
   try {
     const teacherId = extractTeacherId(req);
     const { classId, slotId, type, date } = req.body || {};
+    console.log("[Attendance] createOrGetSession input", { classId, slotId, type, date });
     if (!classId || !slotId || !type) {
       return res.status(400).json({ success: false, message: "Thiếu thông tin lớp, slot hoặc hình thức" });
     }
@@ -242,6 +254,11 @@ const createOrGetSession = async (req, res) => {
     }
     await ensureTeacherOwnsClass(teacherId, classId);
     const targetDay = toDateOnly(date);
+    console.log("[Attendance] createOrGetSession normalized date", {
+      raw: date,
+      targetDayISO: targetDay.toISOString(),
+      targetDayFormatted: targetDay.format("YYYY-MM-DD"),
+    });
     const existing = await findLatestSession({ classId, slotId: slot, day: targetDay.toDate() });
     const now = dayjs().utc();
 
@@ -291,6 +308,14 @@ const createOrGetSession = async (req, res) => {
     const initialAttempts = type === "manual" ? 0 : 1;
     const totalStudents = await countClassStudents(classId);
 
+    console.log("[Attendance] createOrGetSession creating session", {
+      classId: normalizeClassId(classId),
+      slot,
+      storedDate: targetDay.toDate(),
+      storedDateISO: targetDay.toDate().toISOString(),
+      dayFormatted: targetDay.format("YYYY-MM-DD"),
+    });
+
     const session = await createSession({
       classId: normalizeClassId(classId),
       slot,
@@ -333,7 +358,17 @@ const endAttendanceSession = async (req, res) => {
 
     await ensureTeacherOwnsClass(teacherId, classId);
 
-    const targetDay = dayjs().startOf("day").toDate();
+    // Dùng ngày hiện tại nhưng chuẩn hóa về UTC date-only để đồng bộ với createOrGetSession
+    const nowLocal = dayjs();
+    const targetDayJs = dayjs.utc(new Date(Date.UTC(nowLocal.year(), nowLocal.month(), nowLocal.date())));
+    const targetDay = targetDayJs.toDate();
+    console.log("[Attendance] endAttendanceSession targetDay", {
+      classId,
+      slot: slotNumber,
+      method,
+      targetDayISO: targetDayJs.toISOString(),
+      targetDayFormatted: targetDayJs.format("YYYY-MM-DD"),
+    });
     const result = await finalizeAttendanceSession({
       classId,
       slot: slotNumber,
@@ -381,7 +416,17 @@ const listSessionsByDateHandler = async (req, res) => {
     const sessions = await listSessionsByDate(classId, targetDay.toDate());
     const data = sessions.map((item) => {
       const serialized = serializeSession(item);
-      const summary = summarizeRecords(item.records || []);
+      const rawRecords = item.records || [];
+      let present = 0;
+      let excused = 0;
+      for (const r of rawRecords) {
+        if (r.status === "present") present += 1;
+        else if (r.status === "excused") excused += 1;
+      }
+      const totalStudents = serialized.totalStudents ?? rawRecords.length;
+      const total = Math.max(totalStudents, present + excused);
+      const absent = Math.max(0, total - present - excused);
+      const summary = { total, present, excused, absent };
       return {
         ...serialized,
         summary,
@@ -407,8 +452,29 @@ const getSessionWithRecordsHandler = async (req, res) => {
     if (!session) return res.status(404).json({ success: false, message: "Không tìm thấy buổi điểm danh" });
     await ensureTeacherOwnsClass(teacherId, session.session_class.class_id);
 
-    const students = await getClassStudents(session.session_class.class_id);
-    const records = mapRecordsWithStudents(session.records || [], students);
+    const [students, rawRecords] = await Promise.all([
+      getClassStudents(session.session_class.class_id),
+      getAttendanceRecords(id),
+    ]);
+
+    const recordMap = new Map((rawRecords || []).map((item) => [item.studentId, item]));
+    const records = (students || []).map((student) => {
+      const record = recordMap.get(student.student_id);
+      return {
+        id: record?.id ?? null,
+        studentId: student.student_id,
+        fullName: student.full_name,
+        email: student.email,
+        course: student.course,
+        status: record?.status || "absent",
+        recordedAt: record?.recordedAt || null,
+        markedAt: record?.recordedAt ? dayjs(record.recordedAt).toISOString() : null,
+        modifiedAt: record?.modifiedAt ? dayjs(record.modifiedAt).toISOString() : null,
+        modifiedBy: record?.modifiedBy || null,
+        note: record?.note || null,
+      };
+    });
+
     const summary = summarizeRecords(records);
     const totalStudents = session.totalStudents ?? students.length;
 

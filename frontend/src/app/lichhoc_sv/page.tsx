@@ -183,6 +183,13 @@ export default function LichHocPage() {
     return '📚';
   };
 
+  const getAttendanceStatusClass = (cell?: { attendanceStatus?: string; status?: string }) => {
+    const raw = (cell?.attendanceStatus ?? cell?.status ?? '').toString().trim().toLowerCase();
+    if (raw === 'present' || raw === 'attended') return 'attend-present';
+    if (raw === 'absent') return 'attend-absent';
+    return '';
+  };
+
   const getAttendanceStatusText = (cell?: { attendanceStatus?: string; status?: string }) => {
     const raw = (cell?.attendanceStatus ?? cell?.status ?? '').toString().trim().toLowerCase();
 
@@ -204,7 +211,7 @@ export default function LichHocPage() {
   };
 
   const Shell = ({ children }: { children: React.ReactNode }) => (
-    <div className={`layout ${collapsed ? 'collapsed' : ''}`}>
+    <div className={`layout ${collapsed ? 'collapsed' : ''} ${themeDark ? '' : 'light-theme'}`}>
       <aside className="sidebar">
         <div className="side-header">
           <button className="collapse-btn" onClick={() => setCollapsed(v => !v)} title={collapsed ? 'Mở rộng' : 'Thu gọn'}>
@@ -237,7 +244,7 @@ export default function LichHocPage() {
           }}>🚪 Đăng xuất</button>
         </div>
       </header>
-      <main className={`main ${themeDark ? 'dark-theme' : 'light-theme'}`}>
+      <main className="main">
         {children}
       </main>
     </div>
@@ -326,7 +333,7 @@ export default function LichHocPage() {
                   <div key={`${day}-${slotId}`} className="cell">
                     {cell ? (
                       <>
-                        <div className={`class-card ${getSubjectColor(cell.className)}`}>
+                        <div className={`class-card ${getSubjectColor(cell.className)} ${getAttendanceStatusClass(cell)}`}>
                           <div style={{ fontSize: 16 }}>{getSubjectIcon(cell.className)}</div>
                           <div style={{ fontSize: 13, fontWeight: 900, lineHeight: 1.15, textShadow: '0 1px 0 rgba(0,0,0,0.15)' }}>{cell.className}</div>
                           {cell.classId && <div style={{ fontSize: 11, opacity: 0.9, marginTop: 2 }}>{cell.classId}</div>}

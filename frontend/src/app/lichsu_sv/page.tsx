@@ -131,7 +131,7 @@ export default function LichSuPage() {
   const totalAbsent = attendanceRecords.filter(r => r.status === 'absent').length;
 
   const Shell = ({ children }: { children: React.ReactNode }) => (
-    <div className={`layout ${collapsed ? 'collapsed' : ''}`}>
+    <div className={`layout ${collapsed ? 'collapsed' : ''} ${themeDark ? '' : 'light-theme'}`}>
       <aside className="sidebar">
         <div className="side-header">
           <button className="collapse-btn" onClick={() => setCollapsed(v => !v)} title={collapsed ? 'Mở rộng' : 'Thu gọn'}>
@@ -164,7 +164,7 @@ export default function LichSuPage() {
           }}>🚪 Đăng xuất</button>
         </div>
       </header>
-      <main className={`main ${themeDark ? 'dark-theme' : 'light-theme'}`}>
+      <main className="main">
         {children}
       </main>
 
