@@ -320,13 +320,6 @@ const handleAvatarChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
               <button className="btn btn-outline" onClick={handleLogoutAll}>Mở</button>
             </div>
 
-            {/* Notifications */}
-            <div className="label">Thông báo</div>
-            <div className="switch" onClick={() => setNotifEnabled(v => !v)}>
-              <input type="checkbox" checked={notifEnabled} readOnly />
-              <div className="knob"></div>
-            </div>
-
             {/* Theme toggle */}
             <div className="Giao diện">
               <div className={`theme-opt ${!themeDark ? 'active' : ''}`} onClick={() => setTheme(false)}>🌞 Sáng</div>

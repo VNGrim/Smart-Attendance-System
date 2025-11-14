@@ -326,13 +326,6 @@ export default function CaiDatGVPage() {
               <button className="btn btn-outline" onClick={handleLogoutAll}>Mở</button>
             </div>
 
-            {/* Notifications */}
-            <div className="label">Thông báo</div>
-            <div className="switch" onClick={() => setNotifEnabled(v => !v)}>
-              <input type="checkbox" checked={notifEnabled} readOnly />
-              <div className="knob"></div>
-            </div>
-
             {/* Theme toggle */}
             <div className="label">Giao diện</div>
             <div className="theme-toggle">
