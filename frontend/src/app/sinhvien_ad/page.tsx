@@ -410,18 +410,23 @@ export default function AdminStudentsPage() {
             </div>
             <div className="drawer-body grid2">
               <div className="profile">
-                <div className="avatar-lg">{drawer.name.split(" ").map(w=>w[0]).slice(-2).join("")}</div>
+                <div className="avatar-lg">
+                  {drawer.avatar ? (
+                    <img
+                      src={drawer.avatar}
+                      alt={drawer.name}
+                      style={{ width: "100%", height: "100%", borderRadius: "9999px", objectFit: "cover" }}
+                    />
+                  ) : (
+                    drawer.name.split(" ").map(w=>w[0]).slice(-2).join("")
+                  )}
+                </div>
                 <div className="kv"><span className="k">MSSV</span><span className="v">{drawer.mssv}</span></div>
-                <div className="kv"><span className="k">Lớp</span><span className="v">{drawer.className}</span></div>
                 <div className="kv"><span className="k">Khóa</span><span className="v">{drawer.cohort}</span></div>
                 <div className="kv"><span className="k">Ngành</span><span className="v">{drawer.major}</span></div>
-                <div className="kv"><span className="k">Cố vấn</span><span className="v">{drawer.advisor}</span></div>
                 <div className="kv"><span className="k">Email</span><span className="v">{drawer.email||"--"}</span></div>
-                <div className="kv"><span className="k">Điện thoại</span><span className="v">{drawer.phone||"--"}</span></div>
-                <div className="kv"><span className="k">Trạng thái</span><span className="v"><span className={`status ${drawer.status}`.replace(/\s/g,"-")}>{drawer.status}</span></span></div>
                 <div className="actions-row">
                   <button className="qr-btn" onClick={()=>{ setDrawer(null); onOpenEdit(drawer); }}>✏️ Chỉnh sửa</button>
-                  <button className="qr-btn" onClick={()=>setList(prev=>prev.map(x=>x.id===drawer.id?{...x,status:x.status==="Hoạt động"?"Bị khóa":"Hoạt động"}:x))}>{drawer.status==="Hoạt động"?"🔒 Khóa":"✅ Mở khóa"}</button>
                   <button className="qr-btn" onClick={()=>alert("Chuyển lớp")}>🔁 Chuyển lớp</button>
                   <button
                     className="qr-btn"
@@ -448,14 +453,6 @@ export default function AdminStudentsPage() {
                   <li>{drawer.className} - Toán rời rạc</li>
                   <li>{drawer.className} - Cấu trúc dữ liệu</li>
                 </ul>
-                <div className="section-title">Giảng viên phụ trách</div>
-                <div className="pill">{drawer.advisor}</div>
-                <div className="section-title">Môn học & Điểm tổng quan</div>
-                <div className="chips">
-                  <span className="pill">CTDL 8.2</span>
-                  <span className="pill">Cơ sở dữ liệu 7.8</span>
-                  <span className="pill">Lập trình Web 8.8</span>
-                </div>
               </div>
             </div>
           </div>

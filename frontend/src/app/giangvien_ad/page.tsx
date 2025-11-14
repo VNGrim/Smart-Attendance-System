@@ -80,7 +80,11 @@ const LecturersShell = ({
       </div>
     </header>
 
-    <main className="main">{children}</main>
+    <main className="main">
+      <div className="content-area">
+        {children}
+      </div>
+    </main>
   </div>
 );
 
@@ -102,7 +106,19 @@ export default function AdminLecturersPage() {
         credentials: "include",
         signal,
       });
+
+      if (resp.status === 401) {
+        try { router.push("/login"); } catch {}
+        return;
+      }
+
+      if (resp.status === 403) {
+        console.warn("Không có quyền truy cập danh sách giảng viên (403)");
+        return;
+      }
+
       if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+
       const data = await resp.json();
       if (signal?.aborted) return;
       const lecturers: Lecturer[] = Array.isArray(data?.lecturers)
@@ -118,7 +134,7 @@ export default function AdminLecturersPage() {
       if ((err as any)?.name === "AbortError") return;
       console.error("fetch lecturers error", err);
     }
-  }, []);
+  }, [router]);
 
   useEffect(() => {
     let cancelled = false;
@@ -352,24 +368,27 @@ export default function AdminLecturersPage() {
             </div>
             <div className="drawer-body grid2">
               <div>
-                <div className="avatar-lg">{drawer.name.split(" ").map(w=>w[0]).slice(-2).join("")}</div>
+                <div className="avatar-lg">
+                  {drawer.avatar ? (
+                    <img
+                      src={drawer.avatar}
+                      alt={drawer.name}
+                      style={{ width: "100%", height: "100%", borderRadius: "9999px", objectFit: "cover" }}
+                    />
+                  ) : (
+                    drawer.name.split(" ").map(w=>w[0]).slice(-2).join("")
+                  )}
+                </div>
                 <div className="kv"><span className="k">Email</span><span className="v">{drawer.email||"--"}</span></div>
                 <div className="kv"><span className="k">SĐT</span><span className="v">{drawer.phone||"--"}</span></div>
-                <div className="kv"><span className="k">Bộ môn</span><span className="v">{drawer.dept}</span></div>
-                <div className="kv"><span className="k">Khoa</span><span className="v">{drawer.faculty}</span></div>
                 <div className="kv"><span className="k">Trạng thái</span><span className="v"><span className={`status ${drawer.status}`.replace(/\s/g,"-")}>{drawer.status}</span></span></div>
                 <div className="actions-row">
                   <button className="qr-btn" onClick={()=>{ setDrawer(null); onOpenEdit(drawer); }}>✏️ Chỉnh sửa</button>
-                  <button className="qr-btn" onClick={()=>alert("Gán/Thay đổi lớp giảng dạy")}>🔁 Gán lớp</button>
                   <button className="qr-btn" onClick={()=>setList(prev=>prev.map(x=>x.id===drawer.id?{...x,status:x.status==="Đang dạy"?"Tạm nghỉ":"Đang dạy"}:x))}>{drawer.status==="Đang dạy"?"⏸ Tạm nghỉ":"▶️ Đang dạy"}</button>
                   <button className="qr-btn" onClick={()=>{ if(confirm("Xóa giảng viên?")){ setList(prev=>prev.filter(x=>x.id!==drawer.id)); setDrawer(null);} }}>🗑 Xóa</button>
                 </div>
               </div>
               <div>
-                <div className="section-title">Mã môn phụ trách</div>
-                <div className="pill">{drawer.dept}</div>
-                <div className="section-title">Số lớp đang phụ trách</div>
-                <div className="pill">{classesByLecturer[drawer.id]?.length ?? 0} lớp</div>
                 <div className="section-title">Lớp phụ trách</div>
                 <div className="chips">
                   {(classesByLecturer[drawer.id] || []).length > 0 ? (

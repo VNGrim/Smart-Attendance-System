@@ -50,6 +50,7 @@ function mapLecturer(record) {
     status: record.status || 'Đang dạy',
     email: record.email || '',
     phone: record.phone || '',
+    avatar: record.avatar_url || record.avatar || null,
     classes: classList.length,
     classList,
     createdAt: record.created_at ? record.created_at.toISOString() : null,
@@ -74,29 +75,48 @@ router.get('/', async (req, res) => {
       orderBy: { full_name: 'asc' },
     });
 
+    const teacherIds = lecturers.map((l) => l.teacher_id);
+
     // Lấy số lớp cho từng giảng viên từ bảng classes
-    const teacherIds = lecturers.map(l => l.teacher_id);
     const classCounts = await prisma.classes.groupBy({
       by: ['teacher_id'],
       where: {
-        teacher_id: { in: teacherIds }
+        teacher_id: { in: teacherIds },
       },
-      _count: { class_id: true }
+      _count: { class_id: true },
     });
 
-    // Map teacher_id -> số lớp
+    // Lấy danh sách mã lớp đang phụ trách cho từng giảng viên
+    const classRows = await prisma.classes.findMany({
+      where: { teacher_id: { in: teacherIds } },
+      select: { teacher_id: true, class_id: true },
+    });
+
     const classCountMap = {};
-    classCounts.forEach(item => {
+    classCounts.forEach((item) => {
       classCountMap[item.teacher_id] = item._count.class_id;
     });
 
-    // Trả về lecturers với số lớp thực tế
+    const classListMap = {};
+    classRows.forEach((row) => {
+      if (!row.teacher_id || !row.class_id) return;
+      if (!classListMap[row.teacher_id]) classListMap[row.teacher_id] = [];
+      classListMap[row.teacher_id].push(row.class_id);
+    });
+
+    // Trả về lecturers với số lớp thực tế và danh sách lớp
     return res.json({
       success: true,
-      lecturers: lecturers.map(l => ({
-        ...mapLecturer(l),
-        classes: classCountMap[l.teacher_id] || 0
-      })),
+      lecturers: lecturers.map((l) => {
+        const base = mapLecturer(l);
+        const classes = classCountMap[l.teacher_id] || base.classes || 0;
+        const classList = classListMap[l.teacher_id] || base.classList || [];
+        return {
+          ...base,
+          classes,
+          classList,
+        };
+      }),
     });
   } catch (error) {
     console.error('admin lecturers list error:', error);

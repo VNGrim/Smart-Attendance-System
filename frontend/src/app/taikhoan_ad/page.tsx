@@ -448,8 +448,6 @@ export default function AdminAccountsPage() {
               <option>Sinh viên</option>
             </select>
           </div>
-          <button className="icon-btn" onClick={toggleDark} title="Chuyển giao diện">{dark ? "🌙" : "🌞"}</button>
-          <button className="icon-btn notif" title="Thông báo">🔔{notifCount > 0 && <span className="badge">{notifCount}</span>}</button>
           <button className="btn-primary" onClick={onOpenCreate}>+ Tạo tài khoản mới</button>
           <button className="qr-btn" onClick={async ()=>{ 
             if (confirm('Bạn có chắc muốn đăng xuất?')) {
@@ -470,12 +468,30 @@ export default function AdminAccountsPage() {
   return (
     <Shell>
       <section className="cards">
-        <div className="card"><div className="card-title">👥 Tổng tài khoản</div><div className="card-num">{stats.total.toLocaleString()}</div></div>
-        <div className="card"><div className="card-title">🧑‍🏫 Giảng viên</div><div className="card-num">{stats.gv}</div></div>
-        <div className="card"><div className="card-title">🎓 Sinh viên</div><div className="card-num">{stats.sv}</div></div>
-        <div className="card"><div className="card-title">🛠 Admin</div><div className="card-num">{stats.ad}</div></div>
-        <div className="card"><div className="card-title">⚠️ Bị khóa</div><div className="card-num">{stats.locked}</div></div>
-        <div className="card"><div className="card-title">🔐 Chưa kích hoạt</div><div className="card-num">{stats.pending}</div></div>
+        <div className="card">
+          <div className="card-title">👥 Tổng tài khoản</div>
+          <div className="card-num">{stats.total.toLocaleString()}</div>
+        </div>
+        <div className="card">
+          <div className="card-title">🧑‍🏫 Giảng viên</div>
+          <div className="card-num">{stats.gv}</div>
+        </div>
+        <div className="card">
+          <div className="card-title">🎓 Sinh viên</div>
+          <div className="card-num">{stats.sv}</div>
+        </div>
+        <div className="card">
+          <div className="card-title">🛠 Admin</div>
+          <div className="card-num">{stats.ad}</div>
+        </div>
+        <div className="card">
+          <div className="card-title">⚠️ Bị khóa</div>
+          <div className="card-num">{stats.locked}</div>
+        </div>
+        <div className="card">
+          <div className="card-title">🔐 Chưa kích hoạt</div>
+          <div className="card-num">{stats.pending}</div>
+        </div>
       </section>
 
       <div className="toolbar-sub">
@@ -490,184 +506,354 @@ export default function AdminAccountsPage() {
           <div className="thead">
             <div><input type="checkbox" checked={allSelected} onChange={toggleSelectAll} /></div>
             <div>Avatar</div>
-            <div className="th" onClick={()=>toggleSort("name")}>Họ tên</div>
-            <div className="th" onClick={()=>toggleSort("code")}>Mã</div>
-            <div className="th" onClick={()=>toggleSort("email")}>Email</div>
-            <div className="th" onClick={()=>toggleSort("role")}>Vai trò</div>
-            <div className="th" onClick={()=>toggleSort("status")}>Trạng thái</div>
-            <div className="th" onClick={()=>toggleSort("lastLogin")}>Đăng nhập gần nhất</div>
+            <div className="th" onClick={() => toggleSort("name")}>Họ tên</div>
+            <div className="th" onClick={() => toggleSort("code")}>Mã</div>
+            <div className="th" onClick={() => toggleSort("email")}>Email</div>
+            <div className="th" onClick={() => toggleSort("role")}>Vai trò</div>
+            <div className="th" onClick={() => toggleSort("status")}>Trạng thái</div>
+            <div className="th" onClick={() => toggleSort("lastLogin")}>Đăng nhập gần nhất</div>
             <div>Hành động</div>
           </div>
           <div className="tbody">
             {loading && (
-              <div className="trow" style={{ justifyContent: "center", color: "#64748b" }}>⏳ Đang tải dữ liệu...</div>
+              <div className="trow" style={{ justifyContent: "center", color: "#64748b" }}>
+                ⏳ Đang tải dữ liệu...
+              </div>
             )}
             {!loading && error && (
-              <div className="trow" style={{ justifyContent: "center", color: "#dc2626" }}>⚠️ {error}</div>
+              <div className="trow" style={{ justifyContent: "center", color: "#dc2626" }}>
+                ⚠️ {error}
+              </div>
             )}
             {!loading && !error && pageData.length === 0 && (
-              <div className="trow" style={{ justifyContent: "center", color: "#64748b" }}>📭 Không có tài khoản phù hợp</div>
+              <div className="trow" style={{ justifyContent: "center", color: "#64748b" }}>
+                📭 Không có tài khoản phù hợp
+              </div>
             )}
             {pageData.map((a) => (
               <div className="trow" key={a.id}>
-                <div><input type="checkbox" checked={selected.has(a.id)} onChange={(e)=>{e.stopPropagation(); toggleSelect(a.id);}} /></div>
+                <div>
+                  <input
+                    type="checkbox"
+                    checked={selected.has(a.id)}
+                    onChange={(e) => {
+                      e.stopPropagation();
+                      toggleSelect(a.id);
+                    }}
+                  />
+                </div>
                 <div>{a.avatar}</div>
                 <div>{a.name}</div>
                 <div>{a.code}</div>
                 <div>{a.email}</div>
-                <div><span className="pill role">{a.role}</span></div>
-                <div><span className={`status ${a.status}`.replace(/\s/g,"-")}>{a.status}</span></div>
+                <div>
+                  <span className="pill role">{a.role}</span>
+                </div>
+                <div>
+                  <span className={`status ${a.status}`.replace(/\s/g, "-")}>{a.status}</span>
+                </div>
                 <div>{a.lastLogin}</div>
                 <div className="actions">
-                  <button className="icon-btn" title="Sửa" onClick={(e)=>{e.stopPropagation(); onOpenEdit(a);}}>✏️</button>
-                  {a.status!=="Hoạt động" ? (
+                  <button
+                    className="icon-btn"
+                    title="Sửa"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onOpenEdit(a);
+                    }}
+                  >
+                    ✏️
+                  </button>
+                  {a.status !== "Hoạt động" ? (
                     <button
                       className="icon-btn"
                       title="Mở khóa"
-                      onClick={(e)=>{
+                      onClick={(e) => {
                         e.stopPropagation();
-                        updateList((prev)=>
-                          prev.map((x)=>
-                            x.id===a.id
+                        updateList((prev) =>
+                          prev.map((x) =>
+                            x.id === a.id
                               ? { ...x, status: "Hoạt động", statusKey: "active" }
                               : x,
                           ),
                         );
                       }}
-                    >🔓</button>
+                    >
+                      🔓
+                    </button>
                   ) : (
                     <button
                       className="icon-btn"
                       title="Khóa"
-                      onClick={(e)=>{
+                      onClick={(e) => {
                         e.stopPropagation();
-                        updateList((prev)=>
-                          prev.map((x)=>
-                            x.id===a.id
+                        updateList((prev) =>
+                          prev.map((x) =>
+                            x.id === a.id
                               ? { ...x, status: "Bị khóa", statusKey: "locked" }
                               : x,
                           ),
                         );
                       }}
-                    >🔒</button>
+                    >
+                      🔒
+                    </button>
                   )}
-                  <button className="icon-btn" title="Đặt lại mật khẩu" onClick={(e)=>{e.stopPropagation(); onResetPassword(a);}}>🔄</button>
-                  <button className="icon-btn" title="Xóa" onClick={(e)=>{e.stopPropagation(); if(confirm("Xóa tài khoản?")) updateList(prev=>prev.filter(x=>x.id!==a.id));}}>🗑</button>
+                  <button
+                    className="icon-btn"
+                    title="Đặt lại mật khẩu"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onResetPassword(a);
+                    }}
+                  >
+                    🔄
+                  </button>
+                  <button
+                    className="icon-btn"
+                    title="Xóa"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (confirm("Xóa tài khoản?")) {
+                        updateList((prev) => prev.filter((x) => x.id !== a.id));
+                      }
+                    }}
+                  >
+                    🗑
+                  </button>
                 </div>
               </div>
             ))}
           </div>
         </div>
         <div className="pagination">
-          <button className="chip" disabled={page<=1} onClick={()=>setPage(p=>Math.max(1,p-1))}>« Trước</button>
-          <span className="page-info">Trang {page}/{totalPages}</span>
-          <button className="chip" disabled={page>=totalPages} onClick={()=>setPage(p=>Math.min(totalPages,p+1))}>Sau »</button>
+          <button
+            className="chip"
+            disabled={page <= 1}
+            onClick={() => setPage((p) => Math.max(1, p - 1))}
+          >
+            « Trước
+          </button>
+          <span className="page-info">
+            Trang {page}/{totalPages}
+          </span>
+          <button
+            className="chip"
+            disabled={page >= totalPages}
+            onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+          >
+            Sau »
+          </button>
         </div>
       </div>
 
-      {resetOpen && (
-        <div className="modal" onClick={()=>setResetOpen(null)}>
-          <div className="modal-content small" onClick={(e)=>e.stopPropagation()}>
-            <div className="modal-head">
-              <div className="title">Đặt lại mật khẩu</div>
-              <button className="icon-btn" onClick={()=>setResetOpen(null)}>✖</button>
-            </div>
-            <div className="modal-body">
-              <div>Bạn có chắc muốn đặt lại mật khẩu cho tài khoản <strong>{resetOpen.name}</strong>?</div>
-            </div>
-            <div className="modal-foot">
-              <button className="qr-btn" onClick={()=>setResetOpen(null)}>Hủy</button>
-              <button className="qr-btn" onClick={doResetPassword}>✅ Đồng ý</button>
-            </div>
+      <div
+        className={`modal ${resetOpen ? "" : "hidden"}`}
+        onClick={() => resetOpen && setResetOpen(null)}
+      >
+        <div className="modal-content small" onClick={(e) => e.stopPropagation()}>
+          <div className="modal-head">
+            <div className="title">Đặt lại mật khẩu</div>
+            <button className="icon-btn" onClick={() => setResetOpen(null)}>
+              ✖
+            </button>
+          </div>
+          <div className="modal-body">
+            {resetOpen && (
+              <div>
+                Bạn có chắc muốn đặt lại mật khẩu cho tài khoản <strong>{resetOpen.name}</strong>?
+              </div>
+            )}
+          </div>
+          <div className="modal-foot">
+            <button className="qr-btn" onClick={() => setResetOpen(null)}>
+              Hủy
+            </button>
+            <button className="qr-btn" onClick={doResetPassword}>
+              ✅ Đồng ý
+            </button>
           </div>
         </div>
-      )}
+      </div>
 
-      {modalOpen && (
-        <div className="modal" onClick={() => setModalOpen(false)}>
-          <div className="modal-content account-modal" onClick={(e)=>e.stopPropagation()}>
-            <div className="modal-head">
-              <div className="title">{edit?"Chỉnh sửa tài khoản":"Tạo tài khoản mới"}</div>
-              <button className="icon-btn" onClick={() => setModalOpen(false)}>✖</button>
-            </div>
-            <div className="modal-body account-grid">
-              <div className="form-panel">
-                <div className="panel-header">
-                  <div className="panel-title">Thông tin tài khoản</div>
+      <div
+        className={`modal ${modalOpen ? "" : "hidden"}`}
+        onClick={() => modalOpen && setModalOpen(false)}
+      >
+        <div className="modal-content account-modal" onClick={(e) => e.stopPropagation()}>
+          <div className="modal-head">
+            <div className="title">{edit ? "Chỉnh sửa tài khoản" : "Tạo tài khoản mới"}</div>
+            <button className="icon-btn" onClick={() => setModalOpen(false)}>
+              ✖
+            </button>
+          </div>
+          <div className="modal-body account-grid">
+            <div className="form-panel">
+              <div className="panel-header">
+                <div className="panel-title">Thông tin tài khoản</div>
+              </div>
+              <div className="panel-body">
+                <div className="field">
+                  <label className="label">Họ và tên</label>
+                  <input
+                    className="input"
+                    value={formName}
+                    onChange={(e) => setFormName(e.target.value)}
+                    placeholder="Nguyễn Văn A"
+                  />
                 </div>
-                <div className="panel-body">
-                  <div className="field">
-                    <label className="label">Họ và tên</label>
-                    <input className="input" value={formName} onChange={(e)=>setFormName(e.target.value)} placeholder="Nguyễn Văn A" />
+                <div className="field">
+                  <label className="label">Email đăng nhập</label>
+                  <input
+                    className="input"
+                    value={formEmail}
+                    onChange={(e) => setFormEmail(e.target.value)}
+                    placeholder="email@school.edu.vn"
+                  />
+                </div>
+                <div className="field">
+                  <label className="label">Mã số</label>
+                  <input
+                    className="input"
+                    value={formCode}
+                    onChange={(e) => setFormCode(e.target.value)}
+                    placeholder="SVxxxx / GVxxx / ADxxx"
+                  />
+                </div>
+                <div className="field two-cols">
+                  <div>
+                    <label className="label">Vai trò</label>
+                    <select
+                      className="input"
+                      value={formRole}
+                      onChange={(e) => setFormRole(e.target.value as Role)}
+                    >
+                      <option>Admin</option>
+                      <option>Giảng viên</option>
+                      <option>Sinh viên</option>
+                    </select>
                   </div>
-                  <div className="field">
-                    <label className="label">Email đăng nhập</label>
-                    <input className="input" value={formEmail} onChange={(e)=>setFormEmail(e.target.value)} placeholder="email@school.edu.vn" />
+                  <div>
+                    <label className="label">Trạng thái</label>
+                    <select
+                      className="input"
+                      value={formStatus}
+                      onChange={(e) => setFormStatus(e.target.value as Status)}
+                    >
+                      <option>Hoạt động</option>
+                      <option>Bị khóa</option>
+                      <option>Chờ kích hoạt</option>
+                    </select>
                   </div>
-                  <div className="field">
-                    <label className="label">Mã số</label>
-                    <input className="input" value={formCode} onChange={(e)=>setFormCode(e.target.value)} placeholder="SVxxxx / GVxxx / ADxxx" />
-                  </div>
-                  <div className="field two-cols">
-                    <div>
-                      <label className="label">Vai trò</label>
-                      <select className="input" value={formRole} onChange={(e)=>setFormRole(e.target.value as Role)}>
-                        <option>Admin</option>
-                        <option>Giảng viên</option>
-                        <option>Sinh viên</option>
-                      </select>
-                    </div>
-                    <div>
-                      <label className="label">Trạng thái</label>
-                      <select className="input" value={formStatus} onChange={(e)=>setFormStatus(e.target.value as Status)}>
-                        <option>Hoạt động</option>
-                        <option>Bị khóa</option>
-                        <option>Chờ kích hoạt</option>
-                      </select>
-                    </div>
-                  </div>
-                  <div className="field">
-                    <label className="label">Mật khẩu</label>
-                    <div className="inline">
-                      <input className="input" value={formPassword} onChange={(e)=>setFormPassword(e.target.value)} placeholder="Tự động nếu để trống" />
-                      <button className="chip" onClick={()=>setFormPassword(randomPass())}>Tạo ngẫu nhiên</button>
-                    </div>
+                </div>
+                <div className="field">
+                  <label className="label">Mật khẩu</label>
+                  <div className="inline">
+                    <input
+                      className="input"
+                      value={formPassword}
+                      onChange={(e) => setFormPassword(e.target.value)}
+                      placeholder="Tự động nếu để trống"
+                    />
+                    <button className="chip" onClick={() => setFormPassword(randomPass())}>
+                      Tạo ngẫu nhiên
+                    </button>
                   </div>
                 </div>
               </div>
-              <div className="form-panel secondary">
-                <div className="panel-header">
-                  <div className="panel-title">Tóm tắt & phân quyền</div>
-                </div>
-                <div className="panel-body">
-                  <div className="summary-box">
-                    <div className="summary-item"><span className="summary-icon">🆔</span><span>Mã số: {formCode || "Chưa nhập"}</span></div>
-                    <div className="summary-item"><span className="summary-icon">🎯</span><span>Vai trò: {formRole}</span></div>
-                    <div className="summary-item"><span className="summary-icon">📨</span><span>Email: {formEmail || "Chưa nhập"}</span></div>
-                    <div className="summary-item"><span className="summary-icon">💡</span><span>Trạng thái: {formStatus}</span></div>
-                  </div>
-                  <label className="label">Ghi chú</label>
-                  <textarea className="input" rows={3} value={formNote} onChange={(e)=>setFormNote(e.target.value)} placeholder="Ghi chú nếu cần..."></textarea>
-                  <div className="section-title">Phân quyền chi tiết</div>
-                  <div className="perm-list">
-                    <label><input type="checkbox" checked={perm.view_students} onChange={(e)=>setPerm(prev=>({...prev, view_students: e.target.checked}))} /> Xem danh sách sinh viên</label>
-                    <label><input type="checkbox" checked={perm.edit_schedule} onChange={(e)=>setPerm(prev=>({...prev, edit_schedule: e.target.checked}))} /> Chỉnh sửa lịch học</label>
-                    <label><input type="checkbox" checked={perm.manage_lecturers} onChange={(e)=>setPerm(prev=>({...prev, manage_lecturers: e.target.checked}))} /> Quản lý giảng viên</label>
-                    <label><input type="checkbox" checked={perm.export_reports} onChange={(e)=>setPerm(prev=>({...prev, export_reports: e.target.checked}))} /> Xuất báo cáo</label>
-                  </div>
-                </div>
-              </div>
             </div>
-            <div className="modal-foot account-foot">
-              <button className="qr-btn ghost" onClick={()=>setModalOpen(false)}>Hủy</button>
-              <div className="actions-row">
-                <button className="qr-btn" onClick={()=>onSubmit(false)}>💾 Lưu</button>
-                <button className="qr-btn" onClick={()=>onSubmit(true)}>📩 Lưu & Gửi mail</button>
+            <div className="form-panel secondary">
+              <div className="panel-header">
+                <div className="panel-title">Tóm tắt & phân quyền</div>
+              </div>
+              <div className="panel-body">
+                <div className="summary-box">
+                  <div className="summary-item">
+                    <span className="summary-icon">🆔</span>
+                    <span>Mã số: {formCode || "Chưa nhập"}</span>
+                  </div>
+                  <div className="summary-item">
+                    <span className="summary-icon">🎯</span>
+                    <span>Vai trò: {formRole}</span>
+                  </div>
+                  <div className="summary-item">
+                    <span className="summary-icon">📨</span>
+                    <span>Email: {formEmail || "Chưa nhập"}</span>
+                  </div>
+                  <div className="summary-item">
+                    <span className="summary-icon">💡</span>
+                    <span>Trạng thái: {formStatus}</span>
+                  </div>
+                </div>
+                <label className="label">Ghi chú</label>
+                <textarea
+                  className="input"
+                  rows={3}
+                  value={formNote}
+                  onChange={(e) => setFormNote(e.target.value)}
+                  placeholder="Ghi chú nếu cần..."
+                ></textarea>
+                <div className="section-title">Phân quyền chi tiết</div>
+                <div className="perm-list">
+                  <label>
+                    <input
+                      type="checkbox"
+                      checked={perm.view_students}
+                      onChange={(e) =>
+                        setPerm((prev) => ({ ...prev, view_students: e.target.checked }))
+                      }
+                    />{" "}
+                    Xem danh sách sinh viên
+                  </label>
+                  <label>
+                    <input
+                      type="checkbox"
+                      checked={perm.edit_schedule}
+                      onChange={(e) =>
+                        setPerm((prev) => ({ ...prev, edit_schedule: e.target.checked }))
+                      }
+                    />{" "}
+                    Chỉnh sửa lịch học
+                  </label>
+                  <label>
+                    <input
+                      type="checkbox"
+                      checked={perm.manage_lecturers}
+                      onChange={(e) =>
+                        setPerm((prev) => ({ ...prev, manage_lecturers: e.target.checked }))
+                      }
+                    />{" "}
+                    Quản lý giảng viên
+                  </label>
+                  <label>
+                    <input
+                      type="checkbox"
+                      checked={perm.export_reports}
+                      onChange={(e) =>
+                        setPerm((prev) => ({ ...prev, export_reports: e.target.checked }))
+                      }
+                    />{" "}
+                    Xuất báo cáo
+                  </label>
+                </div>
               </div>
             </div>
           </div>
+          <div className="modal-foot account-foot">
+            <button className="qr-btn ghost" onClick={() => setModalOpen(false)}>
+              Hủy
+            </button>
+            <div className="actions-row">
+              <button className="qr-btn" onClick={() => onSubmit(false)}>
+                💾 Lưu
+              </button>
+              <button className="qr-btn" onClick={() => onSubmit(true)}>
+                📩 Lưu & Gửi mail
+              </button>
+            </div>
+          </div>
         </div>
-      )}
+      </div>
     </Shell>
   );
 }

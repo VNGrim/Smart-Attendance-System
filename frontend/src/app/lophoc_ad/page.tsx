@@ -243,7 +243,11 @@ const Shell = ({
       </div>
     </header>
 
-    <main className="main">{children}</main>
+    <main className="main">
+      <div className="content-area">
+        {children}
+      </div>
+    </main>
   </div>
 );
 
@@ -1002,6 +1006,39 @@ export default function AdminClassesPage() {
     }
   }, [fetchClassList]);
 
+  const handleChangeTeacher = useCallback(async (classItem: ClassItem) => {
+    if (!classItem?.code) return;
+    const teacherId = window.prompt("Nhập mã giảng viên mới (vd: GV001)", classItem.teacherId || "");
+    if (!teacherId || !teacherId.trim()) return;
+
+    try {
+      const resp = await fetch(`${API_BASE}/${encodeURIComponent(classItem.code)}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ teacherId: teacherId.trim() }),
+      });
+      const data = await resp.json().catch(() => null);
+      if (!resp.ok) {
+        throw new Error(data?.message || `HTTP ${resp.status}`);
+      }
+
+      const updated = mapBackendClass(data?.data || data);
+      const teacherName = updated.teacher || findTeacherName(updated.teacherId);
+      const merged: ClassItem = {
+        ...updated,
+        teacher: teacherName,
+        subjectName: updated.subjectName || options.subjects[updated.subjectCode] || updated.subjectName,
+      };
+
+      setList((prev) => prev.map((c) => (c.code === merged.code ? merged : c)));
+      setDrawer((prev) => (prev && prev.code === merged.code ? { ...prev, ...merged } : prev));
+    } catch (error) {
+      console.error("change teacher error", error);
+      alert((error instanceof Error && error.message) || "Không thể đổi giảng viên. Vui lòng thử lại.");
+    }
+  }, [findTeacherName, options.subjects]);
+
   const onOpenCreate = () => { setEdit(null); setModalOpen(true); };
   const onOpenEdit = (c: ClassItem) => { setEdit(c); setModalOpen(true); };
 
@@ -1210,7 +1247,6 @@ export default function AdminClassesPage() {
             <div className="drawer-body grid2">
               <div>
                 <div className="kv"><span className="k">Khóa</span><span className="v">{drawer.cohort}</span></div>
-                <div className="kv"><span className="k">Ngành</span><span className="v">{drawer.major}</span></div>
                 <div className="kv"><span className="k">Giảng viên</span><span className="v">{drawer.teacher} <span className="muted">({drawer.teacherEmail||"--"})</span></span></div>
                 <div className="kv"><span className="k">Trạng thái</span><span className="v"><span className={`status ${drawer.status}`.replace(/\s/g,"-")}>{drawer.status}</span></span></div>
                 <div className="section-title">Môn học</div>
@@ -1219,7 +1255,6 @@ export default function AdminClassesPage() {
                 </div>
                 <div className="actions-row">
                   <button className="qr-btn" onClick={()=>{ setDrawer(null); onOpenEdit(drawer); }}>✏️ Chỉnh sửa</button>
-                  <button className="qr-btn" onClick={()=>alert("Đổi giảng viên")}>👨‍🏫 Đổi giảng viên</button>
                   <button className="qr-btn" onClick={()=>handleOpenAddStudent(drawer)}>➕ Thêm sinh viên</button>
                   <button className="qr-btn" onClick={()=>{ handleDeleteClass(drawer.code); }}>🗑 Xóa lớp</button>
                 </div>
