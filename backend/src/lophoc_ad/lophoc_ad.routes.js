@@ -239,6 +239,7 @@ router.get("/", async (req, res) => {
       throw new Error("PRISMA_CLASSES_UNAVAILABLE");
     }
 
+    // Lấy danh sách lớp
     const rows = await prisma.classes.findMany({
       orderBy: { created_at: "desc" },
       include: {
@@ -248,12 +249,28 @@ router.get("/", async (req, res) => {
       },
     });
 
+    // Lấy số sinh viên cho từng lớp
+    const classIds = rows.map(row => row.class_id);
+    const studentCountsRaw = await prisma.students.findMany({
+      where: {
+        classes: { in: classIds }
+      },
+      select: { student_id: true, classes: true }
+    });
+    const studentCounts = {};
+    classIds.forEach(id => { studentCounts[id] = 0; });
+    studentCountsRaw.forEach(stu => {
+      splitClasses(stu.classes).forEach(cid => {
+        if (studentCounts[cid] !== undefined) studentCounts[cid]++;
+      });
+    });
+
     const formatted = rows.map((row) => {
       const normalizedStatus = normalizeStatus(row.status);
       return formatClassRecord({
         ...row,
         status: normalizedStatus,
-        studentCount: row.studentCount || 0,
+        studentCount: studentCounts[row.class_id] || 0,
       });
     });
 

@@ -1,4 +1,5 @@
 const express = require('express');
+const ExcelJS = require('exceljs');
 const bcrypt = require('bcryptjs');
 const prisma = require('../config/prisma');
 const { auth } = require('../middleware/auth');
@@ -7,6 +8,7 @@ const { requireRole } = require('../middleware/roles');
 const router = express.Router();
 
 router.use(auth, requireRole('admin'));
+
 
 const DEFAULT_PASSWORD = 'giangvienfpt';
 const ALLOWED_STATUSES = new Set(['Đang dạy', 'Tạm nghỉ', 'Thôi việc']);
@@ -67,13 +69,34 @@ router.get('/next-id', async (req, res) => {
 
 router.get('/', async (req, res) => {
   try {
+    // Lấy danh sách giảng viên
     const lecturers = await prisma.teachers.findMany({
       orderBy: { full_name: 'asc' },
     });
 
+    // Lấy số lớp cho từng giảng viên từ bảng classes
+    const teacherIds = lecturers.map(l => l.teacher_id);
+    const classCounts = await prisma.classes.groupBy({
+      by: ['teacher_id'],
+      where: {
+        teacher_id: { in: teacherIds }
+      },
+      _count: { class_id: true }
+    });
+
+    // Map teacher_id -> số lớp
+    const classCountMap = {};
+    classCounts.forEach(item => {
+      classCountMap[item.teacher_id] = item._count.class_id;
+    });
+
+    // Trả về lecturers với số lớp thực tế
     return res.json({
       success: true,
-      lecturers: lecturers.map(mapLecturer),
+      lecturers: lecturers.map(l => ({
+        ...mapLecturer(l),
+        classes: classCountMap[l.teacher_id] || 0
+      })),
     });
   } catch (error) {
     console.error('admin lecturers list error:', error);
