@@ -452,14 +452,34 @@ const getSessionWithRecordsHandler = async (req, res) => {
     if (!session) return res.status(404).json({ success: false, message: "Không tìm thấy buổi điểm danh" });
     await ensureTeacherOwnsClass(teacherId, session.session_class.class_id);
 
-    const [students, rawRecords] = await Promise.all([
+    let [students, rawRecords] = await Promise.all([
       getClassStudents(session.session_class.class_id),
       getAttendanceRecords(id),
     ]);
 
     const recordMap = new Map((rawRecords || []).map((item) => [item.studentId, item]));
+    const missingStudents = (students || []).filter((student) => !recordMap.has(student.student_id));
+
+    if (missingStudents.length) {
+      const entries = missingStudents.map((student) => ({
+        studentId: student.student_id,
+        status: "absent",
+        markedAt: undefined,
+        note: null,
+        modifiedBy: teacherId,
+      }));
+
+      await saveManualAttendance(id, entries);
+
+      [students, rawRecords] = await Promise.all([
+        getClassStudents(session.session_class.class_id),
+        getAttendanceRecords(id),
+      ]);
+    }
+
+    const finalRecordMap = new Map((rawRecords || []).map((item) => [item.studentId, item]));
     const records = (students || []).map((student) => {
-      const record = recordMap.get(student.student_id);
+      const record = finalRecordMap.get(student.student_id);
       return {
         id: record?.id ?? null,
         studentId: student.student_id,
