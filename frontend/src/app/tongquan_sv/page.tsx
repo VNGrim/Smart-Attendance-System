@@ -314,7 +314,7 @@ export default function StudentDashboardPage() {
         body: JSON.stringify({ code }),
       });
 
-      setAttendanceMessage({ type: "success", text: "✅ Điểm danh thành công!" });
+      setAttendanceMessage({ type: "success", text: "Đã điểm danh thành công!" });
       setShowQRScanner(false);
       setShowCodeInput(false);
       setAttendanceCode("");

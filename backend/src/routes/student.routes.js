@@ -1,64 +1,30 @@
 const express = require("express");
-const multer = require("multer");
-const path = require("path");
-const fs = require("fs");
 const prisma = require("../config/prisma");
 
 const router = express.Router();
 
-// Cấu hình lưu file upload
-const uploadDir = path.join(__dirname, "../../uploads");
-if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir);
-
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => cb(null, uploadDir),
-  filename: (req, file, cb) => {
-    const ext = path.extname(file.originalname);
-    const unique = `${Date.now()}-${Math.round(Math.random() * 1e9)}${ext}`;
-    cb(null, unique);
-  },
-});
-const upload = multer({ storage });
-
 // POST /api/students/update-avatar
-router.post("/update-avatar", upload.single("avatar"), async (req, res) => {
-  console.log("📥 Received avatar upload request");
-  console.log("📦 Body:", req.body);
-  console.log("📎 File:", req.file);
-  
+// Body JSON: { student_id: string, avatar_url: string }
+router.post("/update-avatar", async (req, res) => {
   try {
-    const { student_id } = req.body;
-    if (!student_id) {
-      console.error("❌ Missing student_id");
-      return res.status(400).json({ success: false, message: "Thiếu student_id trong FormData" });
+    const { student_id, avatar_url } = req.body || {};
+    console.log("📥 Received avatar URL update", { student_id, avatar_url });
+    if (!student_id || typeof student_id !== "string") {
+      return res.status(400).json({ success: false, message: "Thiếu hoặc sai student_id" });
+    }
+    if (!avatar_url || typeof avatar_url !== "string") {
+      return res.status(400).json({ success: false, message: "Thiếu avatar_url" });
     }
 
-    if (!req.file) {
-      console.error("❌ No file uploaded");
-      return res.status(400).json({ success: false, message: "Không có file được upload" });
-    }
-
-    const avatarPath = `/uploads/${req.file.filename}`;
-    console.log("💾 Saving avatar path to DB:", avatarPath, "for student:", student_id);
-
-    // ✅ Cập nhật avatar_url vào database
-    try {
-      const updateResult = await prisma.students.update({
-        where: { student_id },
-        data: { avatar_url: avatarPath },
-      });
-      console.log("✅ Database update result:", updateResult);
-    } catch (dbError) {
-      console.error("❌ Database update error:", dbError);
-      throw dbError; // Re-throw để outer catch xử lý
-    }
-
-    console.log("✅ Avatar updated successfully");
-    res.json({ success: true, avatar_url: avatarPath });
+    const updated = await prisma.students.update({
+      where: { student_id },
+      data: { avatar_url },
+    });
+    console.log("✅ Avatar URL saved to DB", { student_id, avatar_url });
+    return res.json({ success: true, avatar_url: updated.avatar_url });
   } catch (err) {
-    console.error("❌ Lỗi upload avatar:", err);
-    console.error("❌ Error stack:", err.stack);
-    res.status(500).json({ success: false, message: "Lỗi máy chủ khi upload avatar", error: err.message });
+    console.error("❌ Lỗi update avatar_url:", err);
+    return res.status(500).json({ success: false, message: "Lỗi máy chủ khi cập nhật avatar", error: err.message });
   }
 });
 

@@ -10,6 +10,7 @@ export type Lecturer = {
   status: LecturerStatus;
   email?: string;
   phone?: string;
+  avatar?: string | null;
   classList?: string[];
   createdAt?: string | null;
   updatedAt?: string | null;
@@ -36,6 +37,7 @@ export function mapBackendLecturer(record: any): Lecturer {
     status: (record.status as LecturerStatus) ?? "Đang dạy",
     email: record.email ?? undefined,
     phone: record.phone ?? undefined,
+    avatar: record.avatar ?? record.avatar_url ?? null,
     classList,
     createdAt: record.createdAt ?? record.created_at ?? null,
     updatedAt: record.updatedAt ?? record.updated_at ?? null,

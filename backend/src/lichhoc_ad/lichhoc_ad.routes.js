@@ -394,8 +394,9 @@ router.post("/schedule/copy", async (req, res) => {
     }
 
     await prisma.$transaction(
-      source.map((item) =>
-        prisma.timetable.create({
+      source.map((item) => {
+        const scheduleDate = computeDateFromWeekDay(to, item.day_of_week);
+        return prisma.timetable.create({
           data: {
             week_key: to,
             day_of_week: item.day_of_week,
@@ -406,9 +407,10 @@ router.post("/schedule/copy", async (req, res) => {
             teacher_name: item.teacher_name,
             room: item.room,
             room_name: item.room_name,
+            date: scheduleDate || null,
           },
-        })
-      )
+        });
+      })
     );
 
     return res.json({ success: true });

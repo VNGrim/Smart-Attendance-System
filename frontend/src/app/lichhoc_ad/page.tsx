@@ -679,9 +679,25 @@ export default function AdminSchedulePage() {
           <>
             <div className="grid" style={{ marginBottom: 6 }}>
               <div></div>
-              {DAYS.map((day) => (
-                <div key={day} className="col-header">{day}</div>
-              ))}
+              {DAYS.map((day, idx) => {
+                const weekStart = normalizeToWeekStart(weekDate);
+                const cellDate = new Date(weekStart.getTime());
+                cellDate.setDate(weekStart.getDate() + idx);
+                const dayLabel = day.toUpperCase();
+                const dateLabel = `${cellDate.getDate().toString().padStart(2, "0")}/${(cellDate.getMonth() + 1)
+                  .toString()
+                  .padStart(2, "0")}`;
+                return (
+                  <div
+                    key={day}
+                    className="col-header"
+                    style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center" }}
+                  >
+                    <div style={{ textAlign: "center" }}>{dayLabel}</div>
+                    <div style={{ fontSize: 13, textAlign: "center" }}>({dateLabel})</div>
+                  </div>
+                );
+              })}
             </div>
             <div className="grid">
               {SLOT_IDS.map((slot) => (
@@ -732,193 +748,188 @@ export default function AdminSchedulePage() {
               ))}
             </div>
           </>
-        )}
+        )} 
       </div>
 
-      {modalCreate && (
-        <Modal onClose={closeCreateModal} title="Thêm lịch học">
-          <form className="schedule-form" onSubmit={handleCreateSubmit}>
+      <Modal open={modalCreate} onClose={closeCreateModal} title="Thêm lịch học">
+        <form className="schedule-form" onSubmit={handleCreateSubmit}>
+          <div className="form-group">
+            <label>Lớp</label>
+            <select
+              value={createForm.classId}
+              onChange={(e) => {
+                const nextId = e.target.value;
+                const cls = options?.classes.find((c) => c.id === nextId);
+                setCreateForm((prev) => ({
+                  ...prev,
+                  classId: nextId,
+                  subjectName: cls?.subject || prev.subjectName,
+                  teacherId: cls?.teacherId || prev.teacherId,
+                  teacherName: cls?.teacherName || prev.teacherName,
+                  room: cls?.room || prev.room,
+                }));
+              }}
+            >
+              <option value="">-- Chọn lớp --</option>
+              {options?.classes.map((cls) => (
+                <option key={cls.id} value={cls.id}>
+                  {cls.id} - {cls.name}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="form-row">
             <div className="form-group">
-              <label>Lớp</label>
+              <label>Môn học</label>
+              <input
+                value={createForm.subjectName}
+                onChange={(e) => setCreateForm((prev) => ({ ...prev, subjectName: e.target.value }))}
+                placeholder="Tên môn"
+              />
+            </div>
+            <div className="form-group">
+              <label>Slot</label>
+              <select value={createForm.slot} onChange={(e) => setCreateForm((prev) => ({ ...prev, slot: Number(e.target.value) }))}>
+                {SLOT_IDS.map((slot) => (
+                  <option key={slot} value={slot}>
+                    Slot {slot}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+          <div className="form-row">
+            <div className="form-group">
+              <label>Ngày</label>
+              <select value={createForm.day} onChange={(e) => setCreateForm((prev) => ({ ...prev, day: e.target.value }))}>
+                {DAYS.map((day) => (
+                  <option key={day} value={day}>
+                    {day}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="form-group">
+              <label>Phòng</label>
+              <input
+                value={createForm.room}
+                onChange={(e) => setCreateForm((prev) => ({ ...prev, room: e.target.value }))}
+                placeholder="VD: A201"
+              />
+            </div>
+          </div>
+          <div className="form-row">
+            <div className="form-group">
+              <label>Giảng viên</label>
               <select
-                value={createForm.classId}
+                value={createForm.teacherId}
                 onChange={(e) => {
-                  const nextId = e.target.value;
-                  const cls = options?.classes.find((c) => c.id === nextId);
+                  const id = e.target.value;
+                  const teacher = options?.teachers.find((t) => t.id === id);
                   setCreateForm((prev) => ({
                     ...prev,
-                    classId: nextId,
-                    subjectName: cls?.subject || prev.subjectName,
-                    teacherId: cls?.teacherId || prev.teacherId,
-                    teacherName: cls?.teacherName || prev.teacherName,
-                    room: cls?.room || prev.room,
+                    teacherId: id,
+                    teacherName: teacher?.name || "",
                   }));
                 }}
               >
-                <option value="">-- Chọn lớp --</option>
-                {options?.classes.map((cls) => (
-                  <option key={cls.id} value={cls.id}>
-                    {cls.id} - {cls.name}
+                <option value="">-- Chọn --</option>
+                {options?.teachers.map((teacher) => (
+                  <option key={teacher.id} value={teacher.id}>
+                    {teacher.name}
                   </option>
                 ))}
               </select>
             </div>
-            <div className="form-row">
-              <div className="form-group">
-                <label>Môn học</label>
-                <input
-                  value={createForm.subjectName}
-                  onChange={(e) => setCreateForm((prev) => ({ ...prev, subjectName: e.target.value }))}
-                  placeholder="Tên môn"
-                />
-              </div>
-              <div className="form-group">
-                <label>Slot</label>
-                <select value={createForm.slot} onChange={(e) => setCreateForm((prev) => ({ ...prev, slot: Number(e.target.value) }))}>
-                  {SLOT_IDS.map((slot) => (
-                    <option key={slot} value={slot}>
-                      Slot {slot}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </div>
-            <div className="form-row">
-              <div className="form-group">
-                <label>Ngày</label>
-                <select value={createForm.day} onChange={(e) => setCreateForm((prev) => ({ ...prev, day: e.target.value }))}>
-                  {DAYS.map((day) => (
-                    <option key={day} value={day}>
-                      {day}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div className="form-group">
-                <label>Phòng</label>
-                <input
-                  value={createForm.room}
-                  onChange={(e) => setCreateForm((prev) => ({ ...prev, room: e.target.value }))}
-                  placeholder="VD: A201"
-                />
-              </div>
-            </div>
-            <div className="form-row">
-              <div className="form-group">
-                <label>Giảng viên</label>
-                <select
-                  value={createForm.teacherId}
-                  onChange={(e) => {
-                    const id = e.target.value;
-                    const teacher = options?.teachers.find((t) => t.id === id);
-                    setCreateForm((prev) => ({
-                      ...prev,
-                      teacherId: id,
-                      teacherName: teacher?.name || "",
-                    }));
-                  }}
-                >
-                  <option value="">-- Chọn --</option>
-                  {options?.teachers.map((teacher) => (
-                    <option key={teacher.id} value={teacher.id}>
-                      {teacher.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div className="form-group">
-                <label>Tên giảng viên</label>
-                <input value={createForm.teacherName} onChange={(e) => setCreateForm((prev) => ({ ...prev, teacherName: e.target.value }))} />
-              </div>
-            </div>
-            <div className="form-actions">
-              <button type="button" className="btn-outline" onClick={closeCreateModal}>
-                Hủy
-              </button>
-              <button type="submit" className="btn-primary" disabled={actionLoading}>
-                {actionLoading ? "Đang lưu..." : "Lưu lịch"}
-              </button>
-            </div>
-          </form>
-        </Modal>
-      )}
-
-      {modalAuto && (
-        <Modal onClose={closeAutoModal} title="Tự động xếp lịch">
-          <div className="auto-body">
             <div className="form-group">
-              <label>Chọn lớp cần xếp</label>
-              <select
-                multiple
-                value={autoSelection}
-                onChange={(e) => {
-                  const selected = Array.from(e.target.selectedOptions).map((opt) => opt.value);
-                  setAutoSelection(selected);
-                }}
-                style={{ height: 160 }}
-              >
-                {options?.classes.map((cls) => (
-                  <option key={cls.id} value={cls.id}>
-                    {cls.id} - {cls.name}
-                  </option>
-                ))}
-              </select>
+              <label>Tên giảng viên</label>
+              <input value={createForm.teacherName} onChange={(e) => setCreateForm((prev) => ({ ...prev, teacherName: e.target.value }))} />
             </div>
-            <div className="form-actions" style={{ justifyContent: "flex-end" }}>
-              <button className="btn-outline" onClick={() => {
-                setAutoSelection([]);
-                setAutoPlan([]);
-              }}>
-                Xóa chọn
-              </button>
-              <button className="btn-primary" onClick={handleAutoGenerate} disabled={autoLoading}>
-                {autoLoading ? "Đang tính..." : "Tạo gợi ý"}
-              </button>
-            </div>
-
-            {autoPlan.length > 0 ? (
-              <div className="auto-preview">
-                <div className="preview-header">
-                  <div>🌐 Gợi ý xếp lịch</div>
-                  <button className="btn-primary" onClick={handleAutoApply} disabled={autoLoading}>
-                    {autoLoading ? "Đang áp dụng..." : "Áp dụng lịch"}
-                  </button>
-                </div>
-                <div className="preview-table">
-                  <div className="preview-row preview-header-row">
-                    <span>Lớp</span>
-                    <span>Slot</span>
-                    <span>Ngày</span>
-                    <span>Giảng viên</span>
-                    <span>Phòng</span>
-                  </div>
-                  {autoPlan.map((item, idx) => (
-                    <div className="preview-row" key={`${item.class_id}-${item.day}-${item.slot_id}-${idx}`}>
-                      <span>{item.class_id}</span>
-                      <span>Slot {item.slot_id}</span>
-                      <span>{item.day}</span>
-                      <span>{item.teacher_name || "--"}</span>
-                      <span>{item.room || "--"}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            ) : (
-              <div className="empty-preview">Chưa có gợi ý – hãy chọn lớp và nhấn "Tạo gợi ý".</div>
-            )}
           </div>
-        </Modal>
-      )}
+          <div className="form-actions">
+            <button type="button" className="btn-outline" onClick={closeCreateModal}>
+              Hủy
+            </button>
+            <button type="submit" className="btn-primary" disabled={actionLoading}>
+              {actionLoading ? "Đang lưu..." : "Lưu lịch"}
+            </button>
+          </div>
+        </form>
+      </Modal>
+
+      <Modal open={modalAuto} onClose={closeAutoModal} title="Tự động xếp lịch">
+        <div className="auto-body">
+          <div className="form-group">
+            <label>Chọn lớp cần xếp</label>
+            <select
+              multiple
+              value={autoSelection}
+              onChange={(e) => {
+                const selected = Array.from(e.target.selectedOptions).map((opt) => opt.value);
+                setAutoSelection(selected);
+              }}
+              style={{ height: 160 }}
+            >
+              {options?.classes.map((cls) => (
+                <option key={cls.id} value={cls.id}>
+                  {cls.id} - {cls.name}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="form-actions" style={{ justifyContent: "flex-end" }}>
+            <button className="btn-outline" onClick={() => {
+              setAutoSelection([]);
+              setAutoPlan([]);
+            }}>
+              Xóa chọn
+            </button>
+            <button className="btn-primary" onClick={handleAutoGenerate} disabled={autoLoading}>
+              {autoLoading ? "Đang tính..." : "Tạo gợi ý"}
+            </button>
+          </div>
+
+          {autoPlan.length > 0 ? (
+            <div className="auto-preview">
+              <div className="preview-header">
+                <div>Gợi ý xếp lịch</div>
+                <button className="btn-primary" onClick={handleAutoApply} disabled={autoLoading}>
+                  {autoLoading ? "Đang áp dụng..." : "Áp dụng lịch"}
+                </button>
+              </div>
+              <div className="preview-table">
+                <div className="preview-row preview-header-row">
+                  <span>Lớp</span>
+                  <span>Slot</span>
+                  <span>Ngày</span>
+                  <span>Giảng viên</span>
+                  <span>Phòng</span>
+                </div>
+                {autoPlan.map((item, idx) => (
+                  <div className="preview-row" key={`${item.class_id}-${item.day}-${item.slot_id}-${idx}`}>
+                    <span>{item.class_id}</span>
+                    <span>Slot {item.slot_id}</span>
+                    <span>{item.day}</span>
+                    <span>{item.teacher_name || "--"}</span>
+                    <span>{item.room || "--"}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : (
+            <div className="empty-preview">Chưa có gợi ý – hãy chọn lớp và nhấn "Tạo gợi ý".</div>
+          )}
+        </div>
+      </Modal>
       </Shell>
 
-      {pendingConfirm && (
-        <ConfirmDialog
-          message={pendingConfirm.message}
-          onCancel={closeConfirm}
-          onConfirm={executeConfirm}
-          loading={actionLoading}
-        />
-      )}
+      <ConfirmDialog
+        open={!!pendingConfirm}
+        message={pendingConfirm?.message || ""}
+        onCancel={closeConfirm}
+        onConfirm={executeConfirm}
+        loading={actionLoading}
+      />
     </>
   );
 }
@@ -948,28 +959,28 @@ function Shell({ collapsed, setCollapsed, router, search, setSearch, children }:
         </div>
         <nav className="side-nav">
           <Link href="/tongquan_ad" className="side-link" title="Dashboard">
-            🏠 {!collapsed && "Dashboard"}
+            {!collapsed && "Dashboard"}
           </Link>
           <Link href="/thongbao_ad" className="side-link" title="Thông báo">
-            📢 {!collapsed && "Thông báo"}
+            {!collapsed && "Thông báo"}
           </Link>
           <Link href="/sinhvien_ad" className="side-link" title="Sinh viên">
-            👨‍🎓 {!collapsed && "Sinh viên"}
+            {!collapsed && "Sinh viên"}
           </Link>
           <Link href="/giangvien_ad" className="side-link" title="Giảng viên">
-            👩‍🏫 {!collapsed && "Giảng viên"}
+            {!collapsed && "Giảng viên"}
           </Link>
           <Link href="/lophoc_ad" className="side-link" title="Lớp học">
-            🏫 {!collapsed && "Lớp học"}
+            {!collapsed && "Lớp học"}
           </Link>
           <Link href="/lichhoc_ad" className="side-link active" title="Lịch học">
-            📅 {!collapsed && "Lịch học"}
+            {!collapsed && "Lịch học"}
           </Link>
           <Link href="/taikhoan_ad" className="side-link" title="Tài khoản">
-            🔑 {!collapsed && "Tài khoản"}
+            {!collapsed && "Tài khoản"}
           </Link>
           <Link href="/caidat_ad" className="side-link" title="Cấu hình">
-            ⚙️ {!collapsed && "Cấu hình"}
+            {!collapsed && "Cấu hình"}
           </Link>
         </nav>
       </aside>
@@ -998,7 +1009,7 @@ function Shell({ collapsed, setCollapsed, router, search, setSearch, children }:
               router.push("/login");
             }
           }}>
-            🚪 Đăng xuất
+            Đăng xuất
           </button>
         </div>
       </header>
@@ -1009,14 +1020,21 @@ function Shell({ collapsed, setCollapsed, router, search, setSearch, children }:
 }
 
 type ModalProps = {
+  open: boolean;
   title: string;
   onClose: () => void;
   children: ReactNode;
 };
 
-function Modal({ title, onClose, children }: ModalProps) {
+function Modal({ open, title, onClose, children }: ModalProps) {
   return (
-    <div className="modal-backdrop" role="dialog" aria-modal="true">
+    <div
+      className="modal-backdrop"
+      role="dialog"
+      aria-modal={open}
+      aria-hidden={!open}
+      style={{ display: open ? "flex" : "none" }}
+    >
       <div className="modal-content">
         <div className="modal-header">
           <div className="modal-title">{title}</div>
@@ -1031,15 +1049,22 @@ function Modal({ title, onClose, children }: ModalProps) {
 }
 
 type ConfirmDialogProps = {
+  open: boolean;
   message: string;
   onCancel: () => void;
   onConfirm: () => void | Promise<void>;
   loading?: boolean;
 };
 
-function ConfirmDialog({ message, onCancel, onConfirm, loading }: ConfirmDialogProps) {
+function ConfirmDialog({ open, message, onCancel, onConfirm, loading }: ConfirmDialogProps) {
   return (
-    <div className="modal-backdrop" role="alertdialog" aria-modal="true">
+    <div
+      className="modal-backdrop"
+      role="alertdialog"
+      aria-modal={open}
+      aria-hidden={!open}
+      style={{ display: open ? "flex" : "none" }}
+    >
       <div className="modal-content confirm-modal">
         <div className="modal-title">Xác nhận</div>
         <div className="confirm-message">{message}</div>

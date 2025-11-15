@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState, PropsWithChildren, Dispatch, SetStateAction } from "react";
+import { supabase } from "@/lib/supabaseClient";
 
 interface StudentInfo {
   student_id: string;
@@ -163,53 +164,64 @@ const handleAvatarChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     return;
   }
 
-  console.log("📤 Uploading avatar:", file.name, "for student:", student.student_id);
-
-  const formData = new FormData();
-  formData.append("avatar", file); // phải trùng với multer.single("avatar")
-  formData.append("student_id", student.student_id); // thêm đúng trường backend cần
+  if (!supabase) {
+    alert("❌ Supabase chưa được cấu hình. Vui lòng kiểm tra NEXT_PUBLIC_SUPABASE_URL và NEXT_PUBLIC_SUPABASE_ANON_KEY.");
+    return;
+  }
 
   try {
-    console.log("🔄 Sending request to:", "http://localhost:8080/api/students/update-avatar");
-    const res = await fetch("http://localhost:8080/api/students/update-avatar", {
+    console.log("📤 Uploading avatar to Supabase:", file.name, "for student:", student.student_id);
+
+    const ext = file.name.split(".").pop() || "png";
+    const filePath = `${student.student_id}/avatar-${Date.now()}.${ext}`;
+
+    const { data: uploadData, error: uploadError } = await supabase.storage
+      .from("avatars")
+      .upload(filePath, file, {
+        cacheControl: "3600",
+        upsert: true,
+      });
+
+    if (uploadError) {
+      console.error("❌ Supabase upload error:", uploadError);
+      alert("❌ Upload avatar lên Supabase thất bại.");
+      return;
+    }
+
+    const { data: publicData } = supabase.storage
+      .from("avatars")
+      .getPublicUrl(uploadData?.path || filePath);
+
+    const publicUrl = publicData?.publicUrl;
+    if (!publicUrl) {
+      alert("❌ Không lấy được public URL cho avatar.");
+      return;
+    }
+
+    console.log("🌐 Supabase public URL:", publicUrl);
+
+    const base = process.env.NEXT_PUBLIC_API_BASE || "http://localhost:8080";
+    const res = await fetch(`${base}/api/students/update-avatar`, {
       method: "POST",
-      body: formData,
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ student_id: student.student_id, avatar_url: publicUrl }),
     });
 
-    console.log("📥 Response status:", res.status, res.statusText);
-
-    let data;
-    try {
-      data = await res.json();
-      console.log("📦 Response data:", data);
-    } catch (parseError) {
-      console.error("❌ JSON parse error:", parseError);
-      const text = await res.text();
-      console.error("📄 Response text:", text);
-      alert("❌ Lỗi: Phản hồi từ máy chủ không hợp lệ (không phải JSON).");
+    const data = await res.json();
+    if (!res.ok || !data?.success) {
+      console.error("❌ Backend update-avatar error:", data);
+      alert(`❌ Lưu avatar vào hệ thống thất bại: ${data?.message || "Không rõ lỗi"}`);
       return;
     }
 
-    if (!data || data.success === false) {
-      alert(`❌ Upload avatar thất bại: ${data.message || "Không rõ lỗi"}`);
-      return;
-    }
-
-    // ✅ Cập nhật ảnh hiển thị + lưu vào state
-    // Thêm timestamp để buộc browser reload ảnh mới
-    const base = process.env.NEXT_PUBLIC_API_BASE || "http://localhost:8080";
     const timestamp = new Date().getTime();
-    const newAvatarUrl = `${base}${data.avatar_url}?t=${timestamp}`;
-    console.log("✅ New avatar URL:", newAvatarUrl);
+    const newAvatarUrl = `${publicUrl}?t=${timestamp}`;
     setPhotoUrl(newAvatarUrl);
-
-    // ✅ Cập nhật student state để hiển thị đúng ảnh
-    setStudent((prev) => prev ? { ...prev, avatar_url: data.avatar_url } : prev);
-
+    setStudent((prev) => (prev ? { ...prev, avatar_url: publicUrl } : prev));
     alert("✅ Cập nhật avatar thành công!");
   } catch (err) {
-    console.error("❌ Upload error:", err);
-    alert("❌ Lỗi kết nối máy chủ hoặc upload thất bại.");
+    console.error("❌ Avatar update error:", err);
+    alert("❌ Lỗi khi cập nhật avatar.");
   }
 };
 
@@ -306,13 +318,6 @@ const handleAvatarChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
                 <div className="desc">Buộc đăng xuất trên các thiết bị đã đăng nhập</div>
               </div>
               <button className="btn btn-outline" onClick={handleLogoutAll}>Mở</button>
-            </div>
-
-            {/* Notifications */}
-            <div className="label">Thông báo</div>
-            <div className="switch" onClick={() => setNotifEnabled(v => !v)}>
-              <input type="checkbox" checked={notifEnabled} readOnly />
-              <div className="knob"></div>
             </div>
 
             {/* Theme toggle */}

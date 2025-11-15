@@ -107,21 +107,27 @@ const AddLecturerModal = ({ open, onClose, lecturer, onSaved }: AddLecturerModal
       setError("Họ tên là bắt buộc");
       return;
     }
+
     const trimmedCode = code.trim();
+    const payload = {
+      code: trimmedCode || undefined,
+      fullName: name.trim(),
+      email: email.trim() || undefined,
+      phone: phone.trim() || undefined,
+      status,
+      password: passwordEditable ? password.trim() || undefined : undefined,
+    };
+
+    const isEdit = !!lecturer;
+    const url = isEdit
+      ? `http://localhost:8080/api/admin/lecturers/${encodeURIComponent(lecturer!.id)}`
+      : "http://localhost:8080/api/admin/lecturers";
+    const method = isEdit ? "PUT" : "POST";
 
     setSaving(true);
     try {
-      const payload = {
-        code: trimmedCode || undefined,
-        fullName: name.trim(),
-        email: email.trim() || undefined,
-        phone: phone.trim() || undefined,
-        status,
-        password: passwordEditable ? password.trim() || undefined : undefined,
-      };
-
-      const resp = await fetch("http://localhost:8080/api/admin/lecturers", {
-        method: "POST",
+      const resp = await fetch(url, {
+        method,
         headers: { "Content-Type": "application/json" },
         credentials: "include",
         body: JSON.stringify(payload),
@@ -129,7 +135,7 @@ const AddLecturerModal = ({ open, onClose, lecturer, onSaved }: AddLecturerModal
 
       if (!resp.ok) {
         const data = await resp.json().catch(() => null);
-        const message = data?.message || `HTTP ${resp.status}`;
+        const message = (data as any)?.message || `HTTP ${resp.status}`;
         throw new Error(message);
       }
 
@@ -139,7 +145,7 @@ const AddLecturerModal = ({ open, onClose, lecturer, onSaved }: AddLecturerModal
       onSaved(mapped);
       onClose();
     } catch (err: any) {
-      console.error("create lecturer error", err);
+      console.error(isEdit ? "update lecturer error" : "create lecturer error", err);
       setError(err?.message || "Không thể lưu giảng viên");
     } finally {
       setSaving(false);

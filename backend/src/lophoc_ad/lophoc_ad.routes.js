@@ -249,19 +249,27 @@ router.get("/", async (req, res) => {
       },
     });
 
-    // Lấy số sinh viên cho từng lớp
-    const classIds = rows.map(row => row.class_id);
-    const studentCountsRaw = await prisma.students.findMany({
-      where: {
-        classes: { in: classIds }
-      },
-      select: { student_id: true, classes: true }
+    // Lấy số sinh viên cho từng lớp dựa trên cột students.classes (chuỗi danh sách mã lớp)
+    const classIds = rows.map((row) => row.class_id);
+
+    // Lấy tất cả sinh viên có tham gia ít nhất một lớp (classes != null)
+    const studentRows = await prisma.students.findMany({
+      where: { classes: { not: null } },
+      select: { student_id: true, classes: true },
     });
+
     const studentCounts = {};
-    classIds.forEach(id => { studentCounts[id] = 0; });
-    studentCountsRaw.forEach(stu => {
-      splitClasses(stu.classes).forEach(cid => {
-        if (studentCounts[cid] !== undefined) studentCounts[cid]++;
+    classIds.forEach((id) => {
+      studentCounts[id] = 0;
+    });
+
+    // Với mỗi sinh viên, tách danh sách lớp và cộng dồn vào từng mã lớp tương ứng
+    studentRows.forEach((stu) => {
+      const classList = splitClasses(stu.classes);
+      classList.forEach((cid) => {
+        if (studentCounts[cid] !== undefined) {
+          studentCounts[cid] += 1;
+        }
       });
     });
 
@@ -437,7 +445,7 @@ router.post("/", async (req, res) => {
 router.put("/:code", async (req, res) => {
   try {
     const { code } = req.params;
-    const { name, subjectCode, cohort, teacherId, major, status } = req.body || {};
+    const { name, subjectCode, cohort, teacherId, major, status, code: nextCodeRaw } = req.body || {};
 
     if (!prisma?.classes?.findUnique) {
       const targetIndex = fallbackStore.findIndex((item) => item.class_id === code);
@@ -519,6 +527,12 @@ router.put("/:code", async (req, res) => {
       updates.status = normalizeStatus(status);
     }
 
+    // Chuẩn hóa mã lớp mới (nếu người dùng nhập)
+    const normalizedNextCode =
+      typeof nextCodeRaw === "string" && nextCodeRaw.trim()
+        ? normalizeClassCode(nextCodeRaw)
+        : null;
+
     if (teacherId !== undefined) {
       if (teacherId && typeof teacherId === "string" && teacherId.trim()) {
         const teacher = await prisma.teachers.findUnique({ where: { teacher_id: teacherId.trim() } });
@@ -531,15 +545,108 @@ router.put("/:code", async (req, res) => {
       }
     }
 
-    const updated = await prisma.classes.update({
-      where: { class_id: code },
-      data: updates,
-      include: {
-        teacher: { select: { teacher_id: true, full_name: true, email: true } },
-      },
+    // Nếu không đổi mã lớp, giữ logic cập nhật đơn giản như cũ
+    if (!normalizedNextCode || normalizedNextCode === existing.class_id) {
+      const updated = await prisma.classes.update({
+        where: { class_id: code },
+        data: updates,
+        include: {
+          teacher: { select: { teacher_id: true, full_name: true, email: true } },
+        },
+      });
+
+      // Cập nhật timetable.subject_name cho mọi dòng chứa lớp này
+      try {
+        await prisma.timetable.updateMany({
+          where: { classes: { contains: updated.class_id } },
+          data: { subject_name: updated.subject_name },
+        });
+      } catch (e) {
+        console.error("update timetable subject_name error (no rename):", e);
+      }
+
+      const formatted = formatClassRecord({ ...updated, studentCount: 0 });
+      return res.json({ success: true, data: formatted });
+    }
+
+    // Đổi mã lớp: tạo lớp mới với mã mới, cập nhật các bảng liên quan, xóa lớp cũ
+    const newCode = normalizedNextCode;
+
+    // Không cho trùng mã lớp
+    const duplicate = await prisma.classes.findUnique({ where: { class_id: newCode } });
+    if (duplicate) {
+      return res.status(409).json({ success: false, message: "Mã lớp mới đã tồn tại" });
+    }
+
+    const result = await prisma.$transaction(async (tx) => {
+      // Tạo bản ghi lớp mới với mã mới và các field đã chỉnh sửa
+      const created = await tx.classes.create({
+        data: {
+          class_id: newCode,
+          class_name: updates.class_name ?? existing.class_name,
+          subject_code: updates.subject_code ?? existing.subject_code,
+          subject_name: updates.subject_name ?? existing.subject_name,
+          cohort: updates.cohort ?? existing.cohort,
+          major: Object.prototype.hasOwnProperty.call(updates, "major") ? updates.major : existing.major,
+          teacher_id: Object.prototype.hasOwnProperty.call(updates, "teacher_id") ? updates.teacher_id : existing.teacher_id,
+          status: updates.status ?? existing.status,
+          room: existing.room,
+          schedule: existing.schedule,
+          semester: existing.semester,
+          school_year: existing.school_year,
+          description: updates.description ?? existing.description,
+        },
+        include: {
+          teacher: { select: { teacher_id: true, full_name: true, email: true } },
+        },
+      });
+
+      // Cập nhật các phiên điểm danh sang mã lớp mới
+      await tx.attendanceSession.updateMany({
+        where: { classId: existing.class_id },
+        data: { classId: newCode },
+      });
+
+      // Cập nhật students.classes: thay mã lớp cũ bằng mã mới
+      const affectedStudents = await tx.students.findMany({
+        where: { classes: { contains: existing.class_id } },
+        select: { student_id: true, classes: true },
+      });
+
+      for (const stu of affectedStudents) {
+        const list = splitClasses(stu.classes).map((cid) => (cid === existing.class_id ? newCode : cid));
+        const merged = joinClasses(list).join(",");
+        await tx.students.update({
+          where: { student_id: stu.student_id },
+          data: { classes: merged },
+        });
+      }
+
+      // Cập nhật timetable.classes và subject_name nếu có dùng mã lớp dạng chuỗi
+      const affectedTimetables = await tx.timetable.findMany({
+        where: { classes: { contains: existing.class_id } },
+        select: { id: true, classes: true },
+      });
+
+      for (const row of affectedTimetables) {
+        const list = splitClasses(row.classes).map((cid) => (cid === existing.class_id ? newCode : cid));
+        const merged = joinClasses(list).join(",");
+        await tx.timetable.update({
+          where: { id: row.id },
+          data: {
+            classes: merged,
+            subject_name: created.subject_name,
+          },
+        });
+      }
+
+      // Xóa lớp cũ sau khi đã migrate dữ liệu
+      await tx.classes.delete({ where: { class_id: existing.class_id } });
+
+      return created;
     });
 
-    const formatted = formatClassRecord({ ...updated, studentCount: 0 });
+    const formatted = formatClassRecord({ ...result, studentCount: 0 });
     return res.json({ success: true, data: formatted });
   } catch (error) {
     console.error("admin classes update error:", error);
