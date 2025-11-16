@@ -1,4 +1,4 @@
-SMART ATTENDANCE SYSTEM - SETUP GUIDE
+SMART ATTENDANCE SYSTEM (AI) - SETUP GUIDE
 ====================================
 
 This document liệt kê các bước tối thiểu để chạy dự án trên máy mới, đồng bộ cơ sở dữ liệu MySQL và cách chạy localhost.
